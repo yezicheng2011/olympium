@@ -39,8 +39,14 @@ projects. The unrelated `default_mini.xml` is 43 projects for the Hi3861 mini
 system and is not this QEMU guest.
 
 `gitcode.com` returned HTTP 418 for `device_qemu` and `vendor_ohemu`. Gitee
-served those two repositories. A full 519-project sync was not completed on
-this VM; see the measured note below if one was recorded.
+served those two repositories. A depth-1 checkout from Gitee was started with
+a stop if free disk fell below 120 GB. It cloned 25 repositories, about 1.5 GB,
+and then a later small clone stayed in `pipe_read` for nine minutes without
+growing. The checkout was stopped there. No `build.sh` was run, and no image
+was produced. The next useful step is a mirror that can finish all 519
+repositories, with enough disk left afterward for the `out/` directory. This
+VM still had about 232 GB free when the clone stalled, so disk was not the
+thing that stopped it.
 
 The public QEMU board instructions are source and configuration, not a system
 image Olympium can republish:

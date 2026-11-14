@@ -47,8 +47,11 @@ stage="$dist/payload/Olympium.app"
 rm -rf "$stage"
 cp -R "$app" "$stage"
 if [ -x target/release/olympium ]; then
-  mkdir -p "$stage/Contents/MacOS"
-  cp target/release/olympium "$stage/Contents/MacOS/olympium"
+  # Keep this out of Contents/MacOS. On the default Mac volume, olympium and
+  # Olympium are one path, so a copy there replaces the application binary.
+  mkdir -p "$stage/Contents/Helpers"
+  cp target/release/olympium "$stage/Contents/Helpers/olympium"
+  chmod 755 "$stage/Contents/Helpers/olympium"
 fi
 if [ -f hosts/macos/Olympium/Resources/Olympium.icns ]; then
   mkdir -p "$stage/Contents/Resources"

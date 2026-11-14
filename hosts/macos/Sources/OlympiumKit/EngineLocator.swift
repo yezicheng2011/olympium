@@ -28,9 +28,12 @@ public enum EngineLocator {
     }
 
     public static func bundledExecutable(bundleURL: URL) -> String {
+        // The app binary is Contents/MacOS/Olympium. A second file named
+        // olympium in that directory is the same path on a case-insensitive
+        // volume and would replace the app. The engine lives under Helpers.
         bundleURL
             .appendingPathComponent("Contents", isDirectory: true)
-            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent("Helpers", isDirectory: true)
             .appendingPathComponent("olympium")
             .path
     }

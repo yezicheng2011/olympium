@@ -53,6 +53,6 @@ final class LaunchGateTests: XCTestCase {
         let missing = dir.appendingPathComponent("missing").path
         XCTAssertNil(EngineLocator.locate(environment: ["PATH": "/usr/bin"], bundledPath: missing))
         let bundle = EngineLocator.bundledExecutable(bundleURL: URL(fileURLWithPath: "/Applications/Olympium.app"))
-        XCTAssertEqual(bundle, "/Applications/Olympium.app/Contents/MacOS/olympium")
+        XCTAssertEqual(bundle, "/Applications/Olympium.app/Contents/Helpers/olympium")
     }
 }
