@@ -1,6 +1,6 @@
-# Development Desktop
+# Olympium
 
-Temporary name. The title is `Development Desktop` in `branding/branding.conf` so it can be replaced when a product name is chosen. The repository name is not the product name.
+The live session and ISO volume are named Olympium. The menu-bar mark is an original geometric dragon, a placeholder until official art is supplied. It is not an Apple logo.
 
 This is a native Linux live system with an original Wayland desktop. It is not a web page, not Electron, and not a copy of macOS. The panel, dock, and launcher are drawn by a small compositor in `desktop/compositor.c`. Windows are normal Wayland clients.
 

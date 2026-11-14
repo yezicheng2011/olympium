@@ -42,7 +42,7 @@ static void reload(void) {
 
 static void go(const char *path) {
 	set_path(path);
-	gtk_window_set_title(GTK_WINDOW(gtk_widget_get_toplevel(list)), current);
+	gtk_window_set_title(GTK_WINDOW(gtk_widget_get_toplevel(list)), "Files");
 	reload();
 }
 
@@ -89,7 +89,11 @@ static void on_activate(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn 
 
 int main(int argc, char **argv) {
 	gtk_init(&argc, &argv);
+	g_object_set(gtk_settings_get_default(),
+		"gtk-decoration-layout", "close,minimize,maximize:",
+		"gtk-font-name", "Ubuntu 11", NULL);
 	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
 	gtk_window_set_default_size(GTK_WINDOW(window), 720, 480);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 

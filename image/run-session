@@ -7,10 +7,10 @@ chmod 755 /run/dev-desktop
 kmsg "session start"
 modprobe bochs 2>/dev/null || true
 modprobe virtio_gpu 2>/dev/null || true
-if grep -q 'devdesk.contrast=1' /proc/cmdline 2>/dev/null; then
+if grep -q 'olympium.contrast=1' /proc/cmdline 2>/dev/null; then
 	export DEV_DESK_CONTRAST=1
 fi
-if grep -q 'devdesk.gles=1' /proc/cmdline 2>/dev/null; then
+if grep -q 'olympium.gles=1' /proc/cmdline 2>/dev/null; then
 	export WLR_RENDERER=gles2
 	export LIBGL_ALWAYS_SOFTWARE=1
 	export GALLIUM_DRIVER=llvmpipe

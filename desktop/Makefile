@@ -8,7 +8,11 @@ GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 
 .PHONY: all test clean
 
-all: dev-compositor dev-files dev-settings dev-swatch dev-compat test-blur test-macho
+all: dev-compositor dev-files dev-settings dev-swatch dev-compat test-blur test-macho splash.png
+
+splash.png: splash.c
+	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS)
+	./splash-gen splash.png
 
 dev-compositor: compositor.c blur.c blur.h
 	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
@@ -36,4 +40,4 @@ test: test-blur test-macho
 	./test-macho
 
 clean:
-	rm -f dev-compositor dev-files dev-settings dev-swatch dev-compat test-blur test-macho
+	rm -f dev-compositor dev-files dev-settings dev-swatch dev-compat test-blur test-macho splash-gen splash.png

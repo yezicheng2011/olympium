@@ -48,6 +48,7 @@
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -157,6 +158,11 @@ struct server {
 	int press_app;
 	int press_contrast;
 	int press_brand;
+	int hover_app;
+	int press_light;
+	struct view *press_view;
+	char frame_title[128];
+	struct wl_listener new_decoration;
 	char shot_path[256];
 	int shot_written;
 	int control_fd;
@@ -164,14 +170,18 @@ struct server {
 	struct wl_event_source *tick_timer;
 };
 
-static const int PANEL_H = 44;
-static const int DOCK_H = 78;
-static const int DOCK_MARGIN = 16;
+static const int PANEL_H = 28;
+static const int TITLE_H = 32;
+static const int DOCK_H = 64;
+static const int DOCK_MARGIN = 8;
+static const int DOCK_SLOT = 56;
+static const char *UI_FONT = "Ubuntu 12";
+static const char *UI_FONT_SM = "Ubuntu 11";
 
 static void focus_view(struct view *view, struct wlr_surface *surface);
 
 static void load_branding(struct server *server) {
-	snprintf(server->title, sizeof server->title, "Development Desktop");
+	snprintf(server->title, sizeof server->title, "Olympium");
 	FILE *f = fopen("/etc/dev-desktop/branding.conf", "r");
 	if (f == NULL) {
 		f = fopen("branding/branding.conf", "r");
@@ -240,7 +250,7 @@ static int app_matches(const struct app_entry *app, const char *filter) {
 }
 
 static void dock_box(const struct server *server, struct wlr_box *box) {
-	int width = 96 * APP_COUNT + 24;
+	int width = 20 + APP_COUNT * DOCK_SLOT;
 	if (width > server->screen_w - 48) {
 		width = server->screen_w - 48;
 	}
@@ -270,7 +280,7 @@ static int dock_app_at(const struct server *server, double x, double y) {
 	if (!point_in(&dock, x, y)) {
 		return -1;
 	}
-	int index = (int)((x - dock.x - 12) / 96);
+	int index = (int)((x - dock.x - 10) / DOCK_SLOT);
 	if (index < 0 || index >= APP_COUNT) {
 		return -1;
 	}
@@ -278,57 +288,93 @@ static int dock_app_at(const struct server *server, double x, double y) {
 }
 
 static int hit_contrast(const struct server *server, double x, double y) {
-	return x >= server->screen_w - 132 && x < server->screen_w - 16 &&
-		y >= 8 && y < PANEL_H - 6;
+	(void)server;
+	(void)x;
+	(void)y;
+	return 0;
 }
 
 static int hit_brand(const struct server *server, double x, double y) {
 	(void)server;
-	return x >= 10 && x < 220 && y >= 0 && y < PANEL_H;
+	return x >= 6 && x < 34 && y >= 0 && y < PANEL_H;
+}
+
+/* Original geometric mark: a short serpentine body, a horn, and a pearl.
+ * It is not an apple, a leaf, or a bitten circle. */
+static void draw_dragon(cairo_t *cr, double x, double y, double size, double r, double g, double b) {
+	cairo_save(cr);
+	cairo_translate(cr, x, y);
+	cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+	cairo_set_source_rgba(cr, r, g, b, 1);
+	cairo_set_line_width(cr, size * 0.16);
+	cairo_move_to(cr, size * 0.18, size * 0.78);
+	cairo_curve_to(cr, size * 0.05, size * 0.42, size * 0.72, size * 0.62,
+		size * 0.48, size * 0.30);
+	cairo_stroke(cr);
+	cairo_set_line_width(cr, size * 0.11);
+	cairo_move_to(cr, size * 0.46, size * 0.30);
+	cairo_line_to(cr, size * 0.62, size * 0.08);
+	cairo_stroke(cr);
+	cairo_arc(cr, size * 0.62, size * 0.34, size * 0.16, 0, 6.2832);
+	cairo_fill(cr);
+	cairo_arc(cr, size * 0.84, size * 0.22, size * 0.07, 0, 6.2832);
+	cairo_fill(cr);
+	cairo_restore(cr);
 }
 
 static void draw_icon(cairo_t *cr, const char *id, double x, double y) {
 	cairo_save(cr);
 	cairo_translate(cr, x, y);
+	cairo_new_path(cr);
+	cairo_arc(cr, 6, 6, 6, 3.1416, 4.7124);
+	cairo_arc(cr, 30, 6, 6, 4.7124, 6.2832);
+	cairo_arc(cr, 30, 30, 6, 0, 1.5708);
+	cairo_arc(cr, 6, 30, 6, 1.5708, 3.1416);
+	cairo_close_path(cr);
 	if (strcmp(id, "files") == 0) {
-		cairo_set_source_rgba(cr, 0.86, 0.62, 0.20, 1);
-		cairo_rectangle(cr, 4, 10, 28, 20);
-		cairo_rectangle(cr, 4, 6, 12, 6);
+		cairo_set_source_rgba(cr, 0.93, 0.78, 0.42, 1);
+	} else if (strcmp(id, "terminal") == 0) {
+		cairo_set_source_rgba(cr, 0.22, 0.24, 0.28, 1);
+	} else if (strcmp(id, "settings") == 0) {
+		cairo_set_source_rgba(cr, 0.55, 0.58, 0.64, 1);
+	} else if (strcmp(id, "olympium") == 0) {
+		cairo_set_source_rgba(cr, 0.16, 0.22, 0.30, 1);
+	} else {
+		cairo_set_source_rgba(cr, 0.45, 0.52, 0.62, 1);
+	}
+	cairo_fill(cr);
+	cairo_restore(cr);
+	if (strcmp(id, "files") == 0) {
+		cairo_set_source_rgba(cr, 0.45, 0.30, 0.08, 1);
+		cairo_rectangle(cr, x + 8, y + 16, 20, 12);
+		cairo_rectangle(cr, x + 8, y + 11, 10, 6);
 		cairo_fill(cr);
 	} else if (strcmp(id, "terminal") == 0) {
-		cairo_set_source_rgba(cr, 0.16, 0.45, 0.42, 1);
-		cairo_rectangle(cr, 3, 6, 30, 22);
-		cairo_fill(cr);
-		cairo_set_source_rgba(cr, 0.93, 0.95, 0.90, 1);
-		cairo_move_to(cr, 8, 12);
-		cairo_line_to(cr, 16, 17);
-		cairo_line_to(cr, 8, 22);
+		cairo_set_source_rgba(cr, 0.72, 0.93, 0.78, 1);
+		cairo_set_line_width(cr, 1.6);
+		cairo_move_to(cr, x + 11, y + 14);
+		cairo_line_to(cr, x + 18, y + 18);
+		cairo_line_to(cr, x + 11, y + 22);
 		cairo_stroke(cr);
 	} else if (strcmp(id, "settings") == 0) {
-		cairo_set_source_rgba(cr, 0.28, 0.33, 0.40, 1);
-		cairo_arc(cr, 18, 17, 7, 0, 6.3);
-		cairo_set_line_width(cr, 3);
+		cairo_set_source_rgba(cr, 0.12, 0.13, 0.16, 1);
+		cairo_set_line_width(cr, 2.2);
+		cairo_arc(cr, x + 18, y + 18, 6, 0, 6.2832);
 		cairo_stroke(cr);
-		cairo_arc(cr, 18, 17, 3, 0, 6.3);
+		cairo_arc(cr, x + 18, y + 18, 2.2, 0, 6.2832);
 		cairo_fill(cr);
 	} else if (strcmp(id, "olympium") == 0) {
-		cairo_set_source_rgba(cr, 0.35, 0.42, 0.62, 1);
-		cairo_move_to(cr, 18, 4);
-		cairo_line_to(cr, 32, 26);
-		cairo_line_to(cr, 4, 26);
-		cairo_close_path(cr);
-		cairo_fill(cr);
+		draw_dragon(cr, x + 4, y + 4, 28, 0.93, 0.78, 0.45);
 	} else {
-		cairo_set_source_rgba(cr, 0.45, 0.32, 0.22, 1);
+		cairo_set_source_rgba(cr, 0.95, 0.96, 0.97, 1);
 		for (int i = 0; i < 3; i++) {
-			cairo_rectangle(cr, 6, 6 + i * 8, 24, 5);
+			cairo_rectangle(cr, x + 10, y + 10 + i * 7, 16, 3);
 		}
 		cairo_fill(cr);
 	}
-	cairo_restore(cr);
 }
 
-static void paint_text(cairo_t *cr, const char *font, const char *text,
+static int paint_text(cairo_t *cr, const char *font, const char *text,
 		double x, double y, double r, double g, double b) {
 	PangoLayout *layout = pango_cairo_create_layout(cr);
 	pango_layout_set_text(layout, text, -1);
@@ -337,12 +383,16 @@ static void paint_text(cairo_t *cr, const char *font, const char *text,
 	cairo_set_source_rgba(cr, r, g, b, 1);
 	cairo_move_to(cr, x, y);
 	pango_cairo_show_layout(cr, layout);
+	int width = 0;
+	int height = 0;
+	pango_layout_get_pixel_size(layout, &width, &height);
 	pango_font_description_free(desc);
 	g_object_unref(layout);
+	return width;
 }
 
 static cairo_surface_t *frosted_surface(uint8_t *bgra, int width, int height, int stride,
-		int contrast, double radius) {
+		int contrast, double radius, int dark) {
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 			bgra[y * stride + x * 4 + 3] = 255;
@@ -353,23 +403,42 @@ static cairo_surface_t *frosted_surface(uint8_t *bgra, int width, int height, in
 	cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 	cairo_t *cr = cairo_create(out);
 	cairo_save(cr);
-	if (radius > 0) {
-		double r = radius;
+	if (radius != 0) {
+		double r = radius < 0 ? -radius : radius;
+		int top_only = radius < 0;
+		if (r > width / 2.0) {
+			r = width / 2.0;
+		}
+		if (!top_only && r > height / 2.0) {
+			r = height / 2.0;
+		}
 		cairo_new_path(cr);
 		cairo_arc(cr, r, r, r, 3.1416, 1.5 * 3.1416);
-		cairo_arc(cr, width - r, r, r, 1.5 * 3.1416, 2 * 3.1416);
-		cairo_arc(cr, width - r, height - r, r, 0, 0.5 * 3.1416);
-		cairo_arc(cr, r, height - r, r, 0.5 * 3.1416, 3.1416);
+		cairo_arc(cr, width - r, r, r, 1.5 * 3.1416, 6.2832);
+		if (top_only) {
+			cairo_line_to(cr, width, height);
+			cairo_line_to(cr, 0, height);
+		} else {
+			cairo_arc(cr, width - r, height - r, r, 0, 0.5 * 3.1416);
+			cairo_arc(cr, r, height - r, r, 0.5 * 3.1416, 3.1416);
+		}
 		cairo_close_path(cr);
 		cairo_clip(cr);
 	}
 	if (!contrast && bgra != NULL) {
 		cairo_set_source_surface(cr, src, 0, 0);
 		cairo_paint(cr);
-		cairo_set_source_rgba(cr, 0.97, 0.95, 0.91, 0.46);
+		if (dark) {
+			cairo_set_source_rgba(cr, 0.07, 0.08, 0.10, 0.38);
+		} else {
+			cairo_set_source_rgba(cr, 0.97, 0.97, 0.98, 0.42);
+		}
+		cairo_paint(cr);
+	} else if (dark) {
+		cairo_set_source_rgba(cr, 0.12, 0.13, 0.15, 1);
 		cairo_paint(cr);
 	} else {
-		cairo_set_source_rgba(cr, 0.96, 0.94, 0.90, 1);
+		cairo_set_source_rgba(cr, 0.96, 0.96, 0.97, 1);
 		cairo_paint(cr);
 	}
 	cairo_restore(cr);
@@ -414,40 +483,55 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		const struct wlr_box *box, int which) {
 	(void)surface;
 	if (which == 0) {
-		cairo_set_source_rgba(cr, 0.18, 0.42, 0.46, 1);
-		cairo_arc(cr, 24, 22, 8, 0, 6.3);
-		cairo_fill(cr);
-		paint_text(cr, "DejaVu Sans 13", server->title, 40, 12, 0.12, 0.12, 0.14);
-		char arch[64];
-		snprintf(arch, sizeof arch, "%s", server->arch);
-		paint_text(cr, "DejaVu Sans 11", arch, server->screen_w / 2.0 - 40, 14,
-			0.20, 0.22, 0.26);
+		draw_dragon(cr, 8, 4, 20, 0.93, 0.78, 0.45);
+		const char *app = server->frame_title[0] != '\0' ? server->frame_title : server->title;
+		int app_w = paint_text(cr, "Ubuntu Bold 13", app, 36, 5, 0.96, 0.96, 0.97);
+		const char *menus[] = {"File", "Edit", "View", "Go", "Window", "Help"};
+		double mx = 36 + app_w + 22;
+		for (int i = 0; i < 6; i++) {
+			int item_w = paint_text(cr, UI_FONT, menus[i], mx, 5, 0.90, 0.91, 0.93);
+			mx += item_w + 18;
+		}
 		time_t now = time(NULL);
 		struct tm tm;
 		localtime_r(&now, &tm);
 		char clock[32];
-		strftime(clock, sizeof clock, "%H:%M", &tm);
-		paint_text(cr, "DejaVu Sans 13", clock, server->screen_w - 210, 12, 0.12, 0.12, 0.14);
-		cairo_rectangle(cr, server->screen_w - 132, 8, 112, 28);
-		cairo_set_source_rgba(cr, server->contrast ? 0.20 : 0.25, 0.22, 0.18, 0.35);
-		cairo_fill(cr);
-		paint_text(cr, "DejaVu Sans 11",
-			server->contrast ? "Contrast" : "Glass",
-			server->screen_w - 118, 12, 0.12, 0.12, 0.14);
+		strftime(clock, sizeof clock, "%a %H:%M", &tm);
+		paint_text(cr, UI_FONT, clock, server->screen_w - 118, 6, 0.96, 0.96, 0.97);
 		return;
 	}
 	if (which == 1) {
 		for (int i = 0; i < APP_COUNT; i++) {
-			double x = 16 + i * 96;
-			draw_icon(cr, APPS[i].id, x + 28, 10);
-			paint_text(cr, "DejaVu Sans 10", APPS[i].label, x + 8, 50, 0.10, 0.10, 0.12);
+			double ix = 12 + i * DOCK_SLOT + (DOCK_SLOT - 36) / 2.0;
+			draw_icon(cr, APPS[i].id, ix, 14);
 		}
 		return;
 	}
-	paint_text(cr, "DejaVu Sans 18", server->title, 28, 24, 0.10, 0.10, 0.12);
+	if (which == 4) {
+		const char *label = server->frame_title[0] != '\0' ? server->frame_title : "";
+		paint_text(cr, UI_FONT_SM, label, 8, 3, 0.12, 0.12, 0.14);
+		return;
+	}
+	if (which == 3) {
+		const double lights[][3] = {
+			{1.0, 0.37, 0.34},
+			{0.996, 0.74, 0.18},
+			{0.16, 0.78, 0.25}
+		};
+		for (int i = 0; i < 3; i++) {
+			cairo_set_source_rgba(cr, lights[i][0], lights[i][1], lights[i][2], 1);
+			cairo_arc(cr, 16 + i * 18, box->height / 2.0, 6.0, 0, 6.2832);
+			cairo_fill(cr);
+		}
+		const char *title = server->frame_title[0] != '\0' ? server->frame_title : "Window";
+		paint_text(cr, UI_FONT, title, box->width / 2.0 - strlen(title) * 3.4, 8,
+			0.12, 0.12, 0.14);
+		return;
+	}
+	paint_text(cr, "Ubuntu Bold 18", server->title, 28, 24, 0.10, 0.10, 0.12);
 	char prompt[96];
 	snprintf(prompt, sizeof prompt, "Search  %s", server->filter);
-	paint_text(cr, "DejaVu Sans 13", prompt, 28, 64, 0.25, 0.27, 0.30);
+	paint_text(cr, UI_FONT, prompt, 28, 64, 0.25, 0.27, 0.30);
 	int row = 0;
 	for (int i = 0; i < APP_COUNT; i++) {
 		if (!app_matches(&APPS[i], server->filter)) {
@@ -455,11 +539,11 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		}
 		double y = 110 + row * 42;
 		draw_icon(cr, APPS[i].id, 28, y);
-		paint_text(cr, "DejaVu Sans 14", APPS[i].label, 78, y + 6, 0.10, 0.10, 0.12);
+		paint_text(cr, UI_FONT, APPS[i].label, 78, y + 8, 0.10, 0.10, 0.12);
 		row++;
 	}
 	if (server->notice[0] != '\0') {
-		paint_text(cr, "DejaVu Sans 11", server->notice, 28, box->height - 36,
+		paint_text(cr, UI_FONT_SM, server->notice, 28, box->height - 36,
 			0.35, 0.22, 0.12);
 	}
 }
@@ -489,8 +573,9 @@ static struct wlr_texture *make_chrome(struct server *server, int x, int y, int 
 			}
 		}
 	}
+	int dark = which == 0 || which == 1;
 	cairo_surface_t *base = frosted_surface(pixels, w, h, stride,
-		server->contrast || !sampled, radius);
+		server->contrast || !sampled, radius, dark);
 	cairo_t *cr = cairo_create(base);
 	struct wlr_box box = {.x = x, .y = y, .width = w, .height = h};
 	draw_chrome_on(server, cr, base, &box, which);
@@ -544,6 +629,73 @@ static void write_shot(struct server *server, int width, int height) {
 	wl_display_terminate(server->wl_display);
 }
 
+static int view_title_box(struct view *view, struct wlr_box *box) {
+	if (view->scene_tree == NULL || !view->scene_tree->node.enabled) {
+		return 0;
+	}
+	struct wlr_box geo;
+	wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo);
+	int width = geo.width > 0 ? geo.width : view->xdg_toplevel->base->surface->current.width;
+	int height = geo.height > 0 ? geo.height : view->xdg_toplevel->base->surface->current.height;
+	if (width < 80 || height < 40) {
+		return 0;
+	}
+	box->x = view->scene_tree->node.x + geo.x;
+	box->y = view->scene_tree->node.y + geo.y - TITLE_H;
+	box->width = width;
+	box->height = TITLE_H;
+	return 1;
+}
+
+static int title_light(const struct wlr_box *box, double x, double y) {
+	if (!point_in(box, x, y)) {
+		return 0;
+	}
+	double cy = box->y + box->height / 2.0;
+	for (int i = 0; i < 3; i++) {
+		double cx = box->x + 16 + i * 18;
+		double dx = x - cx;
+		double dy = y - cy;
+		if (dx * dx + dy * dy <= 64) {
+			return i + 1;
+		}
+	}
+	return 0;
+}
+
+static struct wlr_texture *make_shadow(struct server *server, int width, int height) {
+	int pad = 36;
+	int sw = width + pad * 2;
+	int sh = height + pad * 2;
+	cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, sw, sh);
+	cairo_t *cr = cairo_create(surface);
+	cairo_set_source_rgba(cr, 0, 0, 0, 0.45);
+	double r = 16;
+	double x = pad;
+	double y = pad + 6;
+	cairo_new_path(cr);
+	cairo_arc(cr, x + r, y + r, r, 3.1416, 4.7124);
+	cairo_arc(cr, x + width - r, y + r, r, 4.7124, 6.2832);
+	cairo_arc(cr, x + width - r, y + height - r, r, 0, 1.5708);
+	cairo_arc(cr, x + r, y + height - r, r, 1.5708, 3.1416);
+	cairo_close_path(cr);
+	cairo_fill(cr);
+	cairo_destroy(cr);
+	cairo_surface_flush(surface);
+	uint8_t *pixels = cairo_image_surface_get_data(surface);
+	int stride = cairo_image_surface_get_stride(surface);
+	dev_blur_bgra(pixels, sw, sh, stride, 10);
+	cr = cairo_create(surface);
+	cairo_set_operator(cr, CAIRO_OPERATOR_DEST_OUT);
+	cairo_set_source_rgba(cr, 0, 0, 0, 1);
+	cairo_rectangle(cr, pad, pad, width, height);
+	cairo_fill(cr);
+	cairo_destroy(cr);
+	struct wlr_texture *texture = texture_from_cairo(server->renderer, surface);
+	cairo_surface_destroy(surface);
+	return texture;
+}
+
 static void output_frame(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct output *output = wl_container_of(listener, output, frame);
@@ -566,12 +718,59 @@ static void output_frame(struct wl_listener *listener, void *data) {
 	struct wlr_texture *launcher = NULL;
 	if (server->screen_w > 0 && server->screen_h > 0 &&
 			wlr_renderer_begin_with_buffer(server->renderer, state.buffer)) {
+		struct view *front = NULL;
+		struct view *view;
+		wl_list_for_each(view, &server->views, link) {
+			if (view->scene_tree->node.enabled) {
+				front = view;
+				break;
+			}
+		}
+		if (front != NULL && front->xdg_toplevel->title != NULL && front->xdg_toplevel->title[0] != '\0') {
+			snprintf(server->frame_title, sizeof server->frame_title, "%s", front->xdg_toplevel->title);
+		} else {
+			snprintf(server->frame_title, sizeof server->frame_title, "%s", server->title);
+		}
+		wl_list_for_each_reverse(view, &server->views, link) {
+			struct wlr_box title;
+			if (!view_title_box(view, &title)) {
+				continue;
+			}
+			int frame_h = title.height + view->xdg_toplevel->base->surface->current.height;
+			struct wlr_texture *shadow = make_shadow(server, title.width, frame_h);
+			render_texture_at(server, output->wlr_output, shadow, title.x - 36, title.y - 24);
+			wlr_texture_destroy(shadow);
+			char saved[128];
+			snprintf(saved, sizeof saved, "%s", server->frame_title);
+			if (view->xdg_toplevel->title != NULL && view->xdg_toplevel->title[0] != '\0') {
+				snprintf(server->frame_title, sizeof server->frame_title, "%s",
+					view->xdg_toplevel->title);
+			}
+			struct wlr_texture *bar = make_chrome(server, title.x, title.y,
+				title.width, title.height, -12, 3);
+			render_texture_at(server, output->wlr_output, bar, title.x, title.y);
+			wlr_texture_destroy(bar);
+			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
+		}
 		panel = make_chrome(server, 0, 0, server->screen_w, PANEL_H, 0, 0);
 		struct wlr_box dockb;
 		dock_box(server, &dockb);
-		dock = make_chrome(server, dockb.x, dockb.y, dockb.width, dockb.height, 22, 1);
+		dock = make_chrome(server, dockb.x, dockb.y, dockb.width, dockb.height, 20, 1);
 		render_texture_at(server, output->wlr_output, panel, 0, 0);
 		render_texture_at(server, output->wlr_output, dock, dockb.x, dockb.y);
+		if (server->hover_app >= 0 && server->hover_app < APP_COUNT) {
+			char saved[128];
+			snprintf(saved, sizeof saved, "%s", server->frame_title);
+			snprintf(server->frame_title, sizeof server->frame_title, "%s",
+				APPS[server->hover_app].label);
+			struct wlr_texture *tip = make_chrome(server,
+				dockb.x + 10 + server->hover_app * DOCK_SLOT, dockb.y - 28,
+				DOCK_SLOT, 22, 8, 4);
+			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
+			render_texture_at(server, output->wlr_output, tip,
+				dockb.x + 10 + server->hover_app * DOCK_SLOT, dockb.y - 28);
+			wlr_texture_destroy(tip);
+		}
 		if (server->launcher) {
 			struct wlr_box lb;
 			launcher_box(server, &lb);
@@ -619,13 +818,27 @@ static void ensure_wallpaper(struct server *server, int width, int height) {
 	if (server->wallpaper != NULL || width <= 0 || height <= 0) {
 		return;
 	}
-	float indigo[4] = {0.10f, 0.14f, 0.20f, 1.0f};
-	float amber[4] = {0.86f, 0.48f, 0.16f, 1.0f};
-	server->wallpaper = wlr_scene_rect_create(&server->scene->tree, width, height, indigo);
-	server->band = wlr_scene_rect_create(&server->scene->tree, width, 180, amber);
-	wlr_scene_node_lower_to_bottom(&server->wallpaper->node);
-	wlr_scene_node_place_above(&server->band->node, &server->wallpaper->node);
-	wlr_scene_node_set_position(&server->band->node, 0, height - 180);
+	int bands = 18;
+	int band_h = height / bands;
+	struct wlr_scene_rect *first = NULL;
+	for (int i = 0; i < bands; i++) {
+		float t = (float)i / (float)(bands - 1);
+		float color[4] = {
+			0.10f + t * 0.05f,
+			0.13f + t * 0.04f,
+			0.20f + t * 0.03f,
+			1.0f
+		};
+		int y = i * band_h;
+		int h = (i == bands - 1) ? height - y : band_h;
+		struct wlr_scene_rect *band = wlr_scene_rect_create(&server->scene->tree, width, h, color);
+		wlr_scene_node_set_position(&band->node, 0, y);
+		if (first == NULL) {
+			first = band;
+		}
+		wlr_scene_node_lower_to_bottom(&band->node);
+	}
+	server->wallpaper = first;
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
@@ -737,6 +950,13 @@ static int chrome_contains(struct server *server, double x, double y) {
 		struct wlr_box box;
 		launcher_box(server, &box);
 		if (point_in(&box, x, y)) {
+			return 1;
+		}
+	}
+	struct view *view;
+	wl_list_for_each(view, &server->views, link) {
+		struct wlr_box title;
+		if (view_title_box(view, &title) && point_in(&title, x, y)) {
 			return 1;
 		}
 	}
@@ -886,6 +1106,7 @@ static void process_cursor_move(struct server *server) {
 }
 
 static void process_cursor_motion(struct server *server, uint32_t time) {
+	server->hover_app = dock_app_at(server, server->cursor->x, server->cursor->y);
 	if (server->cursor_mode == CURSOR_MOVE) {
 		process_cursor_move(server);
 		return;
@@ -930,6 +1151,8 @@ static void press_chrome(struct server *server) {
 	server->press_app = -1;
 	server->press_contrast = 0;
 	server->press_brand = 0;
+	server->press_light = 0;
+	server->press_view = NULL;
 	if (server->launcher) {
 		struct wlr_box box;
 		launcher_box(server, &box);
@@ -953,6 +1176,20 @@ static void press_chrome(struct server *server) {
 		server->launcher = 0;
 		return;
 	}
+	struct view *view;
+	wl_list_for_each(view, &server->views, link) {
+		struct wlr_box title;
+		int light;
+		if (!view_title_box(view, &title)) {
+			continue;
+		}
+		light = title_light(&title, x, y);
+		if (light != 0) {
+			server->press_light = light;
+			server->press_view = view;
+			return;
+		}
+	}
 	if (hit_contrast(server, x, y)) {
 		server->press_contrast = 1;
 		return;
@@ -970,7 +1207,23 @@ static void press_chrome(struct server *server) {
 static void release_chrome(struct server *server) {
 	double x = server->cursor->x;
 	double y = server->cursor->y;
-	if (server->press_contrast && hit_contrast(server, x, y)) {
+	if (server->press_view != NULL && server->press_light != 0) {
+		struct wlr_box title;
+		if (view_title_box(server->press_view, &title) &&
+				title_light(&title, x, y) == server->press_light) {
+			if (server->press_light == 1) {
+				wlr_xdg_toplevel_send_close(server->press_view->xdg_toplevel);
+			} else if (server->press_light == 2) {
+				wlr_scene_node_set_enabled(&server->press_view->scene_tree->node, false);
+			} else if (server->press_light == 3) {
+				int width = server->screen_w - 80;
+				int height = server->screen_h - PANEL_H - DOCK_H - TITLE_H - 36;
+				wlr_xdg_toplevel_set_size(server->press_view->xdg_toplevel, width, height);
+				wlr_scene_node_set_position(&server->press_view->scene_tree->node,
+					40, PANEL_H + 8);
+			}
+		}
+	} else if (server->press_contrast && hit_contrast(server, x, y)) {
 		server->contrast = !server->contrast;
 		snprintf(server->notice, sizeof server->notice,
 			server->contrast ? "Contrast mode" : "Glass mode");
@@ -985,6 +1238,8 @@ static void release_chrome(struct server *server) {
 	server->press_app = -1;
 	server->press_contrast = 0;
 	server->press_brand = 0;
+	server->press_light = 0;
+	server->press_view = NULL;
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data) {
@@ -1045,15 +1300,8 @@ static void view_map(struct wl_listener *listener, void *data) {
 	struct view *view = wl_container_of(listener, view, map);
 	wl_list_insert(&view->server->views, &view->link);
 	if (!view->placed) {
-		const char *app_id = view->xdg_toplevel->app_id;
-		int y = 70;
-		int x = 48;
-		if (app_id != NULL && strcmp(app_id, "dev-swatch") == 0) {
-			y = view->server->screen_h - 300;
-			if (y < PANEL_H + 8) {
-				y = PANEL_H + 8;
-			}
-		}
+		int y = PANEL_H + TITLE_H + 36;
+		int x = 180;
 		wlr_scene_node_set_position(&view->scene_tree->node, x, y);
 		view->placed = 1;
 	}
@@ -1223,6 +1471,40 @@ static void add_headless_output(struct wlr_backend *backend, void *data) {
 	}
 }
 
+struct deco_hook {
+	struct wlr_xdg_toplevel_decoration_v1 *decoration;
+	struct wl_listener request;
+	struct wl_listener destroy;
+};
+
+static void decoration_request(struct wl_listener *listener, void *data) {
+	(void)data;
+	struct deco_hook *hook = wl_container_of(listener, hook, request);
+	wlr_xdg_toplevel_decoration_v1_set_mode(hook->decoration,
+		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+}
+
+static void decoration_destroy(struct wl_listener *listener, void *data) {
+	(void)data;
+	struct deco_hook *hook = wl_container_of(listener, hook, destroy);
+	wl_list_remove(&hook->request.link);
+	wl_list_remove(&hook->destroy.link);
+	free(hook);
+}
+
+static void new_decoration(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
+	struct deco_hook *hook = calloc(1, sizeof(*hook));
+	hook->decoration = decoration;
+	hook->request.notify = decoration_request;
+	wl_signal_add(&decoration->events.request_mode, &hook->request);
+	hook->destroy.notify = decoration_destroy;
+	wl_signal_add(&decoration->events.destroy, &hook->destroy);
+	wlr_xdg_toplevel_decoration_v1_set_mode(decoration,
+		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+}
+
 static void usage(const char *argv0) {
 	fprintf(stderr, "Usage: %s [-s startup-command]\n", argv0);
 }
@@ -1245,6 +1527,7 @@ int main(int argc, char *argv[]) {
 
 	struct server server = {0};
 	server.press_app = -1;
+	server.hover_app = -1;
 	load_branding(&server);
 	struct utsname uts;
 	if (uname(&uts) == 0) {
@@ -1296,6 +1579,10 @@ int main(int argc, char *argv[]) {
 	server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 3);
 	server.new_xdg_surface.notify = server_new_xdg_surface;
 	wl_signal_add(&server.xdg_shell->events.new_surface, &server.new_xdg_surface);
+	struct wlr_xdg_decoration_manager_v1 *decorations =
+		wlr_xdg_decoration_manager_v1_create(server.wl_display);
+	server.new_decoration.notify = new_decoration;
+	wl_signal_add(&decorations->events.new_toplevel_decoration, &server.new_decoration);
 
 	server.cursor = wlr_cursor_create();
 	wlr_cursor_attach_output_layout(server.cursor, server.output_layout);

@@ -112,12 +112,12 @@ stage_desktop() {
 	ln -sfn /etc/systemd/system/dev-desktop.service \
 		"$ROOT/etc/systemd/system/multi-user.target.wants/dev-desktop.service"
 	ln -sfn /dev/null "$ROOT/etc/systemd/system/getty@tty1.service"
-	printf 'devdesk\n' > "$ROOT/etc/hostname"
+	printf 'olympium\n' > "$ROOT/etc/hostname"
 	cat > "$ROOT/etc/hosts" <<'EOF'
-127.0.0.1 localhost devdesk
+127.0.0.1 localhost olympium
 ::1 localhost ip6-localhost ip6-loopback
 EOF
-	printf 'Development Desktop (temporary name)\n' > "$ROOT/etc/issue"
+	printf 'Olympium\n' > "$ROOT/etc/issue"
 	: > "$ROOT/etc/machine-id"
 	cp "$REPO/docs/isa-and-abi.md" "$REPO/docs/compatibility-matrix.md" \
 		"$REPO/docs/firmware.md" "$REPO/docs/guest-images.md" \
@@ -153,31 +153,42 @@ pack_iso() {
 	initrd=$(echo "$ROOT"/boot/initrd.img-*)
 	cp -L "$kimg" "$WORK/boot/vmlinuz"
 	cp -L "$initrd" "$WORK/boot/initrd.img"
+	if [ -f "$REPO/desktop/splash.png" ]; then
+		cp "$REPO/desktop/splash.png" "$WORK/boot/grub/splash.png"
+	fi
 	mksquashfs "$ROOT" "$WORK/live/filesystem.squashfs" -comp xz -b 1M -noappend \
 		-e var/cache/apt/archives var/lib/apt/lists
 	cat > "$WORK/boot/grub/grub.cfg" <<'EOF'
 set timeout=4
 set default=0
-menuentry "Development Desktop live" {
+if loadfont unicode ; then
+	set gfxmode=1280x800,auto
+	terminal_output gfxterm
+fi
+insmod png
+background_image /boot/grub/splash.png
+set menu_color_normal=white/black
+set menu_color_highlight=black/light-gray
+menuentry "Olympium" {
 	linux /boot/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0
 	initrd /boot/initrd.img
 }
-menuentry "Development Desktop live, contrast fallback" {
-	linux /boot/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0 devdesk.contrast=1
+menuentry "Olympium, contrast" {
+	linux /boot/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0 olympium.contrast=1
 	initrd /boot/initrd.img
 }
 EOF
 	local out="$REPO/build/dev-live-${ARCH}.iso"
 	mkdir -p "$REPO/build"
 	if [ "$ARCH" = amd64 ]; then
-		grub-mkrescue -o "$out" "$WORK" -- -volid DEV_LIVE
+		grub-mkrescue -o "$out" "$WORK" -- -volid OLYMPIUM
 	else
 		# grub-mkrescue inside the arm64 chroot emits an arm64 EFI image.
 		mount_chroot
 		rm -rf "$ROOT/tmp/iso"
 		mkdir -p "$ROOT/tmp/iso"
 		cp -a "$WORK/." "$ROOT/tmp/iso/"
-		chroot "$ROOT" grub-mkrescue -o /tmp/dev-live-arm64.iso /tmp/iso -- -volid DEV_LIVE
+		chroot "$ROOT" grub-mkrescue -o /tmp/dev-live-arm64.iso /tmp/iso -- -volid OLYMPIUM
 		cp "$ROOT/tmp/dev-live-arm64.iso" "$out"
 		umount_chroot
 	fi
