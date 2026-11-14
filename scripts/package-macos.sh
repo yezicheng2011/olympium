@@ -15,7 +15,10 @@ if [ "$(uname -s)" != Darwin ]; then
   exit 2
 fi
 
-version="$(awk -F'"' '/^version = / { print $2; exit }' crates/linkspan-cli/Cargo.toml)"
+version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
+if [ -z "$version" ]; then
+  version="$(awk -F'"' '/^version = / { print $2; exit }' crates/linkspan-cli/Cargo.toml)"
+fi
 if [ -z "$version" ]; then
   version="0.1.0"
 fi
@@ -30,7 +33,7 @@ fi
 
 xcodebuild \
   -project hosts/macos/Linkspan.xcodeproj \
-  -target Linkspan \
+  -scheme Linkspan \
   -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath "$dist/DerivedData" \
