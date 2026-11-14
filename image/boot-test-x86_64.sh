@@ -75,15 +75,36 @@ boot_one() {
 	ls -lh "$OUT/${name}.ppm" || echo "missing $name screenshot"
 }
 
-boot_one olympium-desktop-clean 6 -cdrom "$ISO" -boot d
 if [ -f "$STAGE/boot/vmlinuz" ] && [ -f "$STAGE/boot/initrd.img" ]; then
-	boot_one olympium-desktop-files 14 \
+	# One boot. The compositor opens the File menu after a few seconds.
+	# Files and the Olympium launcher follow on the same command line.
+	mon=/tmp/qemu-monitor.sock
+	log=$OUT/olympium-boot-serial.log
+	rm -f "$mon" "$log"
+	qemu-system-x86_64 -m 2048 -smp 2 "${KVM[@]}" \
 		-kernel "$STAGE/boot/vmlinuz" \
 		-initrd "$STAGE/boot/initrd.img" \
-		-append "boot=live console=ttyS0,115200 console=tty0 olympium.openfiles=1" \
-		-cdrom "$ISO"
+		-append "boot=live console=ttyS0,115200 console=tty0 olympium.openmenu=1 olympium.openfiles=1 olympium.openruntime=1" \
+		-cdrom "$ISO" \
+		-vga std -display none \
+		-serial file:"$log" \
+		-monitor unix:"$mon",server,nowait \
+		-usb -device usb-tablet -no-reboot &
+	qemu=$!
+	wait_desktop "$log" "$qemu" || true
+	sleep 3
+	shot "$mon" "$OUT/olympium-desktop-clean.ppm" || true
+	sleep 6
+	shot "$mon" "$OUT/olympium-desktop-menu.ppm" || true
+	sleep 8
+	shot "$mon" "$OUT/olympium-desktop-files.ppm" || true
+	sleep 10
+	shot "$mon" "$OUT/olympium-desktop-olympium.ppm" || true
+	kill "$qemu" 2>/dev/null || true
+	wait "$qemu" 2>/dev/null || true
 else
-	echo "no staged kernel; skipping the open-window boot" >&2
+	echo "no staged kernel" >&2
+	exit 1
 fi
 sha256sum "$ISO" | tee "$OUT/dev-live-amd64.iso.sha256"
 file "$OUT"/olympium-desktop-*.ppm || true

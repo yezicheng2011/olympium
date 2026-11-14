@@ -163,6 +163,11 @@ struct server {
 	struct view *press_view;
 	char frame_title[128];
 	struct wl_listener new_decoration;
+	int open_menu;
+	int menu_x[8];
+	int menu_w[8];
+	int demo_menu;
+	int demo_menu_done;
 	char shot_path[256];
 	int shot_written;
 	int control_fd;
@@ -177,6 +182,10 @@ static const int DOCK_MARGIN = 8;
 static const int DOCK_SLOT = 56;
 static const char *UI_FONT = "Ubuntu 12";
 static const char *UI_FONT_SM = "Ubuntu 11";
+
+static int menu_item_count(int menu);
+static void menu_box(const struct server *server, struct wlr_box *box);
+static const char *MENU_ITEMS[][4];
 
 static void focus_view(struct view *view, struct wlr_surface *surface);
 
@@ -299,25 +308,36 @@ static int hit_brand(const struct server *server, double x, double y) {
 	return x >= 6 && x < 34 && y >= 0 && y < PANEL_H;
 }
 
-/* Original geometric mark: a short serpentine body, a horn, and a pearl.
- * It is not an apple, a leaf, or a bitten circle. */
+/* Official-placeholder Olympium mark: an abstract Eastern dragon.
+ * Serpentine body, antler horns, whiskers, and a pearl. Not an apple. */
 static void draw_dragon(cairo_t *cr, double x, double y, double size, double r, double g, double b) {
 	cairo_save(cr);
 	cairo_translate(cr, x, y);
 	cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+	cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 	cairo_set_source_rgba(cr, r, g, b, 1);
-	cairo_set_line_width(cr, size * 0.16);
-	cairo_move_to(cr, size * 0.18, size * 0.78);
-	cairo_curve_to(cr, size * 0.05, size * 0.42, size * 0.72, size * 0.62,
-		size * 0.48, size * 0.30);
+	cairo_set_line_width(cr, size * 0.09);
+	cairo_move_to(cr, size * 0.08, size * 0.82);
+	cairo_curve_to(cr, size * 0.02, size * 0.48, size * 0.55, size * 0.72,
+		size * 0.38, size * 0.46);
+	cairo_curve_to(cr, size * 0.22, size * 0.22, size * 0.70, size * 0.30,
+		size * 0.58, size * 0.18);
 	cairo_stroke(cr);
-	cairo_set_line_width(cr, size * 0.11);
-	cairo_move_to(cr, size * 0.46, size * 0.30);
-	cairo_line_to(cr, size * 0.62, size * 0.08);
+	cairo_set_line_width(cr, size * 0.045);
+	cairo_move_to(cr, size * 0.56, size * 0.18);
+	cairo_line_to(cr, size * 0.48, size * 0.02);
+	cairo_move_to(cr, size * 0.60, size * 0.16);
+	cairo_line_to(cr, size * 0.74, size * 0.00);
 	cairo_stroke(cr);
-	cairo_arc(cr, size * 0.62, size * 0.34, size * 0.16, 0, 6.2832);
+	cairo_arc(cr, size * 0.70, size * 0.24, size * 0.11, 0, 6.2832);
 	cairo_fill(cr);
-	cairo_arc(cr, size * 0.84, size * 0.22, size * 0.07, 0, 6.2832);
+	cairo_set_line_width(cr, size * 0.03);
+	cairo_move_to(cr, size * 0.78, size * 0.22);
+	cairo_line_to(cr, size * 0.96, size * 0.16);
+	cairo_move_to(cr, size * 0.76, size * 0.28);
+	cairo_line_to(cr, size * 0.94, size * 0.32);
+	cairo_stroke(cr);
+	cairo_arc(cr, size * 0.90, size * 0.08, size * 0.035, 0, 6.2832);
 	cairo_fill(cr);
 	cairo_restore(cr);
 }
@@ -483,14 +503,16 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		const struct wlr_box *box, int which) {
 	(void)surface;
 	if (which == 0) {
-		draw_dragon(cr, 8, 4, 20, 0.93, 0.78, 0.45);
+		draw_dragon(cr, 6, 3, 22, 0.93, 0.78, 0.45);
 		const char *app = server->frame_title[0] != '\0' ? server->frame_title : server->title;
-		int app_w = paint_text(cr, "Ubuntu Bold 13", app, 36, 5, 0.96, 0.96, 0.97);
+		server->menu_x[0] = 34;
+		server->menu_w[0] = paint_text(cr, "Ubuntu Bold 13", app, 34, 5, 0.96, 0.96, 0.97);
 		const char *menus[] = {"File", "Edit", "View", "Go", "Window", "Help"};
-		double mx = 36 + app_w + 22;
+		double mx = server->menu_x[0] + server->menu_w[0] + 20;
 		for (int i = 0; i < 6; i++) {
-			int item_w = paint_text(cr, UI_FONT, menus[i], mx, 5, 0.90, 0.91, 0.93);
-			mx += item_w + 18;
+			server->menu_x[i + 1] = (int)mx;
+			server->menu_w[i + 1] = paint_text(cr, UI_FONT, menus[i], mx, 5, 0.92, 0.93, 0.95);
+			mx += server->menu_w[i + 1] + 16;
 		}
 		time_t now = time(NULL);
 		struct tm tm;
@@ -504,6 +526,14 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		for (int i = 0; i < APP_COUNT; i++) {
 			double ix = 12 + i * DOCK_SLOT + (DOCK_SLOT - 36) / 2.0;
 			draw_icon(cr, APPS[i].id, ix, 14);
+		}
+		return;
+	}
+	if (which == 5 && server->open_menu >= 0) {
+		int n = menu_item_count(server->open_menu);
+		for (int i = 0; i < n; i++) {
+			paint_text(cr, UI_FONT, MENU_ITEMS[server->open_menu][i], 16, 8 + i * 28,
+				0.10, 0.10, 0.12);
 		}
 		return;
 	}
@@ -663,6 +693,37 @@ static int title_light(const struct wlr_box *box, double x, double y) {
 	return 0;
 }
 
+static void wallpaper_rgb(int y, int screen_h, double *r, double *g, double *b) {
+	float t = screen_h > 1 ? (float)y / (float)(screen_h - 1) : 0;
+	*r = 0.10 + t * 0.05;
+	*g = 0.13 + t * 0.04;
+	*b = 0.20 + t * 0.03;
+}
+
+/* Cover the square corner of a client surface so the window reads as rounded. */
+static void mask_corner(struct server *server, struct wlr_output *output,
+		int x, int y, int radius, int which) {
+	cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, radius, radius);
+	cairo_t *cr = cairo_create(surface);
+	double wr, wg, wb;
+	wallpaper_rgb(y, server->screen_h, &wr, &wg, &wb);
+	cairo_set_source_rgba(cr, wr, wg, wb, 1);
+	cairo_paint(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_DEST_OUT);
+	cairo_set_source_rgba(cr, 0, 0, 0, 1);
+	if (which == 2) {
+		cairo_arc(cr, radius, 0, radius, 0, 6.2832);
+	} else {
+		cairo_arc(cr, 0, 0, radius, 0, 6.2832);
+	}
+	cairo_fill(cr);
+	cairo_destroy(cr);
+	struct wlr_texture *texture = texture_from_cairo(server->renderer, surface);
+	cairo_surface_destroy(surface);
+	render_texture_at(server, output, texture, x, y);
+	wlr_texture_destroy(texture);
+}
+
 static struct wlr_texture *make_shadow(struct server *server, int width, int height) {
 	int pad = 36;
 	int sw = width + pad * 2;
@@ -750,6 +811,11 @@ static void output_frame(struct wl_listener *listener, void *data) {
 				title.width, title.height, -12, 3);
 			render_texture_at(server, output->wlr_output, bar, title.x, title.y);
 			wlr_texture_destroy(bar);
+			int content_h = frame_h - TITLE_H;
+			mask_corner(server, output->wlr_output, title.x, title.y + frame_h - 14, 14, 2);
+			mask_corner(server, output->wlr_output, title.x + title.width - 14,
+				title.y + frame_h - 14, 14, 3);
+			(void)content_h;
 			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
 		}
 		panel = make_chrome(server, 0, 0, server->screen_w, PANEL_H, 0, 0);
@@ -770,6 +836,18 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			render_texture_at(server, output->wlr_output, tip,
 				dockb.x + 10 + server->hover_app * DOCK_SLOT, dockb.y - 28);
 			wlr_texture_destroy(tip);
+		}
+		if (server->demo_menu && !server->demo_menu_done && server->frames > 240) {
+			server->open_menu = 1;
+			server->demo_menu_done = 1;
+		}
+		if (server->open_menu >= 0) {
+			struct wlr_box drop;
+			menu_box(server, &drop);
+			struct wlr_texture *drop_tex = make_chrome(server, drop.x, drop.y,
+				drop.width, drop.height, 10, 5);
+			render_texture_at(server, output->wlr_output, drop_tex, drop.x, drop.y);
+			wlr_texture_destroy(drop_tex);
 		}
 		if (server->launcher) {
 			struct wlr_box lb;
@@ -945,6 +1023,13 @@ static int chrome_contains(struct server *server, double x, double y) {
 	dock_box(server, &dock);
 	if (point_in(&dock, x, y)) {
 		return 1;
+	}
+	if (server->open_menu >= 0) {
+		struct wlr_box drop;
+		menu_box(server, &drop);
+		if (point_in(&drop, x, y)) {
+			return 1;
+		}
 	}
 	if (server->launcher) {
 		struct wlr_box box;
@@ -1145,6 +1230,113 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
 	process_cursor_motion(server, event->time_msec);
 }
 
+static const char *MENU_ITEMS[][4] = {
+	{"About Olympium", "Settings", NULL, NULL},
+	{"New Window", "Close Window", "About Olympium", NULL},
+	{"Toggle Contrast", NULL, NULL, NULL},
+	{"Show Hidden Files", NULL, NULL, NULL},
+	{"Home", "Documents", "Computer", NULL},
+	{"Minimize", "Zoom", "Cycle Windows", NULL},
+	{"Olympium", "Compatibility", NULL, NULL},
+};
+
+static int menu_item_count(int menu) {
+	int n = 0;
+	if (menu < 0 || menu > 6) {
+		return 0;
+	}
+	while (n < 4 && MENU_ITEMS[menu][n] != NULL) {
+		n++;
+	}
+	return n;
+}
+
+static void menu_box(const struct server *server, struct wlr_box *box) {
+	int n = menu_item_count(server->open_menu);
+	box->x = server->menu_x[server->open_menu];
+	box->y = PANEL_H;
+	box->width = 220;
+	box->height = 10 + n * 28;
+}
+
+static void launch_files_at(const char *path) {
+	if (fork() == 0) {
+		setsid();
+		execl("/usr/bin/dev-files", "dev-files", path, (char *)NULL);
+		_exit(127);
+	}
+}
+
+static struct view *front_view(struct server *server) {
+	struct view *view;
+	wl_list_for_each(view, &server->views, link) {
+		if (view->scene_tree->node.enabled) {
+			return view;
+		}
+	}
+	return NULL;
+}
+
+static void menu_activate(struct server *server, int menu, int item) {
+	const char *home = getenv("HOME");
+	if (home == NULL || home[0] == '\0') {
+		home = "/root";
+	}
+	server->open_menu = -1;
+	if (menu == 0 && item == 0) {
+		launch_app(server, &APPS[2]);
+	} else if (menu == 0 && item == 1) {
+		launch_app(server, &APPS[3]);
+	} else if (menu == 1 && item == 0) {
+		launch_files_at(home);
+	} else if (menu == 1 && item == 1) {
+		struct view *view = front_view(server);
+		if (view != NULL) {
+			wlr_xdg_toplevel_send_close(view->xdg_toplevel);
+		}
+	} else if (menu == 1 && item == 2) {
+		launch_app(server, &APPS[2]);
+	} else if (menu == 2 && item == 0) {
+		server->contrast = !server->contrast;
+	} else if (menu == 3 && item == 0) {
+		setenv("OLYMPIUM_SHOW_HIDDEN", "1", 1);
+		launch_files_at(home);
+	} else if (menu == 4 && item == 0) {
+		launch_files_at(home);
+	} else if (menu == 4 && item == 1) {
+		launch_files_at("/usr/share/doc");
+	} else if (menu == 4 && item == 2) {
+		launch_files_at("/");
+	} else if (menu == 5 && item == 0) {
+		struct view *view = front_view(server);
+		if (view != NULL) {
+			wlr_scene_node_set_enabled(&view->scene_tree->node, false);
+		}
+	} else if (menu == 5 && item == 1) {
+		struct view *view = front_view(server);
+		if (view != NULL) {
+			wlr_xdg_toplevel_set_size(view->xdg_toplevel,
+				server->screen_w - 80, server->screen_h - PANEL_H - DOCK_H - TITLE_H - 36);
+			wlr_scene_node_set_position(&view->scene_tree->node, 40, PANEL_H + 8);
+		}
+	} else if (menu == 5 && item == 2 && !wl_list_empty(&server->views)) {
+		struct view *next = wl_container_of(server->views.prev, next, link);
+		focus_view(next, next->xdg_toplevel->base->surface);
+	} else if (menu == 6 && item == 0) {
+		if (fork() == 0) {
+			setsid();
+			execl("/usr/bin/dev-settings", "dev-settings", "--page=olympium", (char *)NULL);
+			_exit(127);
+		}
+	} else if (menu == 6 && item == 1) {
+		if (fork() == 0) {
+			setsid();
+			execl("/usr/bin/dev-settings", "dev-settings", "--page=compat", (char *)NULL);
+			_exit(127);
+		}
+	}
+}
+
 static void press_chrome(struct server *server) {
 	double x = server->cursor->x;
 	double y = server->cursor->y;
@@ -1153,6 +1345,26 @@ static void press_chrome(struct server *server) {
 	server->press_brand = 0;
 	server->press_light = 0;
 	server->press_view = NULL;
+	if (server->open_menu >= 0) {
+		struct wlr_box drop;
+		menu_box(server, &drop);
+		if (point_in(&drop, x, y)) {
+			int item = (int)((y - drop.y - 6) / 28);
+			if (item >= 0 && item < menu_item_count(server->open_menu)) {
+				menu_activate(server, server->open_menu, item);
+			}
+			return;
+		}
+	}
+	if (y >= 0 && y < PANEL_H) {
+		for (int i = 0; i < 7; i++) {
+			if (x >= server->menu_x[i] && x < server->menu_x[i] + server->menu_w[i]) {
+				server->open_menu = server->open_menu == i ? -1 : i;
+				return;
+			}
+		}
+	}
+	server->open_menu = -1;
 	if (server->launcher) {
 		struct wlr_box box;
 		launcher_box(server, &box);
@@ -1528,6 +1740,15 @@ int main(int argc, char *argv[]) {
 	struct server server = {0};
 	server.press_app = -1;
 	server.hover_app = -1;
+	server.open_menu = -1;
+	FILE *cmd = fopen("/proc/cmdline", "r");
+	if (cmd != NULL) {
+		char line[512];
+		if (fgets(line, sizeof line, cmd) != NULL && strstr(line, "olympium.openmenu=1") != NULL) {
+			server.demo_menu = 1;
+		}
+		fclose(cmd);
+	}
 	load_branding(&server);
 	struct utsname uts;
 	if (uname(&uts) == 0) {

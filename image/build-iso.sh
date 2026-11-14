@@ -106,7 +106,10 @@ stage_desktop() {
 		"$REPO/desktop/dev-compat" "$ROOT/usr/bin/"
 	install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 		"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
+		"$REPO/image/guest-fetch.sh" \
 		"$ROOT/usr/libexec/dev-desktop/"
+	install -d "$ROOT/usr/share/olympium"
+	install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
 	install -m 644 "$REPO/branding/branding.conf" "$ROOT/etc/dev-desktop/branding.conf"
 	install -m 644 "$REPO/image/dev-desktop.service" "$ROOT/etc/systemd/system/dev-desktop.service"
 	ln -sfn /etc/systemd/system/dev-desktop.service \

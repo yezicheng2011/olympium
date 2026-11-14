@@ -6,17 +6,24 @@
 # twice. This is a BIOS or UEFI installer for this image, not a general
 # distribution installer.
 set -eu
+YES=0
+if [ "${1:-}" = "--yes" ]; then
+	YES=1
+	shift
+fi
 DISK=${1:-${DEV_INSTALL_DISK:-}}
 if [ -z "$DISK" ] || [ ! -b "$DISK" ]; then
 	echo "Usage: install-to-disk /dev/sdX" >&2
 	echo "The device you name will be erased." >&2
 	exit 1
 fi
-printf 'Type %s to erase it: ' "$DISK"
-read -r answer
-if [ "$answer" != "$DISK" ]; then
-	echo "Not confirmed." >&2
-	exit 1
+if [ "$YES" -ne 1 ]; then
+	printf 'Type %s to erase it: ' "$DISK"
+	read -r answer
+	if [ "$answer" != "$DISK" ]; then
+		echo "Not confirmed." >&2
+		exit 1
+	fi
 fi
 if [ -d /sys/firmware/efi ]; then
 	sfdisk "$DISK" <<EOF
