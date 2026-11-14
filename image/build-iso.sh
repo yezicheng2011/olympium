@@ -269,6 +269,9 @@ EOF
 }
 
 pack_iso() {
+	# A previous arm64 grub-mkrescue leaves the ISO and a squashfs copy here.
+	# ISO9660 cannot hold a file over 4 GiB, so those copies must not be packed.
+	rm -rf "$ROOT/tmp/iso" "$ROOT/tmp/desktop" "$ROOT/tmp/dev-live-arm64.iso"
 	umount_chroot
 	rm -rf "$WORK"
 	mkdir -p "$WORK/boot/grub" "$WORK/live"
