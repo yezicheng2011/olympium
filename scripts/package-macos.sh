@@ -22,7 +22,15 @@ rm -rf "$dist"
 mkdir -p "$dist/payload" "$dist/notes"
 
 if command -v cargo >/dev/null 2>&1; then
-  cargo build -p olympium-cli --release
+  rustup target add aarch64-apple-darwin x86_64-apple-darwin
+  cargo build -p olympium-cli --release --target aarch64-apple-darwin
+  cargo build -p olympium-cli --release --target x86_64-apple-darwin
+  mkdir -p "$dist"
+  lipo -create \
+    target/aarch64-apple-darwin/release/olympium \
+    target/x86_64-apple-darwin/release/olympium \
+    -output "$dist/olympium-universal"
+  chmod 755 "$dist/olympium-universal"
 fi
 
 xcodebuild \
@@ -31,6 +39,8 @@ xcodebuild \
   -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath "$dist/DerivedData" \
+  ARCHS='arm64 x86_64' \
+  ONLY_ACTIVE_ARCH=NO \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGN_IDENTITY=- \
   CODE_SIGN_STYLE=Manual \
@@ -46,13 +56,23 @@ fi
 stage="$dist/payload/Olympium.app"
 rm -rf "$stage"
 cp -R "$app" "$stage"
-if [ -x target/release/olympium ]; then
+if [ -x "$dist/olympium-universal" ]; then
   # Keep this out of Contents/MacOS. On the default Mac volume, olympium and
   # Olympium are one path, so a copy there replaces the application binary.
   mkdir -p "$stage/Contents/Helpers"
-  cp target/release/olympium "$stage/Contents/Helpers/olympium"
+  cp "$dist/olympium-universal" "$stage/Contents/Helpers/olympium"
   chmod 755 "$stage/Contents/Helpers/olympium"
+else
+  echo "The universal engine was not built." >&2
+  exit 1
 fi
+{
+  echo "QEMU is not installed by this package. The Mac guest job installs QEMU with Homebrew on the runner only."
+  echo "Application:"
+  lipo -info "$stage/Contents/MacOS/Olympium"
+  echo "Engine:"
+  lipo -info "$stage/Contents/Helpers/olympium"
+} > "$dist/notes/ARCHITECTURES.txt"
 if [ -f hosts/macos/Olympium/Resources/Olympium.icns ]; then
   mkdir -p "$stage/Contents/Resources"
   cp hosts/macos/Olympium/Resources/Olympium.icns "$stage/Contents/Resources/Olympium.icns"
@@ -121,13 +141,13 @@ cat > "$dist/notes/update.json" <<EOF
   "product": "Olympium",
   "version": "$version",
   "package": "Olympium-${version}.pkg",
-  "notes": "Produced by GitHub Actions as a workflow artifact. It does not replace https://olympium.net/download/v0.1.0/Linkspan-0.1.0.pkg and it is not a GitHub Release. Slim guest images are not inside the package. The deb+zip polyglot is a separate experiment and is not this package."
+  "notes": "Produced by GitHub Actions as a workflow artifact. It does not replace https://olympium.net/download/v0.1.0/Linkspan-0.1.0.pkg and it is not a GitHub Release. QEMU is not inside the package. Slim guest images are not inside the package. The deb+zip polyglot is a separate experiment and is not this package."
 }
 EOF
 
-cp "$dist/notes/SIGNING.txt" "$dist/notes/update.json" "$pkg" dist/ 2>/dev/null || true
 mkdir -p dist
 cp "$pkg" "dist/Olympium-${version}.pkg"
 cp "$dist/notes/SIGNING.txt" dist/SIGNING.txt
 cp "$dist/notes/update.json" dist/update.json
+cp "$dist/notes/ARCHITECTURES.txt" dist/ARCHITECTURES.txt
 echo "Wrote dist/Olympium-${version}.pkg"

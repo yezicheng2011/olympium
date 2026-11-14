@@ -53,6 +53,7 @@ jobs:
             dist/*.pkg
             dist/SIGNING.txt
             dist/update.json
+            dist/ARCHITECTURES.txt
 
   # The package job produces Olympium-<version>.pkg as a workflow artifact.
   # This job is the Mac download and boot check. It does not upload a package
@@ -70,7 +71,7 @@ jobs:
             brew install qemu
           fi
           qemu-system-aarch64 --version
-          echo "Lima is not used. This boots the slim Alpine guest with QEMU."
+          echo "This Homebrew install is only for the runner. The .pkg does not include QEMU."
       - name: Download, check, and boot the slim Linux guest
         run: |
           cargo build -p olympium-cli --release

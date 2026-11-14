@@ -13,9 +13,10 @@ final class LibraryModel: ObservableObject {
     @Published var cells: [CellRow] = []
     @Published var limits: [LimitNote] = []
     @Published var guestBusy = false
-    @Published var guestStatus = "The slim Linux guest has not been started from this window."
+    @Published var guestCanBoot = false
+    @Published var guestStatus = "Checking whether QEMU is installed. This package does not include it."
     @Published var guestLog = ""
-    private var guestProcess: Process?
+    private var guestController: LinuxGuestController?
 
     func load() {
         if let document = bundledDocument() ?? repositoryDocument() {
@@ -31,6 +32,7 @@ final class LibraryModel: ObservableObject {
             }
             limits = document.limits
         }
+        refreshGuestReadiness()
         if let cli = locateCli() {
             engineLine = "Engine: \(cli.path)"
             programs = listPrograms(cli)
@@ -109,71 +111,54 @@ final class LibraryModel: ObservableObject {
 
     func downloadCheckAndBootLinuxGuest() {
         guard !guestBusy else { return }
-        guard let cli = locateCli() else {
-            guestStatus = "The Olympium engine is not in this app, so the guest cannot be downloaded."
-            return
-        }
+        let controller = makeGuestController()
+        guestController = controller
+        guestCanBoot = controller.canBoot
+        guestStatus = controller.status
+        guard controller.canBoot else { return }
         guestBusy = true
-        guestStatus = "Downloading the slim Linux guest. The checksum is checked before it is kept."
-        guestLog = ""
-        let process = Process()
-        process.executableURL = cli
-        process.arguments = ["guest", "--guest", "linux"]
-        var env = ProcessInfo.processInfo.environment
-        let prefix = "/opt/homebrew/bin:/usr/local/bin"
-        if let path = env["PATH"], !path.isEmpty {
-            env["PATH"] = prefix + ":" + path
-        } else {
-            env["PATH"] = prefix + ":/usr/bin:/bin"
-        }
-        process.environment = env
-        let output = Pipe()
-        let errors = Pipe()
-        process.standardOutput = output
-        process.standardError = errors
-        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            Task { @MainActor in
-                self?.appendGuestOutput(data)
+        let engine = locateCli()?.path
+        Task {
+            let code = await controller.start(
+                enginePath: engine,
+                isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
+                runner: FoundationGuestRunner()
+            )
+            guestBusy = controller.busy
+            guestLog = controller.log
+            guestStatus = controller.status
+            if code == nil, controller.outcome == .blocked {
+                guestCanBoot = controller.canBoot
             }
-        }
-        errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            Task { @MainActor in
-                self?.appendGuestOutput(data)
-            }
-        }
-        process.terminationHandler = { [weak self] proc in
-            output.fileHandleForReading.readabilityHandler = nil
-            errors.fileHandleForReading.readabilityHandler = nil
-            let code = proc.terminationStatus
-            Task { @MainActor in
-                guard let self else { return }
-                self.guestProcess = nil
-                self.guestBusy = false
-                if code == 0 {
-                    self.guestStatus = "The slim Linux guest finished. The command reported the guest marker."
-                } else {
-                    self.guestStatus = "The slim Linux guest command failed with exit \(code)."
-                }
-            }
-        }
-        do {
-            guestProcess = process
-            try process.run()
-        } catch {
-            guestProcess = nil
-            guestBusy = false
-            guestStatus = "Could not start the guest command. \(error.localizedDescription)"
         }
     }
 
-    private func appendGuestOutput(_ data: Data) {
-        guard !data.isEmpty, let text = String(data: data, encoding: .utf8), !text.isEmpty else {
-            return
-        }
-        Task { @MainActor in
-            self.guestLog += text
-        }
+    private func refreshGuestReadiness() {
+        let controller = makeGuestController()
+        guestController = controller
+        guestCanBoot = controller.canBoot
+        guestStatus = controller.status
+    }
+
+    private func makeGuestController() -> LinuxGuestController {
+        var paths = ["/opt/homebrew/bin", "/usr/local/bin"]
+        let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        paths.append(contentsOf: envPath.split(separator: ":").map(String.init))
+        let session = LinuxGuestSession.evaluate(
+            hostArchitecture: currentHostArchitecture(),
+            searchPaths: paths,
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }
+        )
+        return LinuxGuestController(session: session)
+    }
+
+    private func currentHostArchitecture() -> String {
+        #if arch(arm64)
+        return "arm64"
+        #elseif arch(x86_64)
+        return "x86_64"
+        #else
+        return "unknown"
+        #endif
     }
 }

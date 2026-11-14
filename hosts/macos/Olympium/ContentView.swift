@@ -74,11 +74,11 @@ struct ContentView: View {
             Text("Mac apps, disk images, and installer packages open with macOS. Scripts run here too. A Linux program you already have still uses Lima. That is not this guest.")
             Text("Linux slim guest")
                 .font(.headline)
-            Text("This downloads the published Alpine image, checks SHA-256, extracts it, and boots it. QEMU has to be installed. The guest is not a general Linux distribution.")
-            Button(model.guestBusy ? "Working…" : "Download, check, and boot") {
+            Text("The package does not include QEMU. Boot is offered only when the QEMU command for this Mac is already installed. The guest is Alpine, not a general Linux distribution, and not Lima.")
+            Button(model.guestCanBoot ? (model.guestBusy ? "Working…" : "Download, check, and boot") : "QEMU is not included") {
                 model.downloadCheckAndBootLinuxGuest()
             }
-            .disabled(model.guestBusy)
+            .disabled(model.guestBusy || !model.guestCanBoot)
             Text(model.guestStatus)
             if !model.guestLog.isEmpty {
                 Text(model.guestLog)
