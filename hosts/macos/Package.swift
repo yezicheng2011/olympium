@@ -6,6 +6,9 @@ import PackageDescription
 
 let package = Package(
     name: "OlympiumKit",
+    platforms: [
+        .macOS(.v14),
+    ],
     products: [
         .library(name: "OlympiumKit", targets: ["OlympiumKit"]),
     ],
