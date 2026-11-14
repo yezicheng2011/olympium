@@ -24,18 +24,18 @@
       "id": "linux",
       "guest": "linux",
       "edition": "slim",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "published": true,
       "repo": "https://github.com/yezicheng2011/olympium-linux",
-      "tag": "v0.1.0",
-      "summary": "Alpine Linux 3.24.4 root filesystem and virt kernel. x86_64 booted with KVM. aarch64 booted with QEMU TCG on an x86_64 host. Lima and WSL import were not tested.",
+      "tag": "v0.1.1",
+      "summary": "Alpine Linux 3.24.4. v0.1.1 keeps the v0.1.0 kernel, initramfs, and rootfs bytes and was booted again with QEMU TCG on an x86_64 host. The aarch64 helper is a static aarch64 ELF. v0.1.0 archives were not modified. Not booted on aarch64 hardware. Lima and WSL were not tested.",
       "assets": {
         "x86_64": "linux-slim-x86_64.tar.gz",
         "aarch64": "linux-slim-aarch64.tar.gz"
       },
       "sha256": {
-        "x86_64": "ee99f134d87dfcaa898566e79f21a521b97837ab864fceb80ba221396e3e0412",
-        "aarch64": "b34d347e4454c129fc8ac2190f036827e988bdbe4f1b2a603689f34bb3cd03c0"
+        "x86_64": "58bef9a0ceb4dcaf853d21aab9a63dc507cfa608cf92665ca5a2cd9ac1a13c4e",
+        "aarch64": "4da345bbf8bd7e94a66fe5afe6d07b80b34df73a5d08912539cfaee0eb27c49f"
       }
     },
     {

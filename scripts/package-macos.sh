@@ -118,7 +118,7 @@ cat > "$dist/notes/update.json" <<EOF
   "product": "Olympium",
   "version": "$version",
   "package": "Olympium-${version}.pkg",
-  "notes": "Produced by GitHub Actions from this repository. The official site is https://olympium.net. Slim guest images are not inside the package."
+  "notes": "Produced by GitHub Actions as a workflow artifact. It does not replace https://olympium.net/download/v0.1.0/Linkspan-0.1.0.pkg and it is not a GitHub Release. Slim guest images are not inside the package. The deb+zip polyglot is a separate experiment and is not this package."
 }
 EOF
 

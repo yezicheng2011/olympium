@@ -53,3 +53,38 @@ jobs:
             dist/*.pkg
             dist/SIGNING.txt
             dist/update.json
+
+  # The package job produces Olympium-<version>.pkg as a workflow artifact.
+  # This job is the Mac download and boot check. It does not upload a package
+  # and it does not publish a release. GitHub-hosted macOS runners are Apple
+  # Silicon, so the client fetches the aarch64 slim Linux image.
+  macos-guest:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install QEMU when the runner does not already have it
+        run: |
+          if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
+            brew install qemu
+          fi
+          qemu-system-aarch64 --version
+          echo "Lima is not used. This boots the slim Alpine guest with QEMU."
+      - name: Download, check, and boot the slim Linux guest
+        run: |
+          cargo build -p olympium-cli --release
+          export OLYMPIUM_HOME="$RUNNER_TEMP/olympium-home"
+          ./target/release/olympium fetch --guest linux
+          test -f "$OLYMPIUM_HOME/runtimes/linux/EDITION"
+          test -f "$OLYMPIUM_HOME/runtimes/linux/boot/vmlinuz"
+          ./target/release/olympium guest --guest linux
+          set +e
+          ./target/release/olympium fetch --guest windows
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "An aarch64 Mac must not accept the Linux x86_64 Wine archive as installed." >&2
+            exit 1
+          fi
+          echo "Windows fetch on this Mac returned $code, as expected. The published Wine archive is a Linux x86_64 ELF."

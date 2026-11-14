@@ -57,7 +57,7 @@ Images are not inside Olympium. When a desktop client starts, it reads the clien
 
 Published image releases:
 
-- [olympium-linux](https://github.com/yezicheng2011/olympium-linux) v0.1.0: Alpine Linux 3.24.4 for x86_64 and aarch64. The x86_64 guest was booted with KVM. The aarch64 guest was booted with QEMU's software CPU on an x86_64 host, not on aarch64 hardware. Lima and WSL import were not tested.
+- [olympium-linux](https://github.com/yezicheng2011/olympium-linux) v0.1.1: the client downloads this tag. It is Alpine Linux 3.24.4. The kernel, initramfs, and root filesystem match v0.1.0. Both v0.1.1 archives were booted again with QEMU TCG on an x86_64 host and printed `olympium-linux-guest-ok`. The aarch64 helper is a static aarch64 ELF. v0.1.0 was not modified. The aarch64 guest was not booted on aarch64 hardware. Lima and WSL import were not tested.
 - [olympium-wine](https://github.com/yezicheng2011/olympium-wine) v0.1.0: Wine 11.0 for 64-bit Windows programs on Linux x86_64. A 32-bit program failed, and there is no aarch64, macOS, or Windows-host build.
 
 Not published, and not reported as working:

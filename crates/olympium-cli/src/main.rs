@@ -462,12 +462,22 @@ fn remember_installed_wine(
     config: &mut olympium_core::Config,
     layout: &olympium_core::Layout,
 ) -> Result<(), Error> {
-    if host != HostPlatform::Linux || !config.engines.windows.wine.is_empty() {
+    if host != HostPlatform::Linux {
         return Ok(());
     }
+    let managed = layout.runtimes.join("wine").join("bin").join("wine");
+    if !config.engines.windows.wine.is_empty() {
+        if PathBuf::from(&config.engines.windows.wine) == managed && !managed.is_file() {
+            config.engines.windows.wine.clear();
+            save_config(&layout.config, config)?;
+        } else {
+            return Ok(());
+        }
+    }
     if let Some(bin) = installed_wine(layout) {
+        // Used for this launch only. Saving it would make a cleared cache
+        // look like a user-configured Wine that can never be fetched again.
         config.engines.windows.wine = bin.display().to_string();
-        save_config(&layout.config, config)?;
     }
     Ok(())
 }
@@ -481,14 +491,21 @@ fn ensure_windows_runtime(
     if host != HostPlatform::Linux || guest != GuestSystem::Windows {
         return Ok(());
     }
+    // Proton is a different engine. Do not download Wine when that is the
+    // selection, including when Proton is already on PATH.
+    if config.engines.windows.prefer == "proton" {
+        return Ok(());
+    }
     if !config.engines.windows.wine.is_empty()
-        || SystemProbe.lookup("wine").is_some()
-        || SystemProbe.lookup("wine64").is_some()
+        && PathBuf::from(&config.engines.windows.wine).is_file()
     {
         return Ok(());
     }
+    if SystemProbe.lookup("wine").is_some() || SystemProbe.lookup("wine64").is_some() {
+        return Ok(());
+    }
     if installed_wine(layout).is_some() {
-        return remember_installed_wine(host, config, layout);
+        return Ok(());
     }
     let lock = bundled_lock();
     let published = lock
@@ -698,11 +715,11 @@ fn cmd_guest(
         })? {
             break status;
         }
-        if started.elapsed() > Duration::from_secs(180) {
+        if started.elapsed() > Duration::from_secs(300) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(Error::Failed {
-                message: "The slim Linux guest did not exit within 180 seconds.".into(),
+                message: "The slim Linux guest did not exit within 300 seconds.".into(),
                 guest_exit_code: None,
                 stdout: log.lock().unwrap_or_else(|err| err.into_inner()).clone(),
                 stderr: String::new(),

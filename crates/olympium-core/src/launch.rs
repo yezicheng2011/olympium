@@ -1565,7 +1565,7 @@ fn choose_wine(config: &Config, probe: &dyn Probe, file: &Path) -> Result<Option
 fn missing_wine() -> Error {
     Error::EngineMissing {
         engine: "wine",
-        message: "Install Wine, or download the slim Wine runtime with `olympium runtime fetch --guest windows`. You can also set engines.windows.proton. Olympium does not ship a Windows license.".into(),
+        message: "Install Wine, or download the slim Linux Wine runtime with `olympium fetch --guest windows`. That archive does not run on macOS. You can also set engines.windows.proton. Olympium does not ship a Windows license.".into(),
     }
 }
 
@@ -1710,7 +1710,7 @@ fn prepare_openharmony(
         OhIdentity::Unknown => {
             return Err(Error::NotConfigured {
                 engine: "openharmony-runtime",
-                message: "No OpenHarmony runtime is connected. Download the slim OpenHarmony image with `olympium runtime fetch --guest openharmony`, or point engines.openharmony.hdc at an OpenHarmony device. Olympium does not bundle the image.".into(),
+                message: "No OpenHarmony runtime is connected. Download the slim OpenHarmony image with `olympium fetch --guest openharmony` when one is published, or point engines.openharmony.hdc at an OpenHarmony device. Olympium does not bundle the image.".into(),
             });
         }
         OhIdentity::OpenHarmony => {}

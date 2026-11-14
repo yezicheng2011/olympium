@@ -71,7 +71,9 @@ struct ContentView: View {
         case .overview:
             Text("Programs from other systems, on this Mac.")
                 .font(.title2)
-            Text("Mac apps, disk images, and installer packages open with macOS. Scripts run here too. Other Linux programs use Lima when you have it. Windows programs use Wine, which opens a native window and is kept for Windows guests. Android APKs use adb or Waydroid if you installed one. OpenHarmony packages run in a real OpenHarmony runtime after the slim image is downloaded. iOS apps that are already on this Mac can be opened. Olympium does not install IPA files.")
+            Text("Mac apps, disk images, and installer packages open with macOS. Scripts run here too. A Linux program you already have uses Lima when you have it. That is separate from the slim Alpine guest.")
+            Text("The command in this app is Olympium.app/Contents/MacOS/olympium. `olympium fetch --guest linux` downloads the slim guest and checks SHA-256. `olympium guest --guest linux` boots it when QEMU is installed. The guest is Alpine. It is not a general Linux distribution, and this window does not start that boot by itself. The published slim Wine archive is a Linux program and does not run on this Mac. Android and OpenHarmony images are not published. This package does not replace the Linkspan 0.1.0 download.")
+            Text("Windows programs use Wine when a Mac build of Wine is installed. Android APKs use adb or Waydroid if you installed one. OpenHarmony packages need a real OpenHarmony runtime. iOS apps that are already on this Mac can be opened. Olympium does not install IPA files.")
             Text(model.engineLine)
                 .foregroundStyle(.secondary)
         case .programs:
