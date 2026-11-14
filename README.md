@@ -72,13 +72,13 @@ Olympium at `25a592cfd65a4f07449ca03e919bfa97626bb164` refuses macOS and iOS gue
 
 ## What this environment actually booted
 
-x86_64 ISO `build/dev-live-amd64.iso`, 1.2 GB, volume id `DEV_LIVE`, hybrid BIOS and UEFI (GRUB El Torito plus an EFI image).
+x86_64 ISO `build/dev-live-amd64.iso`, 1.2 GB, volume id `OLYMPIUM`, hybrid BIOS and UEFI (GRUB El Torito plus an EFI image).
 
 ```
-6dcec4aaff42c096beb23e89f916b5c6e88fb9ff27f6c01b621a6ef370cc74e3  dev-live-amd64.iso
+c0aef0ca0ce2f0c4cfe3f6ca5ee2bd8b29d879a1ae9461a6f8e045f1ff155f74  dev-live-amd64.iso
 ```
 
-QEMU `pc`, KVM, standard VGA, 1280×800. The serial console reached `devdesk login`. The VGA frame showed the panel (frosted over the indigo wallpaper), the flat indigo field in the middle, and a dock whose pixels vary with the color window behind it. A headless pixman run of the same compositor wrote `desktop-headless.ppm` before the ISO existed; that frame has the same structure.
+QEMU `pc`, KVM, standard VGA, 1280×800. The same boot attached an e1000 NIC, a virtio-net NIC, and an NVMe disk. The kernel log shows `e1000 0000:00:03.0`, `virtio_net virtio0`, and `nvme nvme0`. The VGA frames show the menu bar, an open File menu, Launchpad, and live blur (`blur=live` in Settings). Drivers and the optional NVIDIA/Broadcom installer are described in `docs/drivers.md`. `driver-install --detect` lists PCI devices and does not download anything.
 
 aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot.
 
@@ -87,6 +87,12 @@ aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/ef
 ```
 
 QEMU `virt`, TCG, AAVMF (`UEFI firmware (version 2024.02-2ubuntu0.10 ...)`), GRUB 2.12. The serial console reached `Development Desktop (temporary name)` and `devdesk login:`. That is this image's userspace, not a stock cloud image. It is not a framebuffer capture: virtio-gpu on that machine has no VGA screendump, and the kernel console name there is not `ttyS0`, so the compositor's kernel log line was not in the serial file. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon.
+
+## Purchase reminder
+
+For the first 5 days after the first boot, Olympium does not ask for a license. After that, one reminder says the system is commercial and asks you to purchase one. It has a close control. Closing it leaves the desktop, menus, Launchpad, blur, drivers, and Olympium fully usable. The same reminder can appear again every 5 days until `olympium-activate LICENSE-KEY` records a purchase, which only hides the reminder.
+
+A personal computer, a school, a business, an intranet, a cloud or CI image, and a factory or bulk install all follow that same rule. There is no second dialog, no watermark, no feature lock, and no shorter timer for those installs. The Olympium name and dragon mark stay on the boot splash and menu bar either way. That is the product name, not a lock.
 
 ## Licenses
 

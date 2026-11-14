@@ -1,0 +1,197 @@
+#!/bin/bash
+# Optional install for drivers that are not bundled.
+# Nothing is downloaded unless you pass --install and the network works.
+set -u
+usage() {
+	cat <<'EOF'
+Usage: driver-install [--detect] [--install nvidia[:BRANCH]|broadcom]
+
+Bundled: kernel modules (i915, xe, amdgpu, radeon, nouveau), Mesa
+(iris, crocus where the arch ships it, radeonsi, r600, ANV, RADV, NVK),
+and the redistributable linux-firmware files. The proprietary NVIDIA
+kernel module is not in the ISO.
+
+NVIDIA branches you can ask for, from the Ubuntu 24.04 archive:
+  nvidia:580       nvidia-driver-580. Prebuilt for kernel 6.8.0-149.
+                   Widest current branch: Maxwell, Pascal, Volta, Turing,
+                   Ampere, Ada, and later cards that the 580 series still lists.
+  nvidia:580-open  nvidia-driver-580-open. Open kernel module. Turing and newer.
+  nvidia:595       nvidia-driver-595. Prebuilt for 6.8.0-149.
+                   Newer branch. Maxwell, Pascal, and Volta are not in this branch.
+  nvidia:470       nvidia-driver-470. Kepler (GeForce 600/700 era) only.
+                   No prebuilt module for 6.8.0-149. DKMS must compile it,
+                   which needs linux-headers and can fail.
+  nvidia           same as nvidia:580.
+
+Not offered. This archive has no package, so the script will not invent one:
+  nvidia-driver-390 and older, Fermi (GeForce 400/500), and anything before Kepler.
+  The noble-updates package nvidia-driver-535 is only a transitional package
+  that depends on nvidia-driver-580. It is not a separate 535 driver.
+
+--install requires a matching PCI device, a network path to the Ubuntu
+archive, the restricted component, and typing YES. It prints the license
+step before apt runs. After a successful install it tries modprobe and
+tells you to reboot; it does not claim the desktop has switched yet.
+EOF
+}
+
+nvidia_note() {
+	cat <<'EOF'
+Proprietary NVIDIA is not installed. Nouveau and its Mesa driver are.
+Branches: 580 (widest, prebuilt for 6.8.0-149), 580-open (Turing+),
+595 (newer, no Maxwell/Pascal/Volta), 470 (Kepler, DKMS, may fail to build).
+Fermi and older have no package in this archive.
+License: NVIDIA proprietary license, shown by the package. Network: required.
+Command: driver-install --install nvidia:580   (or :595, :470, :580-open)
+EOF
+}
+
+detect() {
+	echo "PCI devices:"
+	if command -v lspci >/dev/null; then
+		lspci -nn || true
+	else
+		echo "lspci is not installed"
+	fi
+	echo "USB devices:"
+	if command -v lsusb >/dev/null; then
+		lsusb || true
+	else
+		echo "lsusb is not installed"
+	fi
+	if lspci -nn 2>/dev/null | grep -qi '10de:'; then
+		echo "NVIDIA GPU detected (vendor 10de)."
+		lspci -nn 2>/dev/null | grep -i '10de:' || true
+		nvidia_note
+	else
+		echo "No NVIDIA PCI device (10de) detected. Nothing to install for NVIDIA."
+		echo "Nouveau remains the bundled driver if a card appears later."
+	fi
+	if lspci -nn 2>/dev/null | grep -qi '14e4:'; then
+		echo "Broadcom PCI device detected (vendor 14e4)."
+		echo "Many Broadcom chips use the bundled brcmfmac firmware."
+		echo "broadcom-sta-dkms is the proprietary wl alternative and is not bundled."
+		echo "License: Broadcom STA license. Network: required for apt."
+	else
+		echo "No Broadcom PCI device (14e4) detected."
+	fi
+	echo "Bundled GPU modules when this kernel ships them: i915, xe, amdgpu, radeon, nouveau, bochs, virtio-gpu, qxl."
+	echo "A QEMU boot is not a test of a real AMD, Intel, or NVIDIA card, a generic ARM board, or Apple Silicon."
+}
+
+archive_reachable() {
+	local host
+	host=$(awk '/^deb / { print $2; exit }' /etc/apt/sources.list 2>/dev/null | sed -e 's|https\?://||' -e 's|/.*||')
+	if [ -n "$host" ] && ping -c 1 -W 3 "$host" >/dev/null 2>&1; then
+		return 0
+	fi
+	ping -c 1 -W 3 archive.ubuntu.com >/dev/null 2>&1
+}
+
+install_pkg() {
+	name="$1"
+	pkg="$2"
+	if ! command -v apt-get >/dev/null; then
+		echo "Failed: apt-get is not available, so ${name} cannot be installed." >&2
+		exit 1
+	fi
+	if ! archive_reachable; then
+		echo "Failed: no route to the Ubuntu archive. ${name} needs a network and was not installed." >&2
+		exit 1
+	fi
+	echo "About to install ${pkg}."
+	echo "This downloads software under that package's own license, not this image's license."
+	echo "Read the license apt prints. Type YES to continue:"
+	read -r answer
+	if [ "$answer" != "YES" ]; then
+		echo "Stopped. Nothing was installed."
+		exit 1
+	fi
+	if ! apt-cache show "$pkg" >/dev/null 2>&1; then
+		if [ -f /etc/apt/sources.list ] && ! grep -q restricted /etc/apt/sources.list; then
+			echo "${pkg} is not in main or universe."
+			echo "Adding the Ubuntu restricted component, which is where this proprietary package is published."
+			sed -i 's/ main universe$/ main universe restricted/' /etc/apt/sources.list
+		fi
+	fi
+	export DEBIAN_FRONTEND=noninteractive
+	apt-get update || { echo "Failed: apt-get update did not succeed. Check the network and /etc/apt/sources.list." >&2; exit 1; }
+	if ! apt-cache show "$pkg" >/dev/null 2>&1; then
+		echo "Failed: ${pkg} is not published for $(uname -m) in this archive. Nothing further was installed." >&2
+		echo "The prebuilt NVIDIA desktop packages are amd64. An arm64 machine keeps the bundled nouveau driver." >&2
+		exit 1
+	fi
+	apt-get install -y "$pkg" || { echo "Failed: apt-get install ${pkg} did not succeed." >&2; exit 1; }
+	echo "Installed ${pkg}."
+}
+
+nvidia_after_install() {
+	local pkg="$1"
+	echo "Reboot before the desktop leaves nouveau."
+	echo "The Ubuntu package blacklists nouveau on the next boot and loads nvidia instead."
+	if modprobe nvidia >/tmp/nvidia-modprobe.err 2>&1; then
+		echo "modprobe nvidia loaded a module in this session."
+		echo "The running desktop is still on nouveau until you reboot."
+	else
+		echo "modprobe nvidia did not load a module."
+		sed 's/^/  /' /tmp/nvidia-modprobe.err
+		echo "If the device is busy, nouveau already owns it. Reboot, then run nvidia-smi."
+		echo "If the message says the module is missing, the DKMS build did not produce nvidia.ko."
+		echo "Look in /var/lib/dkms and do not treat this install as a working driver yet."
+	fi
+	echo "Package installed: ${pkg}. Display switch happens at the next boot, not now."
+}
+
+mode="detect"
+target=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--detect) mode="detect" ;;
+		--install) mode="install"; target="${2:-}"; shift ;;
+		-h|--help) usage; exit 0 ;;
+		*) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
+	esac
+	shift
+done
+
+detect
+if [ "$mode" = "detect" ]; then
+	exit 0
+fi
+
+case "$target" in
+	nvidia|nvidia:580|nvidia:580-open|nvidia:595|nvidia:470)
+		if ! lspci -nn 2>/dev/null | grep -qi '10de:'; then
+			echo "Failed: no NVIDIA device detected, so no nvidia-driver package was installed." >&2
+			exit 1
+		fi
+		case "$target" in
+			nvidia|nvidia:580) pkg=nvidia-driver-580 ;;
+			nvidia:580-open) pkg=nvidia-driver-580-open ;;
+			nvidia:595) pkg=nvidia-driver-595 ;;
+			nvidia:470) pkg=nvidia-driver-470 ;;
+		esac
+		if [ "$pkg" = nvidia-driver-470 ]; then
+			echo "470 is the Kepler legacy branch. Fermi and older are not supported and will not be installed."
+			echo "There is no prebuilt 470 module for kernel $(uname -r). DKMS will try to compile one."
+			kver=$(uname -r)
+			install_pkg "kernel headers for DKMS" "linux-headers-${kver}"
+			install_pkg "compiler for DKMS" build-essential
+		fi
+		install_pkg "NVIDIA proprietary driver" "$pkg"
+		nvidia_after_install "$pkg"
+		;;
+	broadcom)
+		if ! lspci -nn 2>/dev/null | grep -qi '14e4:'; then
+			echo "Failed: no Broadcom device detected, so broadcom-sta-dkms was not installed." >&2
+			exit 1
+		fi
+		install_pkg "Broadcom STA" broadcom-sta-dkms
+		echo "Reboot before wl replaces the in-tree Broadcom driver."
+		;;
+	*)
+		echo "Failed: --install needs nvidia, nvidia:580, nvidia:580-open, nvidia:595, nvidia:470, or broadcom." >&2
+		echo "Fermi and older, and a real 535 driver, are not offered. nvidia-driver-535 in noble-updates depends on 580." >&2
+		exit 2
+		;;
+esac

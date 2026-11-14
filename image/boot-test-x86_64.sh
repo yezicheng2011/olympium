@@ -102,6 +102,29 @@ if [ -f "$STAGE/boot/vmlinuz" ] && [ -f "$STAGE/boot/initrd.img" ]; then
 	shot "$mon" "$OUT/olympium-desktop-olympium.ppm" || true
 	kill "$qemu" 2>/dev/null || true
 	wait "$qemu" 2>/dev/null || true
+	# Second boot: Launchpad only, plus e1000 and an NVMe disk so the serial log
+	# shows those drivers bind. This is QEMU pc evidence, not a hardware survey.
+	dd if=/dev/zero of=/tmp/olympium-nvme.img bs=1M count=8 status=none
+	rm -f "$mon"
+	qemu-system-x86_64 -m 2048 -smp 2 "${KVM[@]}" \
+		-kernel "$STAGE/boot/vmlinuz" \
+		-initrd "$STAGE/boot/initrd.img" \
+		-append "boot=live console=ttyS0,115200 console=tty0 olympium.openlaunch=1" \
+		-cdrom "$ISO" \
+		-vga std -display none \
+		-netdev user,id=n0 -device e1000,netdev=n0 \
+		-netdev user,id=n1 -device virtio-net-pci,netdev=n1 \
+		-drive file=/tmp/olympium-nvme.img,if=none,id=nvme0,format=raw \
+		-device nvme,serial=smoke,drive=nvme0 \
+		-serial file:"$OUT/olympium-drivers-serial.log" \
+		-monitor unix:"$mon",server,nowait \
+		-usb -device usb-tablet -no-reboot &
+	qemu=$!
+	wait_desktop "$OUT/olympium-drivers-serial.log" "$qemu" || true
+	sleep 8
+	shot "$mon" "$OUT/olympium-desktop-launchpad.ppm" || true
+	kill "$qemu" 2>/dev/null || true
+	wait "$qemu" 2>/dev/null || true
 else
 	echo "no staged kernel" >&2
 	exit 1

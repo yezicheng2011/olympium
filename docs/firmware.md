@@ -17,6 +17,10 @@ Kernel: the Ubuntu 24.04 generic kernel recorded in `sbom.tsv` (6.8.0 series at 
 
 When the arm64 ISO is produced, GRUB is the arm64 EFI binary from the same package set. The only firmware this environment can boot it with is QEMU's `virt` machine plus AAVMF (EDK2). That boot is emulated. It does not show that the image boots a Raspberry Pi, a generic SBSA server, or Apple Silicon. Apple Silicon needs its own firmware path, which this image does not include.
 
+## Drivers and device firmware
+
+Kernel modules, Mesa, and redistributable device firmware are part of both images. The package list, the optional NVIDIA and Broadcom installer, and the hardware this image has not been tested on are in `docs/drivers.md`.
+
 ## Writable disk
 
 The live system keeps the squashfs read-only and puts changes on a tmpfs overlay. That overlay is discarded on power-off. `install-to-disk` can copy the running system to a disk the operator names twice. It selects a BIOS partition table or a UEFI ESP from the firmware it is actually running on.

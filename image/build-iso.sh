@@ -73,6 +73,122 @@ umount_chroot() {
 	umount "$ROOT/sys" 2>/dev/null || true
 }
 
+install_drivers() {
+	mount_chroot
+	chroot "$ROOT" apt-get update
+	# Match the kernel already installed in this root, not the host kernel.
+	local kver
+	kver=$(cd "$ROOT/lib/modules" && echo *)
+	# Redistributable modules, Mesa, and linux-firmware.
+	# NVIDIA proprietary and Broadcom STA are not installed; see driver-install.
+	local pkgs="linux-modules-${kver} linux-modules-extra-${kver} linux-firmware mesa-vulkan-drivers mesa-va-drivers mesa-vdpau-drivers wireless-regdb pciutils usbutils alsa-ucm-conf firmware-sof-signed iproute2"
+	# Open Intel VAAPI userspace. The non-free sibling stays out (multiverse).
+	local cand
+	cand=$(chroot "$ROOT" apt-cache policy intel-media-va-driver 2>/dev/null | awk '/Candidate:/{print $2}')
+	if [ -n "$cand" ] && [ "$cand" != "(none)" ]; then
+		pkgs="$pkgs intel-media-va-driver"
+	fi
+	if [ "$ARCH" = amd64 ]; then
+		pkgs="$pkgs intel-microcode amd64-microcode"
+		if chroot "$ROOT" apt-cache show "linux-modules-iwlwifi-${kver}" >/dev/null 2>&1; then
+			pkgs="$pkgs linux-modules-iwlwifi-${kver}"
+		fi
+		if chroot "$ROOT" apt-cache show "linux-modules-ipu6-${kver}" >/dev/null 2>&1; then
+			pkgs="$pkgs linux-modules-ipu6-${kver}"
+		fi
+	fi
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends $pkgs
+	if [ ! -e "$ROOT/usr/share/doc/linux-firmware/copyright" ] && [ ! -e "$ROOT/usr/share/doc/linux-firmware-misc/copyright" ]; then
+		echo "linux-firmware copyright file missing" >&2
+		exit 1
+	fi
+}
+
+verify_drivers() {
+	local kver miss=0
+	kver=$(cd "$ROOT/lib/modules" && echo *)
+	local builtin="$ROOT/lib/modules/$kver/modules.builtin"
+	have_mod() {
+		local name=$1 alt=${1//_/-}
+		local hit
+		hit=$(find "$ROOT/lib/modules/$kver" \( -name "${name}.ko*" -o -name "${alt}.ko*" \) -print -quit)
+		if [ -n "$hit" ]; then
+			return 0
+		fi
+		if [ -f "$builtin" ] && grep -E -q "/(${name}|${alt})\\.ko$" "$builtin"; then
+			return 0
+		fi
+		return 1
+	}
+	local required="nvme snd xhci-hcd hid-multitouch btusb amdgpu radeon nouveau xe e1000 bochs virtio_net virtio_blk virtio-gpu qxl"
+	if [ "$ARCH" = amd64 ]; then
+		required="$required i915 iwlwifi"
+	fi
+	for name in $required; do
+		if have_mod "$name"; then
+			echo "driver-ok module $name"
+		else
+			echo "driver-missing module $name" >&2
+			miss=1
+		fi
+	done
+	local fwroot="$ROOT/lib/firmware"
+	if [ -d "$ROOT/usr/lib/firmware" ]; then
+		fwroot="$ROOT/usr/lib/firmware"
+	fi
+	for dir in amdgpu radeon xe i915 iwlwifi ath10k brcm rtl_nic nvidia; do
+		local fw
+		fw=$(find "$fwroot" -maxdepth 2 -name "${dir}*" -print -quit)
+		if [ -d "$fwroot/$dir" ] || [ -n "$fw" ]; then
+			echo "driver-ok firmware $dir"
+		else
+			echo "driver-missing firmware $dir" >&2
+			miss=1
+		fi
+	done
+	local dri="$ROOT/usr/lib/x86_64-linux-gnu/dri"
+	if [ ! -d "$dri" ]; then
+		dri="$ROOT/usr/lib/aarch64-linux-gnu/dri"
+	fi
+	if [ ! -d "$dri" ]; then
+		echo "driver-missing mesa dri" >&2
+		miss=1
+	else
+		for so in iris_dri.so radeonsi_dri.so r600_dri.so nouveau_dri.so; do
+			if [ -e "$dri/$so" ]; then
+				echo "driver-ok mesa $so"
+			else
+				echo "driver-missing mesa $so" >&2
+				miss=1
+			fi
+		done
+	fi
+	for icd in intel_icd.json radeon_icd.json nouveau_icd.json; do
+		if [ -e "$ROOT/usr/share/vulkan/icd.d/$icd" ]; then
+			echo "driver-ok vulkan $icd"
+		else
+			echo "driver-missing vulkan $icd" >&2
+			miss=1
+		fi
+	done
+	install -d "$ROOT/usr/share/olympium"
+	{
+		echo "arch ${ARCH}"
+		echo "kernel ${kver}"
+		for pat in 'linux-image-*' 'linux-modules-*' 'linux-firmware*' 'mesa-*' 'libgl1-mesa-*' \
+			intel-microcode amd64-microcode wireless-regdb firmware-sof-signed \
+			alsa-ucm-conf pciutils usbutils iproute2 intel-media-va-driver; do
+			chroot "$ROOT" dpkg-query -W -f '${db:Status-abbrev} ${Package}\t${Version}\n' "$pat" 2>/dev/null \
+				| awk '$1 == "ii" { $1=""; sub(/^ /,""); print }' || true
+		done
+		echo "not-bundled nvidia-driver broadcom-sta-dkms"
+	} | tee "$ROOT/usr/share/olympium/driver-manifest.txt" "$REPO/build/driver-manifest-${ARCH}.txt"
+	if [ "$miss" -ne 0 ]; then
+		echo "driver verification failed" >&2
+		exit 1
+	fi
+}
+
 install_packages() {
 	mount_chroot
 	chroot "$ROOT" apt-get update
@@ -107,7 +223,11 @@ stage_desktop() {
 	install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 		"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
 		"$REPO/image/guest-fetch.sh" \
+		"$REPO/image/driver-report" "$REPO/image/driver-install" \
 		"$ROOT/usr/libexec/dev-desktop/"
+	install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
+	install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
+	install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
 	install -d "$ROOT/usr/share/olympium"
 	install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
 	install -m 644 "$REPO/branding/branding.conf" "$ROOT/etc/dev-desktop/branding.conf"
@@ -125,6 +245,7 @@ EOF
 	cp "$REPO/docs/isa-and-abi.md" "$REPO/docs/compatibility-matrix.md" \
 		"$REPO/docs/firmware.md" "$REPO/docs/guest-images.md" \
 		"$REPO/docs/32-bit.md" "$REPO/docs/olympium-integration.md" \
+		"$REPO/docs/drivers.md" \
 		"$ROOT/usr/share/doc/dev-desktop/"
 	cat > "$ROOT/usr/share/doc/dev-desktop/SOURCE" <<'EOF'
 First-party desktop source is under daniel.ye Source License, Version 1.0.
@@ -203,6 +324,8 @@ bootstrap
 if [ ! -e "$ROOT/usr/bin/foot" ]; then
 	install_packages
 fi
+install_drivers
+verify_drivers
 mkdir -p "$WORK"
 stage_desktop
 if [ "$ARCH" = arm64 ]; then

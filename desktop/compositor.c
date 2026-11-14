@@ -11,6 +11,7 @@
 #include "blur.h"
 
 #include <cairo.h>
+#include <dirent.h>
 #include <glib.h>
 #include <drm_fourcc.h>
 #include <errno.h>
@@ -68,6 +69,7 @@ struct app_entry {
 };
 
 static const struct app_entry APPS[] = {
+	{"launchpad", "Launchpad", "", NULL},
 	{"files", "Files", "/usr/bin/dev-files", NULL},
 	{"terminal", "Terminal", "/usr/bin/foot", NULL},
 	{"settings", "Settings", "/usr/bin/dev-settings", NULL},
@@ -76,6 +78,13 @@ static const struct app_entry APPS[] = {
 };
 
 enum { APP_COUNT = sizeof APPS / sizeof APPS[0] };
+
+struct pad_app {
+	char name[48];
+	char exec[160];
+	char group[24];
+	int is_folder;
+};
 
 struct view {
 	struct wl_list link;
@@ -168,6 +177,21 @@ struct server {
 	int menu_w[8];
 	int demo_menu;
 	int demo_menu_done;
+	int launchpad;
+	int pad_page;
+	int pad_count;
+	int pad_folder;
+	int pad_cursor;
+	int net_kind;
+	int net_level;
+	int demo_pad;
+	int demo_pad_done;
+	int nag;
+	int nag_force;
+	int nag_closed;
+	int nag_demo_dismiss;
+	char pad_filter[64];
+	struct pad_app pad[48];
 	char shot_path[256];
 	int shot_written;
 	int control_fd;
@@ -186,6 +210,16 @@ static const char *UI_FONT_SM = "Ubuntu 11";
 static int menu_item_count(int menu);
 static void menu_box(const struct server *server, struct wlr_box *box);
 static const char *MENU_ITEMS[][4];
+static void draw_net(cairo_t *cr, double x, double y, int kind, int level);
+static void draw_pad(struct server *server, cairo_t *cr);
+static void probe_net(struct server *server);
+static void pad_load(struct server *server);
+static int pad_list(struct server *server, int *ids, int cap);
+static void pad_activate(struct server *server, int index);
+static void nag_box(const struct server *server, struct wlr_box *box);
+static void nag_dismiss(struct server *server);
+static void nag_eval(struct server *server);
+static int nag_close_hit(const struct server *server, double x, double y);
 
 static void focus_view(struct view *view, struct wlr_surface *surface);
 
@@ -342,6 +376,102 @@ static void draw_dragon(cairo_t *cr, double x, double y, double size, double r, 
 	cairo_restore(cr);
 }
 
+static void draw_net(cairo_t *cr, double x, double y, int kind, int level) {
+	/* Original status glyph: a dot and arcs for a radio link, bars for a
+	 * wired link. Levels follow the live interface, not a brand asset. */
+	cairo_save(cr);
+	cairo_translate(cr, x, y);
+	cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+	cairo_set_line_width(cr, 1.6);
+	if (kind == 1) {
+		for (int i = 0; i < 4; i++) {
+			double h = 4 + i * 3.5;
+			cairo_set_source_rgba(cr, 0.95, 0.96, 0.97, i < level ? 1 : 0.28);
+			cairo_move_to(cr, 2 + i * 4.2, 18);
+			cairo_line_to(cr, 2 + i * 4.2, 18 - h);
+			cairo_stroke(cr);
+		}
+	} else {
+		cairo_set_source_rgba(cr, 0.95, 0.96, 0.97, 1);
+		cairo_arc(cr, 10, 16, 1.6, 0, 6.2832);
+		cairo_fill(cr);
+		for (int i = 1; i <= 3; i++) {
+			cairo_set_source_rgba(cr, 0.95, 0.96, 0.97, i <= level ? 1 : 0.28);
+			cairo_arc(cr, 10, 16, 3.2 * i, 3.7, 5.7);
+			cairo_stroke(cr);
+		}
+		if (kind == 0) {
+			cairo_set_source_rgba(cr, 0.93, 0.45, 0.38, 1);
+			cairo_move_to(cr, 15, 4);
+			cairo_line_to(cr, 20, 10);
+			cairo_move_to(cr, 20, 4);
+			cairo_line_to(cr, 15, 10);
+			cairo_stroke(cr);
+		}
+	}
+	cairo_restore(cr);
+}
+
+static void probe_net(struct server *server) {
+	server->net_kind = 0;
+	server->net_level = 0;
+	DIR *dir = opendir("/sys/class/net");
+	if (dir == NULL) {
+		return;
+	}
+	struct dirent *ent;
+	while ((ent = readdir(dir)) != NULL) {
+		if (ent->d_name[0] == '.' || strcmp(ent->d_name, "lo") == 0) {
+			continue;
+		}
+		char path[320];
+		snprintf(path, sizeof path, "/sys/class/net/%s/operstate", ent->d_name);
+		FILE *f = fopen(path, "r");
+		char state[32] = "";
+		if (f != NULL) {
+			if (fgets(state, sizeof state, f) == NULL) {
+				state[0] = '\0';
+			}
+			fclose(f);
+		}
+		if (strncmp(state, "up", 2) != 0) {
+			continue;
+		}
+		snprintf(path, sizeof path, "/sys/class/net/%s/wireless", ent->d_name);
+		DIR *wifi = opendir(path);
+		if (wifi != NULL) {
+			closedir(wifi);
+			server->net_kind = 2;
+			server->net_level = 2;
+			FILE *w = fopen("/proc/net/wireless", "r");
+			if (w != NULL) {
+				char line[256];
+				while (fgets(line, sizeof line, w) != NULL) {
+					if (strncmp(line, ent->d_name, strlen(ent->d_name)) == 0) {
+						int qual = 0;
+						if (sscanf(line, "%*s %*d %d", &qual) == 1) {
+							int level = qual / 20;
+							if (level < 1) {
+								level = 1;
+							}
+							if (level > 3) {
+								level = 3;
+							}
+							server->net_level = level;
+						}
+					}
+				}
+				fclose(w);
+			}
+			break;
+		}
+		server->net_kind = 1;
+		server->net_level = 4;
+		break;
+	}
+	closedir(dir);
+}
+
 static void draw_icon(cairo_t *cr, const char *id, double x, double y) {
 	cairo_save(cr);
 	cairo_translate(cr, x, y);
@@ -385,6 +515,14 @@ static void draw_icon(cairo_t *cr, const char *id, double x, double y) {
 		cairo_fill(cr);
 	} else if (strcmp(id, "olympium") == 0) {
 		draw_dragon(cr, x + 4, y + 4, 28, 0.93, 0.78, 0.45);
+	} else if (strcmp(id, "launchpad") == 0) {
+		cairo_set_source_rgba(cr, 0.95, 0.96, 0.97, 1);
+		for (int row = 0; row < 3; row++) {
+			for (int col = 0; col < 3; col++) {
+				cairo_arc(cr, x + 10 + col * 8, y + 10 + row * 8, 2.1, 0, 6.2832);
+				cairo_fill(cr);
+			}
+		}
 	} else {
 		cairo_set_source_rgba(cr, 0.95, 0.96, 0.97, 1);
 		for (int i = 0; i < 3; i++) {
@@ -519,7 +657,35 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		localtime_r(&now, &tm);
 		char clock[32];
 		strftime(clock, sizeof clock, "%a %H:%M", &tm);
-		paint_text(cr, UI_FONT, clock, server->screen_w - 118, 6, 0.96, 0.96, 0.97);
+		paint_text(cr, UI_FONT, clock, server->screen_w - 108, 6, 0.96, 0.96, 0.97);
+		draw_net(cr, server->screen_w - 146, 4, server->net_kind, server->net_level);
+		return;
+	}
+	if (which == 6) {
+		draw_pad(server, cr);
+		return;
+	}
+	if (which == 7) {
+		cairo_set_source_rgba(cr, 0.16, 0.16, 0.18, 1);
+		cairo_arc(cr, box->width - 22, 20, 9, 0, 6.2832);
+		cairo_fill(cr);
+		cairo_set_source_rgba(cr, 0.98, 0.98, 0.98, 1);
+		cairo_set_line_width(cr, 1.6);
+		cairo_move_to(cr, box->width - 26, 16);
+		cairo_line_to(cr, box->width - 18, 24);
+		cairo_move_to(cr, box->width - 18, 16);
+		cairo_line_to(cr, box->width - 26, 24);
+		cairo_stroke(cr);
+		paint_text(cr, "Ubuntu Bold 18", "Olympium", 22, 18, 0.12, 0.12, 0.14);
+		paint_text(cr, UI_FONT, "This is a commercial system.", 22, 58, 0.16, 0.16, 0.18);
+		paint_text(cr, UI_FONT, "Please purchase a license.", 22, 80, 0.16, 0.16, 0.18);
+		paint_text(cr, UI_FONT, "Close this reminder to keep using Olympium.", 22, 108, 0.28, 0.28, 0.32);
+		paint_text(cr, UI_FONT_SM, "It returns every 5 days until a license is activated.", 22, 132, 0.28, 0.28, 0.32);
+		paint_text(cr, UI_FONT_SM, "Same reminder for home, school, business, and bulk installs.", 22, 154, 0.28, 0.28, 0.32);
+		cairo_set_source_rgba(cr, 0.18, 0.18, 0.20, 1);
+		cairo_rectangle(cr, box->width - 108, box->height - 52, 84, 28);
+		cairo_fill(cr);
+		paint_text(cr, UI_FONT, "Close", box->width - 86, box->height - 46, 0.98, 0.98, 0.98);
 		return;
 	}
 	if (which == 1) {
@@ -818,6 +984,24 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			(void)content_h;
 			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
 		}
+		if ((server->frames % 90) == 0) {
+			probe_net(server);
+		}
+		if (server->demo_pad && !server->demo_pad_done && server->frames > 180) {
+			pad_load(server);
+			server->launchpad = 1;
+			server->pad_folder = -1;
+			server->demo_pad_done = 1;
+		}
+		if (server->launchpad) {
+			if (server->pad_count == 0) {
+				pad_load(server);
+			}
+			struct wlr_texture *pad = make_chrome(server, 0, 0,
+				server->screen_w, server->screen_h, 0, 6);
+			render_texture_at(server, output->wlr_output, pad, 0, 0);
+			wlr_texture_destroy(pad);
+		}
 		panel = make_chrome(server, 0, 0, server->screen_w, PANEL_H, 0, 0);
 		struct wlr_box dockb;
 		dock_box(server, &dockb);
@@ -848,6 +1032,17 @@ static void output_frame(struct wl_listener *listener, void *data) {
 				drop.width, drop.height, 10, 5);
 			render_texture_at(server, output->wlr_output, drop_tex, drop.x, drop.y);
 			wlr_texture_destroy(drop_tex);
+		}
+		if (server->nag_demo_dismiss && server->nag && server->frames > 1500) {
+			nag_dismiss(server);
+		}
+		if (server->nag) {
+			struct wlr_box nb;
+			nag_box(server, &nb);
+			struct wlr_texture *nag = make_chrome(server, nb.x, nb.y,
+				nb.width, nb.height, 16, 7);
+			render_texture_at(server, output->wlr_output, nag, nb.x, nb.y);
+			wlr_texture_destroy(nag);
 		}
 		if (server->launcher) {
 			struct wlr_box lb;
@@ -1016,6 +1211,16 @@ static struct view *view_at(struct server *server, double lx, double ly,
 }
 
 static int chrome_contains(struct server *server, double x, double y) {
+	if (server->nag) {
+		struct wlr_box nb;
+		nag_box(server, &nb);
+		if (point_in(&nb, x, y)) {
+			return 1;
+		}
+	}
+	if (server->launchpad) {
+		return 1;
+	}
 	if (y < PANEL_H) {
 		return 1;
 	}
@@ -1066,7 +1271,60 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 	int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 	int handled = 0;
 	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		for (int i = 0; i < nsyms; i++) {
+		if (server->nag) {
+			for (int i = 0; i < nsyms; i++) {
+				if (syms[i] == XKB_KEY_Escape) {
+					nag_dismiss(server);
+					handled = 1;
+				}
+			}
+		}
+		if (!handled && server->launchpad) {
+			for (int i = 0; i < nsyms; i++) {
+				if (syms[i] == XKB_KEY_Escape) {
+					if (server->pad_filter[0] != '\0') {
+						server->pad_filter[0] = '\0';
+					} else if (server->pad_folder >= 0) {
+						server->pad_folder = -1;
+						server->pad_page = 0;
+					} else {
+						server->launchpad = 0;
+					}
+					handled = 1;
+				} else if (syms[i] == XKB_KEY_Return) {
+					int ids[48];
+					int n = pad_list(server, ids, 48);
+					int at = server->pad_page * 28 + server->pad_cursor;
+					if (at >= 0 && at < n) {
+						pad_activate(server, ids[at]);
+					}
+					handled = 1;
+				} else if (syms[i] == XKB_KEY_Left) {
+					if (server->pad_cursor > 0) {
+						server->pad_cursor--;
+					}
+					handled = 1;
+				} else if (syms[i] == XKB_KEY_Right) {
+					server->pad_cursor++;
+					handled = 1;
+				} else if (syms[i] == XKB_KEY_BackSpace) {
+					size_t n = strlen(server->pad_filter);
+					if (n > 0) {
+						server->pad_filter[n - 1] = '\0';
+					}
+					handled = 1;
+				} else {
+					char utf[8];
+					int len = xkb_keysym_to_utf8(syms[i], utf, sizeof utf);
+					if (len > 1 && strlen(server->pad_filter) + (size_t)len < sizeof server->pad_filter) {
+						strcat(server->pad_filter, utf);
+						server->pad_page = 0;
+						handled = 1;
+					}
+				}
+			}
+		}
+		for (int i = 0; i < nsyms && !handled; i++) {
 			if (syms[i] == XKB_KEY_Super_L || syms[i] == XKB_KEY_Super_R) {
 				server->launcher = !server->launcher;
 				server->filter[0] = '\0';
@@ -1284,9 +1542,9 @@ static void menu_activate(struct server *server, int menu, int item) {
 	}
 	server->open_menu = -1;
 	if (menu == 0 && item == 0) {
-		launch_app(server, &APPS[2]);
-	} else if (menu == 0 && item == 1) {
 		launch_app(server, &APPS[3]);
+	} else if (menu == 0 && item == 1) {
+		launch_app(server, &APPS[4]);
 	} else if (menu == 1 && item == 0) {
 		launch_files_at(home);
 	} else if (menu == 1 && item == 1) {
@@ -1295,7 +1553,7 @@ static void menu_activate(struct server *server, int menu, int item) {
 			wlr_xdg_toplevel_send_close(view->xdg_toplevel);
 		}
 	} else if (menu == 1 && item == 2) {
-		launch_app(server, &APPS[2]);
+		launch_app(server, &APPS[3]);
 	} else if (menu == 2 && item == 0) {
 		server->contrast = !server->contrast;
 	} else if (menu == 3 && item == 0) {
@@ -1337,6 +1595,337 @@ static void menu_activate(struct server *server, int menu, int item) {
 	}
 }
 
+static void pad_add(struct server *server, const char *name, const char *exec, const char *group, int folder) {
+	if (server->pad_count >= 48 || name == NULL || name[0] == '\0') {
+		return;
+	}
+	struct pad_app *app = &server->pad[server->pad_count++];
+	snprintf(app->name, sizeof app->name, "%s", name);
+	snprintf(app->exec, sizeof app->exec, "%s", exec != NULL ? exec : "");
+	snprintf(app->group, sizeof app->group, "%s", group != NULL ? group : "");
+	app->is_folder = folder;
+}
+
+static void pad_load(struct server *server) {
+	server->pad_count = 0;
+	for (int i = 0; i < APP_COUNT; i++) {
+		if (strcmp(APPS[i].id, "launchpad") == 0) {
+			continue;
+		}
+		pad_add(server, APPS[i].label, APPS[i].path, "", 0);
+	}
+	DIR *dir = opendir("/usr/share/applications");
+	if (dir != NULL) {
+		struct dirent *ent;
+		while ((ent = readdir(dir)) != NULL) {
+			if (!strstr(ent->d_name, ".desktop")) {
+				continue;
+			}
+			char path[512];
+			snprintf(path, sizeof path, "/usr/share/applications/%s", ent->d_name);
+			FILE *f = fopen(path, "r");
+			if (f == NULL) {
+				continue;
+			}
+			char name[48] = "";
+			char exec[160] = "";
+			char group[24] = "";
+			int hidden = 0;
+			char line[256];
+			while (fgets(line, sizeof line, f) != NULL) {
+				if (strncmp(line, "NoDisplay=true", 14) == 0) {
+					hidden = 1;
+				} else if (strncmp(line, "Name=", 5) == 0 && name[0] == '\0') {
+					snprintf(name, sizeof name, "%s", line + 5);
+					name[strcspn(name, "\r\n")] = '\0';
+				} else if (strncmp(line, "Exec=", 5) == 0 && exec[0] == '\0') {
+					char *token = line + 5;
+					token[strcspn(token, " \t%\r\n")] = '\0';
+					snprintf(exec, sizeof exec, "%s", token);
+				} else if (strncmp(line, "Categories=", 11) == 0 && group[0] == '\0') {
+					snprintf(group, sizeof group, "%s", line + 11);
+					group[strcspn(group, ";\r\n")] = '\0';
+				}
+			}
+			fclose(f);
+			if (!hidden && name[0] != '\0' && exec[0] == '/') {
+				pad_add(server, name, exec, group, 0);
+			}
+		}
+		closedir(dir);
+	}
+	char seen[48][24];
+	int seen_n = 0;
+	for (int i = 0; i < server->pad_count; i++) {
+		if (server->pad[i].group[0] == '\0' || server->pad[i].is_folder) {
+			continue;
+		}
+		int count = 0;
+		int known = 0;
+		for (int s = 0; s < seen_n; s++) {
+			if (strcmp(seen[s], server->pad[i].group) == 0) {
+				known = 1;
+			}
+		}
+		if (known) {
+			continue;
+		}
+		for (int j = 0; j < server->pad_count; j++) {
+			if (!server->pad[j].is_folder && strcmp(server->pad[j].group, server->pad[i].group) == 0) {
+				count++;
+			}
+		}
+		if (count >= 2 && seen_n < 48) {
+			snprintf(seen[seen_n], sizeof seen[seen_n], "%s", server->pad[i].group);
+			seen_n++;
+			pad_add(server, server->pad[i].group, "", server->pad[i].group, 1);
+		}
+	}
+}
+
+static int pad_visible(const struct server *server, int index) {
+	const struct pad_app *app = &server->pad[index];
+	if (server->pad_filter[0] != '\0') {
+		return !app->is_folder && strcasestr(app->name, server->pad_filter) != NULL;
+	}
+	if (server->pad_folder >= 0) {
+		return !app->is_folder && strcmp(app->group, server->pad[server->pad_folder].group) == 0;
+	}
+	if (!app->is_folder && app->group[0] != '\0') {
+		for (int i = 0; i < server->pad_count; i++) {
+			if (server->pad[i].is_folder && strcmp(server->pad[i].group, app->group) == 0) {
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+static int pad_list(struct server *server, int *out, int max) {
+	int n = 0;
+	for (int i = 0; i < server->pad_count && n < max; i++) {
+		if (pad_visible(server, i)) {
+			out[n++] = i;
+		}
+	}
+	return n;
+}
+
+static void draw_pad(struct server *server, cairo_t *cr) {
+	const char *heading = "Launchpad";
+	if (server->pad_folder >= 0) {
+		heading = server->pad[server->pad_folder].name;
+	}
+	paint_text(cr, "Ubuntu Bold 22", heading, 72, 48, 0.96, 0.96, 0.97);
+	if (server->pad_filter[0] != '\0') {
+		char search[80];
+		snprintf(search, sizeof search, "Search  %s", server->pad_filter);
+		paint_text(cr, UI_FONT, search, server->screen_w - 280, 54, 0.90, 0.91, 0.93);
+	}
+	int ids[48];
+	int n = pad_list(server, ids, 48);
+	int per = 28;
+	int pages = n == 0 ? 1 : (n + per - 1) / per;
+	if (server->pad_page >= pages) {
+		server->pad_page = pages - 1;
+	}
+	if (server->pad_page < 0) {
+		server->pad_page = 0;
+	}
+	int cell_w = 140;
+	int cell_h = 118;
+	int origin_x = (server->screen_w - 7 * cell_w) / 2;
+	int origin_y = 110;
+	int start = server->pad_page * per;
+	for (int i = 0; i < per && start + i < n; i++) {
+		int col = i % 7;
+		int row = i / 7;
+		double x = origin_x + col * cell_w;
+		double y = origin_y + row * cell_h;
+		const struct pad_app *app = &server->pad[ids[start + i]];
+		if (i == server->pad_cursor) {
+			cairo_set_source_rgba(cr, 1, 1, 1, 0.12);
+			cairo_rectangle(cr, x + 18, y, 96, 100);
+			cairo_fill(cr);
+		}
+		if (app->is_folder) {
+			cairo_set_source_rgba(cr, 1, 1, 1, 0.18);
+			cairo_rectangle(cr, x + 36, y + 8, 52, 44);
+			cairo_fill(cr);
+			paint_text(cr, UI_FONT_SM, app->name, x + 28, y + 78, 0.95, 0.96, 0.97);
+		} else if (strcmp(app->name, "Files") == 0) {
+			draw_icon(cr, "files", x + 46, y + 10);
+			paint_text(cr, UI_FONT_SM, app->name, x + 42, y + 78, 0.95, 0.96, 0.97);
+		} else if (strcmp(app->name, "Olympium") == 0) {
+			draw_icon(cr, "olympium", x + 46, y + 10);
+			paint_text(cr, UI_FONT_SM, app->name, x + 34, y + 78, 0.95, 0.96, 0.97);
+		} else if (strcmp(app->name, "Terminal") == 0) {
+			draw_icon(cr, "terminal", x + 46, y + 10);
+			paint_text(cr, UI_FONT_SM, app->name, x + 36, y + 78, 0.95, 0.96, 0.97);
+		} else if (strcmp(app->name, "Settings") == 0) {
+			draw_icon(cr, "settings", x + 46, y + 10);
+			paint_text(cr, UI_FONT_SM, app->name, x + 36, y + 78, 0.95, 0.96, 0.97);
+		} else if (strcmp(app->name, "Compatibility") == 0) {
+			draw_icon(cr, "compat", x + 46, y + 10);
+			paint_text(cr, UI_FONT_SM, app->name, x + 22, y + 78, 0.95, 0.96, 0.97);
+		} else {
+			cairo_set_source_rgba(cr, 0.35, 0.55, 0.72, 1);
+			cairo_rectangle(cr, x + 46, y + 10, 36, 36);
+			cairo_fill(cr);
+			paint_text(cr, UI_FONT_SM, app->name, x + 24, y + 78, 0.95, 0.96, 0.97);
+		}
+	}
+	for (int p = 0; p < pages && p < 8; p++) {
+		cairo_set_source_rgba(cr, 1, 1, 1, p == server->pad_page ? 0.95 : 0.35);
+		cairo_arc(cr, server->screen_w / 2.0 - (pages - 1) * 8 + p * 16, server->screen_h - 92, 3.2, 0, 6.2832);
+		cairo_fill(cr);
+	}
+}
+
+static int pad_hit(struct server *server, double x, double y, int *index) {
+	int ids[48];
+	int n = pad_list(server, ids, 48);
+	int per = 28;
+	int cell_w = 140;
+	int cell_h = 118;
+	int origin_x = (server->screen_w - 7 * cell_w) / 2;
+	int origin_y = 110;
+	int start = server->pad_page * per;
+	for (int i = 0; i < per && start + i < n; i++) {
+		int col = i % 7;
+		int row = i / 7;
+		double ix = origin_x + col * cell_w;
+		double iy = origin_y + row * cell_h;
+		if (x >= ix && x < ix + cell_w && y >= iy && y < iy + cell_h) {
+			*index = ids[start + i];
+			server->pad_cursor = i;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void pad_activate(struct server *server, int index) {
+	struct pad_app *app = &server->pad[index];
+	if (app->is_folder) {
+		server->pad_folder = index;
+		server->pad_page = 0;
+		server->pad_cursor = 0;
+		return;
+	}
+	if (app->exec[0] == '\0') {
+		return;
+	}
+	if (fork() == 0) {
+		setsid();
+		execl(app->exec, app->exec, (char *)NULL);
+		_exit(127);
+	}
+	server->launchpad = 0;
+	server->pad_filter[0] = '\0';
+}
+
+static void nag_box(const struct server *server, struct wlr_box *box) {
+	box->width = 460;
+	box->height = 230;
+	box->x = (server->screen_w - box->width) / 2;
+	box->y = (server->screen_h - box->height) / 2 - 24;
+}
+
+static int license_active(void) {
+	FILE *f = fopen("/var/lib/olympium/license", "r");
+	if (f == NULL) {
+		return 0;
+	}
+	char buf[128];
+	if (fgets(buf, sizeof buf, f) == NULL) {
+		fclose(f);
+		return 0;
+	}
+	fclose(f);
+	for (char *p = buf; *p != '\0'; p++) {
+		if (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static time_t read_stamp(const char *path) {
+	FILE *f = fopen(path, "r");
+	if (f == NULL) {
+		return 0;
+	}
+	long long value = 0;
+	if (fscanf(f, "%lld", &value) != 1 || value < 0) {
+		value = 0;
+	}
+	fclose(f);
+	return (time_t)value;
+}
+
+static int write_stamp(const char *path, time_t value) {
+	mkdir("/var/lib/olympium", 0755);
+	FILE *f = fopen(path, "w");
+	if (f == NULL) {
+		return -1;
+	}
+	fprintf(f, "%lld\n", (long long)value);
+	fclose(f);
+	return 0;
+}
+
+static void nag_dismiss(struct server *server) {
+	server->nag = 0;
+	server->nag_closed = 1;
+	write_stamp("/var/lib/olympium/nag-dismissed", time(NULL));
+}
+
+static void nag_eval(struct server *server) {
+	const long five_days = 5L * 24L * 60L * 60L;
+	time_t now = time(NULL);
+	if (server->nag_closed || license_active()) {
+		server->nag = 0;
+		return;
+	}
+	time_t first = read_stamp("/var/lib/olympium/first-use");
+	if (first <= 0) {
+		if (write_stamp("/var/lib/olympium/first-use", now) != 0) {
+			server->nag = server->nag_force ? 1 : 0;
+			return;
+		}
+		first = now;
+	}
+	if (server->nag_force) {
+		server->nag = 1;
+		return;
+	}
+	if (now - first < five_days) {
+		server->nag = 0;
+		return;
+	}
+	time_t dismissed = read_stamp("/var/lib/olympium/nag-dismissed");
+	if (dismissed > 0 && now - dismissed < five_days) {
+		server->nag = 0;
+		return;
+	}
+	server->nag = 1;
+}
+
+static int nag_close_hit(const struct server *server, double x, double y) {
+	struct wlr_box box;
+	nag_box(server, &box);
+	if (x >= box.x + box.width - 36 && x < box.x + box.width - 8 &&
+			y >= box.y + 8 && y < box.y + 36) {
+		return 1;
+	}
+	if (x >= box.x + box.width - 116 && x < box.x + box.width - 16 &&
+			y >= box.y + box.height - 58 && y < box.y + box.height - 16) {
+		return 1;
+	}
+	return 0;
+}
+
 static void press_chrome(struct server *server) {
 	double x = server->cursor->x;
 	double y = server->cursor->y;
@@ -1345,6 +1934,25 @@ static void press_chrome(struct server *server) {
 	server->press_brand = 0;
 	server->press_light = 0;
 	server->press_view = NULL;
+	if (server->nag) {
+		struct wlr_box nb;
+		nag_box(server, &nb);
+		if (nag_close_hit(server, x, y)) {
+			nag_dismiss(server);
+		} else if (point_in(&nb, x, y)) {
+			return;
+		}
+	}
+	if (server->launchpad) {
+		int index = -1;
+		if (pad_hit(server, x, y, &index)) {
+			pad_activate(server, index);
+		} else if (y > PANEL_H + 40) {
+			server->launchpad = 0;
+			server->pad_filter[0] = '\0';
+		}
+		return;
+	}
 	if (server->open_menu >= 0) {
 		struct wlr_box drop;
 		menu_box(server, &drop);
@@ -1443,7 +2051,17 @@ static void release_chrome(struct server *server) {
 		server->launcher = 1;
 		server->filter[0] = '\0';
 	} else if (server->press_app >= 0 && server->press_app == dock_app_at(server, x, y)) {
-		launch_app(server, &APPS[server->press_app]);
+		if (strcmp(APPS[server->press_app].id, "launchpad") == 0) {
+			if (!server->launchpad) {
+				pad_load(server);
+				server->pad_page = 0;
+				server->pad_folder = -1;
+				server->pad_filter[0] = '\0';
+			}
+			server->launchpad = !server->launchpad;
+		} else {
+			launch_app(server, &APPS[server->press_app]);
+		}
 	} else if (server->press_app >= 0 && server->launcher) {
 		launch_app(server, &APPS[server->press_app]);
 	}
@@ -1741,14 +2359,27 @@ int main(int argc, char *argv[]) {
 	server.press_app = -1;
 	server.hover_app = -1;
 	server.open_menu = -1;
+	server.pad_folder = -1;
 	FILE *cmd = fopen("/proc/cmdline", "r");
 	if (cmd != NULL) {
 		char line[512];
-		if (fgets(line, sizeof line, cmd) != NULL && strstr(line, "olympium.openmenu=1") != NULL) {
-			server.demo_menu = 1;
+		if (fgets(line, sizeof line, cmd) != NULL) {
+			if (strstr(line, "olympium.openmenu=1") != NULL) {
+				server.demo_menu = 1;
+			}
+			if (strstr(line, "olympium.openlaunch=1") != NULL) {
+				server.demo_pad = 1;
+			}
+			if (strstr(line, "olympium.nag=1") != NULL) {
+				server.nag_force = 1;
+			}
+			if (strstr(line, "olympium.nagdismiss=1") != NULL) {
+				server.nag_demo_dismiss = 1;
+			}
 		}
 		fclose(cmd);
 	}
+	nag_eval(&server);
 	load_branding(&server);
 	struct utsname uts;
 	if (uname(&uts) == 0) {

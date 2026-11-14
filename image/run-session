@@ -7,6 +7,18 @@ chmod 755 /run/dev-desktop
 kmsg "session start"
 modprobe bochs 2>/dev/null || true
 modprobe virtio_gpu 2>/dev/null || true
+modprobe e1000 2>/dev/null || true
+modprobe virtio_net 2>/dev/null || true
+modprobe virtio_blk 2>/dev/null || true
+modprobe nvme 2>/dev/null || true
+if command -v ip >/dev/null 2>&1; then
+	for iface in /sys/class/net/*; do
+		name=$(basename "$iface")
+		[ "$name" = lo ] && continue
+		ip link set "$name" up 2>/dev/null || true
+	done
+fi
+/usr/bin/driver-report >/tmp/driver-report.txt 2>&1 || true
 if grep -q 'olympium.contrast=1' /proc/cmdline 2>/dev/null; then
 	export DEV_DESK_CONTRAST=1
 fi

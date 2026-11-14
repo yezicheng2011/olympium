@@ -1,0 +1,15 @@
+#!/bin/bash
+# Record a purchased Olympium license on this machine.
+# That only hides the purchase reminder. It is optional.
+# Personal, school, business, and bulk installs run the same without it.
+set -u
+key="${1:-}"
+if [ -z "$key" ]; then
+	echo "Usage: olympium-activate LICENSE-KEY" >&2
+	echo "No license was written." >&2
+	exit 2
+fi
+mkdir -p /var/lib/olympium
+printf '%s\n' "$key" > /var/lib/olympium/license
+echo "License recorded. The purchase reminder will stay hidden."
+echo "Restart the desktop session if the reminder is already on screen."
