@@ -6,11 +6,11 @@
 use clap::{Parser, Subcommand};
 use linkspan_core::{
     append_session, bundled_lock, classify_path, doctor, envelope, error_envelope, execute,
-    export_json, fetch_runtime, host_arch, load_catalog, load_config, matrix_table, prepare,
-    read_sessions, request_for_android_package, request_for_file, request_for_flatpak,
+    export_json, fetch_runtime, host_arch, installed_wine, load_catalog, load_config, matrix_table,
+    prepare, read_sessions, request_for_android_package, request_for_file, request_for_flatpak,
     request_for_ios_bundle, request_for_openharmony_bundle, request_for_snap, runtime_rows,
     save_catalog, save_config, Appearance, Error, GuestSystem, HostPlatform, LaunchKind,
-    MirrorSource, PackageKind, RunOptions, SessionRecord, SystemNet, SystemProbe,
+    MirrorSource, PackageKind, Probe, RunOptions, SessionRecord, SystemNet, SystemProbe,
 };
 use serde_json::json;
 use std::path::PathBuf;
@@ -271,8 +271,9 @@ fn cmd_plan(
     layout: &linkspan_core::Layout,
     args: RunArgs,
 ) -> Result<i32, Error> {
-    let config = load_config(&layout.config)?;
+    let mut config = load_config(&layout.config)?;
     let request = request_from_run(layout, &args)?;
+    remember_installed_wine(host, &mut config, layout)?;
     let prepared = prepare(host, &request, &config, &SystemProbe)?;
     emit(json, "plan", host, json!(prepared), &plan_text(&prepared))
 }
@@ -288,8 +289,9 @@ fn cmd_run(
             message: "Detach cannot be combined with --json or --capture.".into(),
         });
     }
-    let config = load_config(&layout.config)?;
+    let mut config = load_config(&layout.config)?;
     let request = request_from_run(layout, &args)?;
+    ensure_windows_runtime(host, layout, &mut config, request.guest)?;
     let name = request.name.clone();
     let guest = request.guest;
     let prepared = match prepare(host, &request, &config, &SystemProbe) {
@@ -440,6 +442,69 @@ fn cmd_config(
     }
 }
 
+fn remember_installed_wine(
+    host: HostPlatform,
+    config: &mut linkspan_core::Config,
+    layout: &linkspan_core::Layout,
+) -> Result<(), Error> {
+    if host != HostPlatform::Linux || !config.engines.windows.wine.is_empty() {
+        return Ok(());
+    }
+    if let Some(bin) = installed_wine(layout) {
+        config.engines.windows.wine = bin.display().to_string();
+        save_config(&layout.config, config)?;
+    }
+    Ok(())
+}
+
+fn ensure_windows_runtime(
+    host: HostPlatform,
+    layout: &linkspan_core::Layout,
+    config: &mut linkspan_core::Config,
+    guest: GuestSystem,
+) -> Result<(), Error> {
+    if host != HostPlatform::Linux || guest != GuestSystem::Windows {
+        return Ok(());
+    }
+    if !config.engines.windows.wine.is_empty()
+        || SystemProbe.lookup("wine").is_some()
+        || SystemProbe.lookup("wine64").is_some()
+    {
+        return Ok(());
+    }
+    if installed_wine(layout).is_some() {
+        return remember_installed_wine(host, config, layout);
+    }
+    let lock = bundled_lock();
+    let published = lock
+        .runtimes
+        .iter()
+        .any(|entry| entry.id == "wine" && entry.published);
+    if !published {
+        return Ok(());
+    }
+    let report = fetch_runtime(
+        "wine",
+        &lock,
+        &config.engines.mirrors,
+        &SystemNet,
+        layout,
+        host_arch(),
+        |progress| {
+            if let Some(total) = progress.total {
+                eprintln!("downloaded {} / {total}", progress.received);
+            } else {
+                eprintln!("downloaded {}", progress.received);
+            }
+        },
+    )?;
+    if report.outcome == "not_published" {
+        return Ok(());
+    }
+    let _ = report;
+    remember_installed_wine(host, config, layout)
+}
+
 fn cmd_runtime(
     json: bool,
     host: HostPlatform,
@@ -527,6 +592,14 @@ fn cmd_fetch(
         if let Some(path) = &report.path {
             config.engines.openharmony.image = path.clone();
             save_config(&layout.config, &config)?;
+        }
+    }
+    if id == "wine" {
+        if let Some(bin) = installed_wine(layout) {
+            if host == HostPlatform::Linux && config.engines.windows.wine.is_empty() {
+                config.engines.windows.wine = bin.display().to_string();
+                save_config(&layout.config, &config)?;
+            }
         }
     }
     if report.outcome == "not_published" {

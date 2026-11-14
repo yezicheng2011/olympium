@@ -310,15 +310,11 @@ pub fn fetch_runtime(
     let sha = entry
         .sha256
         .get(arch)
+        .filter(|value| value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit()))
         .cloned()
         .ok_or_else(|| Error::Config {
-            message: format!("The slim {} image has no SHA-256 for {arch}.", entry.id),
+            message: format!("The slim {} image is not published for {arch}.", entry.id),
         })?;
-    if sha.len() != 64 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(Error::Config {
-            message: format!("The SHA-256 for the slim {} image is not usable.", entry.id),
-        });
-    }
     let dest_dir = layout.runtimes.join(&entry.id);
     let marker = dest_dir.join("EDITION");
     if marker.is_file() {
@@ -439,6 +435,22 @@ pub fn host_arch() -> &'static str {
         "x86_64" => "x86_64",
         "aarch64" => "aarch64",
         other => other,
+    }
+}
+
+/// The slim Wine loader, when this archive says it is a Linux binary.
+/// Linkspan does not treat a Linux ELF as a macOS or Windows program.
+pub fn installed_wine(layout: &Layout) -> Option<std::path::PathBuf> {
+    let root = layout.runtimes.join("wine");
+    let host = fs::read_to_string(root.join("HOST_OS")).unwrap_or_default();
+    if host.trim() != "linux" {
+        return None;
+    }
+    let bin = root.join("bin/wine");
+    if bin.is_file() {
+        Some(bin)
+    } else {
+        None
     }
 }
 
@@ -587,7 +599,26 @@ pub fn read_mirror(layout: &Layout) -> Option<MirrorChoice> {
 
 #[cfg(test)]
 mod ip_parse {
-    use super::parse_ip_body;
+    use super::{installed_wine, parse_ip_body};
+    use crate::paths::Layout;
+    use std::fs;
+
+    #[test]
+    fn installed_wine_requires_the_linux_marker() {
+        let root =
+            std::env::temp_dir().join(format!("linkspan-wine-marker-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let layout = Layout::under(&root);
+        assert!(installed_wine(&layout).is_none());
+        let dir = layout.runtimes.join("wine/bin");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("wine"), b"wine").unwrap();
+        fs::write(layout.runtimes.join("wine/HOST_OS"), b"linux\n").unwrap();
+        assert!(installed_wine(&layout).unwrap().ends_with("bin/wine"));
+        fs::write(layout.runtimes.join("wine/HOST_OS"), b"macos\n").unwrap();
+        assert!(installed_wine(&layout).is_none());
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn reads_ipinfo_and_ip_api_shapes() {

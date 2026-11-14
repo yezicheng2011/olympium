@@ -10,17 +10,11 @@
 set -eu
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 
+version="$(sh scripts/check-client-version.sh)"
+
 if [ "$(uname -s)" != Darwin ]; then
   echo "This packaging script runs on macOS." >&2
   exit 2
-fi
-
-version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
-if [ -z "$version" ]; then
-  version="$(awk -F'"' '/^version = / { print $2; exit }' crates/linkspan-cli/Cargo.toml)"
-fi
-if [ -z "$version" ]; then
-  version="0.1.0"
 fi
 
 dist="dist/macos"

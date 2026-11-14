@@ -520,7 +520,30 @@ fn mirror_follows_client_ip_and_falls_back_like_a_probe() {
 fn unpublished_slim_image_is_not_invented_and_a_published_one_is_checked() {
     let (root, layout) = scratch();
     let mut lock = bundled_lock();
-    assert!(lock.runtimes.iter().all(|entry| !entry.published));
+    for entry in &lock.runtimes {
+        match entry.id.as_str() {
+            "android" | "openharmony" => {
+                assert!(!entry.published, "{}", entry.id);
+                assert!(entry.sha256.is_empty(), "{}", entry.id);
+            }
+            "linux" => {
+                assert!(entry.published);
+                for arch in ["x86_64", "aarch64"] {
+                    let sha = entry.sha256.get(arch).expect(arch);
+                    assert_eq!(sha.len(), 64);
+                    assert!(sha.chars().all(|c| c.is_ascii_hexdigit()));
+                }
+            }
+            "wine" => {
+                assert!(entry.published);
+                let sha = entry.sha256.get("x86_64").unwrap();
+                assert_eq!(sha.len(), 64);
+                assert!(entry.assets.aarch64.is_empty());
+                assert!(entry.sha256.get("aarch64").is_none());
+            }
+            other => panic!("unexpected runtime {other}"),
+        }
+    }
     assert!(lock
         .runtimes
         .iter()

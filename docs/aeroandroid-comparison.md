@@ -8,7 +8,7 @@ The slim images are not in this repository. They are downloaded at runtime from 
 | --- | --- |
 | Real Android system, not a translation layer | Android guests use Waydroid or adb when you already have them, or the slim AOSP image after it is published. No Play services are bundled. |
 | One host window per app, no emulator chrome | Launch plans ask for `host-window` and refuse to open a nested emulator frame when the runtime's `linkspan-surface` bridge is missing. Wine, which is kept for Windows, already opens native host windows. OpenHarmony on an OpenHarmony device uses the system window. |
-| Runtime downloaded at install, SHA-256 checked | `linkspan runtime` and `linkspan fetch` download a published slim image, show progress, and reject a bad hash. Unpublished images are reported, not invented. |
+| Runtime downloaded at install, SHA-256 checked | `linkspan runtime` and `linkspan fetch` download a published slim image, show progress, and reject a bad hash. Linux and Wine are published. Android and OpenHarmony are reported as not published, not invented. |
 | GitHub or a China mirror | The client IP is read from a configurable HTTPS lookup. Country `CN` selects `engines.mirrors.china_prefix` (default `https://gh-proxy.com/`). Otherwise GitHub is used. If the lookup fails, GitHub is probed, which is AeroAndroid's fallback. Prefixes are configurable. The official site is https://olympium.net. |
 | Light and dark appearance | Every host follows the system, or a forced light or dark choice. |
 | Memory budget | Automatic budget from available memory, with a minimum and maximum. Manual mode is a setting. |

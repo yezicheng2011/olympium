@@ -116,4 +116,8 @@ The package does not contain a guest image.
 
 ## Slim images
 
-`share/runtime-lock.json` names the four image repositories. The images themselves are not built by this repository. `linkspan runtime` chooses GitHub or a China mirror from the client IP. `linkspan fetch --guest openharmony` downloads an image only after that repository publishes a release and the lock records its SHA-256.
+`share/runtime-lock.json` is compiled into the client with `include_str!`. It names the four image repositories. The images are not built by this repository.
+
+`linkspan runtime` chooses GitHub or a China mirror from the client IP. `linkspan fetch --guest linux` and `linkspan fetch --guest windows` download the published Alpine and Wine archives and check SHA-256. Android and OpenHarmony stay unpublished. On Linux, `linkspan run` of a Windows program uses the slim Wine binary when no system Wine is installed and the archive's `HOST_OS` says `linux`.
+
+The published macOS package is 0.1.0 and does not contain this lock. `scripts/check-client-version.sh` refuses to package 0.1.0 again. `scripts/package-macos.sh` reads that version and, on macOS, builds `dist/Linkspan-<version>.pkg`. GitHub Actions uploads that package as a workflow artifact. It does not publish a GitHub Release and it does not replace `Linkspan-0.1.0.pkg`. Publishing 0.1.1 is a separate follow-up after this source is merged.

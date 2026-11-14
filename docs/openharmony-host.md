@@ -125,7 +125,7 @@ There is no macOS image repository and no iOS image repository.
 
 When a desktop client looks for a download, it reads the client IP from `engines.mirrors.ip_lookup_url` (default `https://ipinfo.io/json`). A country code of `CN` selects the China mirror prefix (`engines.mirrors.china_prefix`, default `https://gh-proxy.com/`). Any other country uses GitHub directly. If the lookup does not return a country, the client probes `engines.mirrors.probe_url` (default `https://github.com`), the same way AeroAndroid picks a mirror when GitHub does not answer. Set `engines.mirrors.prefer` to `github` or `china` to skip the lookup.
 
-Every downloaded file is checked with SHA-256 from `share/runtime-lock.json`. A mirror that changes the bytes is discarded, and the original repository URL is tried next. Until an image is published, the lock says `published: false` and the client reports that instead of inventing a file.
+Every downloaded file is checked with SHA-256 from `share/runtime-lock.json`. A mirror that changes the bytes is discarded, and the original repository URL is tried next. Linux and Wine have published archives. Android and OpenHarmony still say `published: false`, and the client reports that instead of inventing a file.
 
 On this OpenHarmony device you do not need the slim OpenHarmony image. The device is the runtime. The manual still describes the lookup so the same rule is visible here.
 

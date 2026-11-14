@@ -35,7 +35,7 @@ Android cannot run these packages. The OpenHarmony client runs them on device an
 
 ## Slim images
 
-Linkspan does not contain guest system images. A desktop client reads the client IP, chooses GitHub or a configurable China mirror, and downloads a published slim image from `olympium-android`, `olympium-linux`, `olympium-openharmony`, or `olympium-wine`. The file is discarded if the SHA-256 does not match. There is no macOS or iOS image.
+Linkspan does not contain guest system images. A desktop client reads the client IP, chooses GitHub or a configurable China mirror, and downloads a published slim image from `olympium-linux` or `olympium-wine`. Android and OpenHarmony images are not published. The file is discarded if the SHA-256 does not match. There is no macOS or iOS image. Wine remains LGPL and is not a Windows license. The Alpine root filesystem and kernel keep their own licenses.
 
 ## Google Play
 

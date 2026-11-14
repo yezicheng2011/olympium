@@ -53,14 +53,19 @@ Harmony guests are OpenHarmony packages. Linkspan does not translate a HAP into 
 
 ### Slim images
 
-Images are not inside Linkspan. When a desktop client starts, it reads the client IP and chooses GitHub or a China mirror. The bytes come from these repositories, and only after a release is published:
+Images are not inside Linkspan. When a desktop client starts, it reads the client IP and chooses GitHub or a China mirror. A mirror that changes a file fails the SHA-256 check. There is no macOS or iOS image repository.
+
+Published image releases:
+
+- [olympium-linux](https://github.com/yezicheng2011/olympium-linux) v0.1.0: Alpine Linux 3.24.4 for x86_64 and aarch64. The x86_64 guest was booted with KVM. The aarch64 guest was booted with QEMU's software CPU on an x86_64 host, not on aarch64 hardware. Lima and WSL import were not tested.
+- [olympium-wine](https://github.com/yezicheng2011/olympium-wine) v0.1.0: Wine 11.0 for 64-bit Windows programs on Linux x86_64. A 32-bit program failed, and there is no aarch64, macOS, or Windows-host build.
+
+Not published, and not reported as working:
 
 - [olympium-android](https://github.com/yezicheng2011/olympium-android)
-- [olympium-linux](https://github.com/yezicheng2011/olympium-linux)
 - [olympium-openharmony](https://github.com/yezicheng2011/olympium-openharmony)
-- [olympium-wine](https://github.com/yezicheng2011/olympium-wine)
 
-There is no macOS or iOS image repository. A mirror that changes a file fails the SHA-256 check. Until a release exists, the client says the image is not published.
+`share/runtime-lock.json` is compiled into the client. The macOS package already published as 0.1.0 does not contain these hashes, so it will not download the new images. This source is 0.1.1 for that follow-up package. Do not replace the 0.1.0 package or its assets.
 
 ### Google Play
 

@@ -54,8 +54,9 @@ pub use request::{
 };
 pub use runtime::{
     available_memory_mib, bundled_lock, candidate_urls, choose_mirror, fetch_runtime,
-    guest_runtime_id, host_arch, memory_budget_mib, parse_ip_body, parse_lock, read_mirror,
-    runtime_rows, write_mirror, FetchReport, MirrorChoice, MirrorSource, Net, Progress, SystemNet,
+    guest_runtime_id, host_arch, installed_wine, memory_budget_mib, parse_ip_body, parse_lock,
+    read_mirror, runtime_rows, write_mirror, FetchReport, MirrorChoice, MirrorSource, Net,
+    Progress, SystemNet,
 };
 pub use session::{append_session, read_sessions, SessionRecord};
 
