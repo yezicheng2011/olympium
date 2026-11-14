@@ -1,34 +1,34 @@
-daniel.ye 源码许可证（第 1.0 版）
+daniel.ye Source License, Version 1.0
 
-版权所有 © 2026 叶子诚（daniel.ye）。保留所有权利。
+Copyright © 2026 Ye Zicheng (daniel.ye). All rights reserved.
 
-1. 许可证性质与适用范围
+1. Nature and Scope of This License
 
-- 本许可证为专有源码可用（Source-Available）自定义许可证，不属于开放源代码促进会（OSI）定义的开源许可证，任何分发的副本均不得标识或宣称为 Apache-2.0、AGPL-3.0 或其他标准开源许可证。
-- 本软件包含的任何第三方组件，仍受其各自原始许可证的约束。
+- This license is a proprietary source-available custom license. It is not an open-source license as defined by the Open Source Initiative (OSI). No distributed copy may be identified or described as Apache-2.0, AGPL-3.0, or any other standard open-source license.
+- Any third-party components included in this software remain subject to their own original licenses.
 
-2. 受限主体与覆盖司法管辖区定义
+2. Definitions of Restricted Entities and Covered Jurisdictions
 
-- 覆盖司法管辖区（Covered Jurisdictions）指：中华人民共和国大陆地区（不含台湾地区）、香港特别行政区、澳门特别行政区、阿拉伯叙利亚共和国、朝鲜民主主义人民共和国、也门共和国、巴勒斯坦国、缅甸联邦共和国。
-- 受限主体（Restricted Entities）指符合下列任一条件的个人或实体：
-  1. 具有覆盖司法管辖区国籍的自然人，或持有香港特别行政区、澳门特别行政区永久性居民身份的自然人，或常居于覆盖司法管辖区的自然人；
-  2. 在覆盖司法管辖区注册成立、或主要营业地/实际运营地位于覆盖司法管辖区的法人、非法人组织或其他实体；
-  3. 由上述第 1 项或第 2 项所述主体直接或间接合计持有超过 5% 股权、表决权或受益权，或受其实际控制的任何实体；
-  4. 覆盖司法管辖区的政府机构、公共部门及其直接或间接控制的企业或组织。
+- “Covered Jurisdictions” means: the mainland of the People’s Republic of China (excluding the Taiwan area); the Hong Kong Special Administrative Region; the Macao Special Administrative Region; the Syrian Arab Republic; the Democratic People’s Republic of Korea; the Republic of Yemen; the State of Palestine; and the Republic of the Union of Myanmar.
+- “Restricted Entities” means any individual or entity that meets any of the following conditions:
+  1. a natural person who is a national of a Covered Jurisdiction, who holds permanent resident status in the Hong Kong Special Administrative Region or the Macao Special Administrative Region, or who habitually resides in a Covered Jurisdiction;
+  2. a legal person, unincorporated organization, or other entity that is incorporated or otherwise formed in a Covered Jurisdiction, or whose principal place of business or actual place of operations is in a Covered Jurisdiction;
+  3. any entity of which more than 5 percent of the equity, voting rights, or beneficial interests is held, directly or indirectly in the aggregate, by one or more persons or entities described in item 1 or item 2 above, or that is actually controlled by any such person or entity;
+  4. a government authority or public body of a Covered Jurisdiction, and any enterprise or organization directly or indirectly controlled by it.
 
-3. 非受限主体的授权（Apache-2.0）
+3. Grant to Non-Restricted Entities (Apache-2.0)
 
-- 凡不属于第 2 条定义的“受限主体”的个人或实体，均依据 Apache License 2.0 的全部条款与条件获得本软件的完整授权。
+- Any individual or entity that is not a “Restricted Entity” as defined in Section 2 is granted full rights in this software under all terms and conditions of Apache License 2.0.
 
-4. 受限主体的有条件限制许可
+4. Conditional Limited License for Restricted Entities
 
-- 凡属于第 2 条定义的“受限主体”，在未获得版权人正式书面商业授权的情况下，仅可在严格遵守以下全部限制条件的前提下，出于纯粹的个人学习、学术研究或非营利性测试目的使用、复制或修改本软件：
-  1. 严格禁止商业与工业用途：严禁将本软件（或其修改版本、衍生作品）用于任何商业目的、工业生产、商业运营、对外提供商业服务、内部商业研发或任何直接/间接获取经济利益的场景。
-  2. 强制传染性与源码公开义务：任何基于本软件的修改版本或衍生作品，在对外分发或通过计算机网络向任何第三方提供交互式功能时，必须以本许可证全文向外发布，并免费向所有接收方或网络交互用户提供完整、对应的机器可读源代码。
-- 书面商业授权：受限主体如需豁免上述限制，必须事先取得版权人签署的正式书面授权。该书面授权仅在明确载明的被授权主体、用途、范围及期限内有效；未明确书面豁免的条款依然完全适用。
+- A “Restricted Entity” as defined in Section 2, unless it has obtained a formal written commercial authorization from the copyright holder, may use, copy, or modify this software only for purely personal study, academic research, or non-profit testing, and only if it strictly complies with all of the following conditions:
+  1. Strict prohibition of commercial and industrial use: this software (including any modified version or derivative work) may not be used for any commercial purpose, industrial production, commercial operations, the provision of commercial services to others, internal commercial research and development, or any scenario that directly or indirectly obtains economic benefit.
+  2. Mandatory copyleft and source-disclosure obligations: any modified version or derivative work based on this software, when distributed to others or when interactive functionality is provided to any third party over a computer network, must be released under this license in full, and complete, corresponding, machine-readable source code must be provided free of charge to all recipients and to all users of that network interaction.
+- Written commercial authorization: a Restricted Entity that seeks a waiver of the restrictions above must first obtain a formal written authorization signed by the copyright holder. That written authorization is valid only for the authorized party, purpose, scope, and term expressly stated in it. Terms not expressly waived in writing remain in full force.
 
-5. 权利终止与免责声明
+5. Termination and Disclaimer
 
-- 自动终止：任何违反本许可证条款（包括但不限于超出授权范围使用、隐瞒受限主体身份或规避股权穿透核查）的行为，将导致本许可证授予你的所有权利自动且立即终止，且无宽限期。权利终止后，你必须立即停止使用并销毁所有副本。
-- 商标权保留：本许可证不授予任何使用版权人姓名、项目名称、商标、服务标志或商号的权利。
-- 无担保与责任限制：本软件按“现状（AS IS）”及“现有（AS AVAILABLE）”基础提供，不附带任何明示或暗示的担保（包括但不限于适销性、特定用途适用性及不侵权的担保）。在适用法律允许的最大范围内，版权人在任何情况下均不对因使用或无法使用本软件而引起的任何直接、间接、附带、特殊或后果性损害承担任何责任。
+- Automatic termination: any violation of the terms of this license, including without limitation use beyond the authorized scope, concealment of Restricted Entity status, or circumvention of equity-look-through review, automatically and immediately terminates all rights granted to you under this license, with no cure period. After termination, you must immediately cease all use and destroy all copies.
+- Reservation of trademark rights: this license does not grant any right to use the copyright holder’s name, the project name, or any trademark, service mark, or trade name.
+- No warranty and limitation of liability: this software is provided on an “AS IS” and “AS AVAILABLE” basis, without warranties of any kind, express or implied, including without limitation warranties of merchantability, fitness for a particular purpose, and non-infringement. To the maximum extent permitted by applicable law, the copyright holder shall in no event be liable for any direct, indirect, incidental, special, or consequential damages arising out of the use of, or inability to use, this software.

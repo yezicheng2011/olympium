@@ -1,6 +1,6 @@
 /*
  * Copyright 2026 Development Desktop contributors
- * License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
+ * License: daniel.ye Source License, Version 1.0. See LICENSE.
  *
  * Separable box blur for live compositor pixels. Bytes are B,G,R,A.
  */

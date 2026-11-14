@@ -90,4 +90,4 @@ QEMU `virt`, TCG, AAVMF (`UEFI firmware (version 2024.02-2ubuntu0.10 ...)`), GRU
 
 ## Licenses
 
-First-party source is under daniel.ye 源码许可证（第 1.0 版）. The full text is [LICENSE](LICENSE). Ubuntu packages and the libraries they contain keep their own licenses (`THIRD_PARTY_NOTICES.md`). The image is built from Ubuntu packages and is not Ubuntu. Ubuntu is a trademark of Canonical.
+First-party source is under daniel.ye Source License, Version 1.0. The full text is [LICENSE](LICENSE). Ubuntu packages and the libraries they contain keep their own licenses (`THIRD_PARTY_NOTICES.md`). The image is built from Ubuntu packages and is not Ubuntu. Ubuntu is a trademark of Canonical.
