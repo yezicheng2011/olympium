@@ -1,0 +1,10 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "linkspan-openharmony",
+  "version": "0.1.0",
+  "description": "Linkspan client for OpenHarmony. Apache-2.0.",
+  "license": "Apache-2.0",
+  "main": "",
+  "author": "Ye Zicheng",
+  "dependencies": {}
+}

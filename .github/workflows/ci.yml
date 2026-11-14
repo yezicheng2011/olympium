@@ -1,0 +1,52 @@
+# Copyright 2026 Ye Zicheng
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Test the engine
+        run: cargo test --workspace --exclude linkspan-linux
+      - name: Test the Android refusal rule
+        run: |
+          javac -d /tmp/linkspan-java \
+            hosts/android/protocol/src/main/java/app/linkspan/protocol/LaunchGate.java \
+            hosts/android/protocol/src/test/java/app/linkspan/protocol/LaunchGateTest.java
+          java -cp /tmp/linkspan-java app.linkspan.protocol.LaunchGateTest
+      - name: Test the OpenHarmony refusal rule
+        run: node hosts/harmony/protocol/launch-gate.test.js
+      - name: Check host icon sets
+        run: python3 scripts/check-icons.py
+
+  macos-pkg:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Test the Mac refusal kit
+        run: swift test --package-path hosts/macos
+      - name: Build the engine and an ad-hoc pkg
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+          APPLE_INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: bash scripts/package-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linkspan-macos-pkg
+          path: |
+            dist/*.pkg
+            dist/SIGNING.txt
+            dist/update.json

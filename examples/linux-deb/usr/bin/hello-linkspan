@@ -1,0 +1,5 @@
+#!/bin/sh
+# Copyright 2026 Ye Zicheng
+# SPDX-License-Identifier: Apache-2.0
+
+printf 'linkspan-guest-ok platform=linux format=deb\n'

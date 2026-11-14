@@ -1,0 +1,13 @@
+<!-- Copyright 2026 Ye Zicheng -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Linkspan.Protocol</RootNamespace>
+    <AssemblyName>Linkspan.Protocol</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Description>Shared protocol for the Linkspan Windows client. Apache-2.0.</Description>
+  </PropertyGroup>
+</Project>

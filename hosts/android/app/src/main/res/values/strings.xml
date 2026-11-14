@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Ye Zicheng -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="app_name">Linkspan</string>
+    <string name="demo_title">Android example</string>
+</resources>

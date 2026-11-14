@@ -1,0 +1,27 @@
+Linkspan
+Copyright 2026 Ye Zicheng
+
+This product is licensed under the Apache License, Version 2.0.
+The license text is in the LICENSE file.
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Linkspan's own source is Apache-2.0 only. It is not dual-licensed, and it is
+not offered under the MIT license, the GPL, or any other license.
+
+Third-party engines and operating systems are not included in this repository
+and are not relicensed. That includes Wine, Proton, QEMU, Lima, Waydroid, WSL,
+OpenHarmony, the Android SDK, Windows, macOS, and iOS. Slim guest images are
+downloaded at runtime from their own repositories. They are not inside
+Linkspan, and they stay under their own terms. Wine is kept for Windows
+programs. It is not used for OpenHarmony, and it is not a Windows license.
+
+The Linux desktop client is built against the system copies of GTK 4 and
+libadwaita. Those libraries remain under the GNU Lesser General Public
+License, version 2.1 or later. Their source is not vendored here. Linking to
+them does not change Linkspan's Apache-2.0 license.
+
+Rust crates fetched by Cargo, the Gradle Wrapper, AndroidX, and the .NET
+runtime stay under their own licenses. They are build or runtime dependencies.
+They are not copied into this repository as source, and they do not change
+Linkspan's license.

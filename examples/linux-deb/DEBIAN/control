@@ -1,0 +1,5 @@
+Package: hello-linkspan
+Version: 1.0
+Architecture: all
+Maintainer: Ye Zicheng <noreply@example.invalid>
+Description: Sample Linux guest for Linkspan

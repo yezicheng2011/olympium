@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "product": "Linkspan",
+  "license": "Apache-2.0",
+  "copyright": "Copyright 2026 Ye Zicheng",
+  "note": "Metadata only. The slim images are not in this repository. They are published from the per-system repositories and downloaded at runtime.",
+  "runtimes": [
+    {
+      "id": "android",
+      "guest": "android",
+      "edition": "slim",
+      "version": "0.1.0",
+      "published": false,
+      "repo": "https://github.com/yezicheng2011/olympium-android",
+      "tag": "v0.1.0",
+      "summary": "Slim AOSP system image. No Google Play, no extra apps.",
+      "assets": {
+        "x86_64": "android-slim-x86_64.tar.gz",
+        "aarch64": "android-slim-aarch64.tar.gz"
+      },
+      "sha256": {}
+    },
+    {
+      "id": "linux",
+      "guest": "linux",
+      "edition": "slim",
+      "version": "0.1.0",
+      "published": false,
+      "repo": "https://github.com/yezicheng2011/olympium-linux",
+      "tag": "v0.1.0",
+      "summary": "Slim Linux root filesystem for a real virtual machine. Not used when the host is already Linux.",
+      "assets": {
+        "x86_64": "linux-slim-x86_64.tar.gz",
+        "aarch64": "linux-slim-aarch64.tar.gz"
+      },
+      "sha256": {}
+    },
+    {
+      "id": "openharmony",
+      "guest": "openharmony",
+      "edition": "slim",
+      "version": "0.1.0",
+      "published": false,
+      "repo": "https://github.com/yezicheng2011/olympium-openharmony",
+      "tag": "v0.1.0",
+      "summary": "Slim OpenHarmony standard system for QEMU. Not a HarmonyOS commercial image.",
+      "assets": {
+        "x86_64": "openharmony-slim-x86_64.tar.gz",
+        "aarch64": "openharmony-slim-aarch64.tar.gz"
+      },
+      "sha256": {}
+    },
+    {
+      "id": "wine",
+      "guest": "windows",
+      "edition": "slim",
+      "version": "0.1.0",
+      "published": false,
+      "repo": "https://github.com/yezicheng2011/olympium-wine",
+      "tag": "v0.1.0",
+      "summary": "Slim Wine runtime. Wine stays under its own license. This is not a Windows license and it is not used for OpenHarmony.",
+      "assets": {
+        "x86_64": "wine-slim-x86_64.tar.gz",
+        "aarch64": "wine-slim-aarch64.tar.gz"
+      },
+      "sha256": {}
+    }
+  ]
+}

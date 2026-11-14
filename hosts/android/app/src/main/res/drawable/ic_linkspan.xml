@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Ye Zicheng -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Same Olympium letterform as ic_launcher_foreground. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:fillColor="#C5F04A"
+        android:pathData="M10,8.5h6.2c4.15,0 7.05,2.55 7.05,6.55S20.35,21.6 16.2,21.6H13.1V23.5H10V8.5z M13.1,11.55v7.05h3.05c2.35,0 3.85,-1.4 3.85,-3.52 0,-2.13 -1.5,-3.53 -3.85,-3.53H13.1z" />
+</vector>

@@ -1,0 +1,20 @@
+# Copyright 2026 Ye Zicheng
+# SPDX-License-Identifier: Apache-2.0
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/linkspan-core",
+    "crates/linkspan-cli",
+    "crates/linkspan-linux",
+    "examples/hello-linux",
+]
+exclude = ["hosts/android"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Ye Zicheng"]
+publish = false
+rust-version = "1.85"

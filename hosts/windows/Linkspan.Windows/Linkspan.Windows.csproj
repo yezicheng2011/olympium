@@ -1,0 +1,24 @@
+<!-- Copyright 2026 Ye Zicheng -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Linkspan.Windows</RootNamespace>
+    <AssemblyName>Linkspan</AssemblyName>
+    <ApplicationTitle>Linkspan</ApplicationTitle>
+    <ApplicationIcon>Assets\Linkspan.ico</ApplicationIcon>
+    <Description>Windows client for Linkspan. Apache-2.0. Build from source; this project does not produce a Mac package.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Assets\Linkspan.ico" />
+    <Resource Include="Assets\Linkspan.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Linkspan.Protocol\Linkspan.Protocol.csproj" />
+    <Content Include="Assets\compatibility.json" CopyToOutputDirectory="PreserveNewest" Link="compatibility.json" />
+  </ItemGroup>
+</Project>
