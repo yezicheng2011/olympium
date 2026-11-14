@@ -162,7 +162,7 @@ olympium run --file ./program.deb</pre>
           <p>The Mac package 0.1.0 was built before these checksums existed. That package reports the images as not published. A later client build is required before it can fetch them. Version 0.1.1 is in source and is not this download.</p>
 
           <h2 id="progress">Download progress</h2>
-          <p><code>olympium fetch --guest linux</code> prints <code>downloaded</code> and a byte count while the archive is coming in, then the final count when the transfer finishes. The file is kept only after the SHA-256 matches. The same progress line is used for Wine. Android and OpenHarmony stop with “not published” and do not invent a file.</p>
+          <p><code>olympium fetch --guest linux</code> prints <code>downloaded</code> and a byte count while the archive is coming in, then the final count when the transfer finishes. The file is kept only after the SHA-256 matches. <code>olympium guest --guest linux</code> boots that extracted image and waits until the guest prints <code>olympium-linux-guest-ok</code>. The same progress line is used for Wine. Android and OpenHarmony stop with “not published” and do not invent a file. Wine in that archive is a Linux x86_64 program, so a Mac cannot run it directly.</p>
 
           <h2 id="uninstall">Uninstall</h2>
           <p>On a Mac, delete <code>/Applications/Linkspan.app</code> to remove the 0.1.0 install. The package receipt does not delete that app for you. <code>pkgutil --forget app.linkspan.macos</code> only drops the 0.1.0 receipt. A later Olympium build would use its own app name and receipt, and it is not published here.</p>

@@ -134,7 +134,7 @@ pub fn doctor(
         "",
         &["limactl"],
         "Runs Linux programs in a Lima virtual machine.",
-        "Install Lima, or set engines.lima.prefix. Olympium does not download a Linux image.",
+        "Install Lima, or set engines.lima.prefix, to run an arbitrary Linux program. The slim Alpine guest is separate: olympium fetch --guest linux, then olympium guest --guest linux.",
     ));
     engines.push(tool_status(
         host,

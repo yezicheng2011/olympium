@@ -85,7 +85,7 @@ pub fn limits() -> &'static [Limit] {
         Limit {
             id: "no-downloads",
             title: "Programs are not downloaded",
-            body: "Olympium does not download applications, Apple system images, Flatpak runtimes, or snaps. Slim guest runtimes for Android, Linux, OpenHarmony, and Wine are downloaded when you open the app, from their own repositories, after the client IP chooses GitHub or a China mirror. Those images are not inside the Olympium program.",
+            body: "Olympium does not download applications, Apple system images, Flatpak runtimes, or snaps. Published slim guest runtimes are downloaded by `olympium fetch`, and from the runtimes page of the Linux app. `olympium guest --guest linux` boots the extracted Linux image. The published Mac 0.1.0 app was compiled before those checksums and still reports every image as not published.",
         },
         Limit {
             id: "openharmony",

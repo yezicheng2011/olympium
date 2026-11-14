@@ -75,7 +75,7 @@ Olympium does not include Google Play, Play Services, or a Google sign-in. An An
 
 ### Downloads
 
-Olympium does not download programs, system images, Linux distributions, Flatpak runtimes, or snaps.
+Olympium does not download programs, Apple system images, Linux distributions, Flatpak runtimes, or snaps. Published slim guest runtimes are downloaded with `olympium fetch` and checked with SHA-256. `olympium guest --guest linux` boots the extracted Linux image. The published Mac 0.1.0 package was compiled before those checksums and still reports every image as not published.
 
 ## Clients
 

@@ -775,7 +775,7 @@ fn prepare_linux_on_macos(
                 HostPlatform::MacOs,
                 "lima",
                 summary,
-                notes(&["Olympium does not download a Linux image."]),
+                notes(&["The slim Alpine guest is a separate download. An arbitrary Linux program still needs Lima or a command prefix."]),
                 Some(HostPlatform::MacOs),
                 launch,
             ))
@@ -785,7 +785,7 @@ fn prepare_linux_on_macos(
             HostPlatform::MacOs,
             "lima",
             "Extracts the .deb and runs the program in Lima, or with your command prefix.",
-            notes(&["Olympium does not download a Linux image."]),
+            notes(&["The slim Alpine guest is a separate download. An arbitrary Linux program still needs Lima or a command prefix."]),
             Some(HostPlatform::MacOs),
             ArchiveFormat::Deb,
             runner,
@@ -1401,7 +1401,7 @@ fn lima_runner(config: &Config, probe: &dyn Probe) -> Result<PayloadRunner, Erro
     }
     Err(Error::NotConfigured {
         engine: "lima",
-        message: "Install Lima and create an instance, or set engines.lima.prefix. Olympium does not download a Linux image.".into(),
+        message: "Install Lima and create an instance, or set engines.lima.prefix, to run an arbitrary Linux program. The slim Alpine guest is booted with `olympium guest --guest linux` after `olympium fetch --guest linux`.".into(),
     })
 }
 

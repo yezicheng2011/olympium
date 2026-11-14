@@ -6,15 +6,20 @@
 use clap::{Parser, Subcommand};
 use olympium_core::{
     append_session, bundled_lock, classify_path, doctor, envelope, error_envelope, execute,
-    export_json, fetch_runtime, host_arch, installed_wine, load_catalog, load_config, matrix_table,
+    export_json, fetch_runtime, host_arch, installed_wine, linux_guest_command, load_catalog,
+    load_config, matrix_table,
     prepare, read_sessions, request_for_android_package, request_for_file, request_for_flatpak,
     request_for_ios_bundle, request_for_openharmony_bundle, request_for_snap, runtime_rows,
     save_catalog, save_config, Appearance, Error, GuestSystem, HostPlatform, LaunchKind,
     MirrorSource, PackageKind, Probe, RunOptions, SessionRecord, SystemNet, SystemProbe,
 };
 use serde_json::json;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 #[derive(Parser)]
 #[command(
@@ -69,6 +74,15 @@ enum Commands {
         /// `android`, `linux`, `openharmony`, or `windows` (the slim Wine runtime).
         #[arg(long)]
         guest: String,
+    },
+    /// Download the slim Linux image if needed, then boot it.
+    Guest {
+        /// Only `linux` has a bootable slim image in this client.
+        #[arg(long)]
+        guest: String,
+        /// `smoke` runs the image's built-in probe. `start` boots its init.
+        #[arg(long, default_value = "smoke")]
+        action: String,
     },
 }
 
@@ -262,6 +276,7 @@ fn dispatch(json: bool, command: Commands) -> Result<i32, Error> {
         }
         Commands::Runtime => cmd_runtime(json, host, &layout),
         Commands::Fetch { guest } => cmd_fetch(json, host, &layout, &guest),
+        Commands::Guest { guest, action } => cmd_guest(json, host, &layout, &guest, &action),
     }
 }
 
@@ -615,6 +630,141 @@ fn cmd_fetch(
         json!(report),
         &format!("{}\n", report.message),
     )
+}
+
+fn cmd_guest(
+    json: bool,
+    host: HostPlatform,
+    layout: &olympium_core::Layout,
+    guest: &str,
+    action: &str,
+) -> Result<i32, Error> {
+    if guest != "linux" {
+        return Err(Error::NotConfigured {
+            engine: "runtime",
+            message: format!(
+                "olympium guest boots the slim Linux image. `{guest}` has no boot command in this client."
+            ),
+        });
+    }
+    let config = load_config(&layout.config)?;
+    let lock = bundled_lock();
+    let report = fetch_runtime(
+        "linux",
+        &lock,
+        &config.engines.mirrors,
+        &SystemNet,
+        layout,
+        host_arch(),
+        |progress| {
+            if !json {
+                if let Some(total) = progress.total {
+                    eprintln!("downloaded {} / {total}", progress.received);
+                } else {
+                    eprintln!("downloaded {}", progress.received);
+                }
+            }
+        },
+    )?;
+    if report.outcome == "not_published" {
+        return Err(Error::NotConfigured {
+            engine: "runtime",
+            message: report.message,
+        });
+    }
+    let command = linux_guest_command(layout, action)?;
+    let mut child = Command::new(&command.program)
+        .args(&command.args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| Error::Io {
+            message: format!(
+                "Could not start {}: {err}. QEMU is not bundled.",
+                command.program.display()
+            ),
+        })?;
+    let log = Arc::new(Mutex::new(String::new()));
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let log_out = Arc::clone(&log);
+    let log_err = Arc::clone(&log);
+    let out_thread = thread::spawn(move || collect_pipe(stdout, &log_out));
+    let err_thread = thread::spawn(move || collect_pipe(stderr, &log_err));
+    let started = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|err| Error::Io {
+            message: format!("Could not wait for the guest: {err}"),
+        })? {
+            break status;
+        }
+        if started.elapsed() > Duration::from_secs(180) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Error::Failed {
+                message: "The slim Linux guest did not exit within 180 seconds.".into(),
+                guest_exit_code: None,
+                stdout: log.lock().unwrap_or_else(|err| err.into_inner()).clone(),
+                stderr: String::new(),
+            });
+        }
+        thread::sleep(Duration::from_millis(200));
+    };
+    let _ = out_thread.join();
+    let _ = err_thread.join();
+    let text = log.lock().unwrap_or_else(|err| err.into_inner()).clone();
+    if action == "smoke" && !text.contains("olympium-linux-guest-ok") {
+        return Err(Error::Failed {
+            message: "The slim Linux guest started, but it did not print olympium-linux-guest-ok."
+                .into(),
+            guest_exit_code: status.code(),
+            stdout: text,
+            stderr: String::new(),
+        });
+    }
+    let code = status.code().unwrap_or(1);
+    let summary = format!(
+        "Booted the slim Linux {} guest ({action}). The guest printed olympium-linux-guest-ok: {}.\n",
+        command.arch,
+        text.contains("olympium-linux-guest-ok")
+    );
+    emit(
+        json,
+        "guest",
+        host,
+        json!({
+            "guest": "linux",
+            "action": action,
+            "arch": command.arch,
+            "fetch": report,
+            "exit": code,
+            "marker": text.contains("olympium-linux-guest-ok"),
+            "output": text,
+        }),
+        &summary,
+    )?;
+    if status.success() || (action == "smoke" && text.contains("olympium-linux-guest-ok")) {
+        Ok(0)
+    } else {
+        Ok(code)
+    }
+}
+
+fn collect_pipe(pipe: Option<impl std::io::Read + Send>, log: &Arc<Mutex<String>>) {
+    let Some(pipe) = pipe else {
+        return;
+    };
+    let reader = BufReader::new(pipe);
+    for line in reader.lines() {
+        let Ok(line) = line else {
+            break;
+        };
+        eprintln!("{line}");
+        if let Ok(mut buf) = log.lock() {
+            buf.push_str(&line);
+            buf.push('\n');
+        }
+    }
 }
 
 fn cmd_ui() -> Result<i32, Error> {

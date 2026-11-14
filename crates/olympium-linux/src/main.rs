@@ -10,7 +10,8 @@ use gtk4::{
 };
 use libadwaita as adw;
 use olympium_core::{
-    bundled_lock, choose_mirror, doctor, execute, load_catalog, load_config, matrix, prepare,
+    bundled_lock, choose_mirror, doctor, execute, fetch_runtime, host_arch, load_catalog,
+    load_config, matrix, prepare,
     request_for_file, runtime_rows, save_catalog, save_config, write_mirror, Appearance, Error,
     Execution, HostPlatform, LaunchRequest, Layout, RunOptions, SystemNet, SystemProbe,
 };
@@ -349,7 +350,7 @@ fn runtimes_page(state: &Rc<State>) -> ScrolledWindow {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let net = SystemNet;
-        let message = match choose_mirror(&mirrors, &net) {
+        let mut message = match choose_mirror(&mirrors, &net) {
             Ok(choice) => {
                 let _ = write_mirror(&layout, &choice);
                 let source = match choice.source {
@@ -357,10 +358,29 @@ fn runtimes_page(state: &Rc<State>) -> ScrolledWindow {
                     olympium_core::MirrorSource::China => "China mirror",
                 };
                 let ip = choice.client_ip.unwrap_or_else(|| "not reported".into());
-                format!("{source}. {ip}. {}", choice.reason)
+                let mut text = format!("{source}. {ip}. {}", choice.reason);
+                let lock = bundled_lock();
+                for id in ["linux", "wine", "android", "openharmony"] {
+                    match fetch_runtime(id, &lock, &mirrors, &net, &layout, host_arch(), |_| {}) {
+                        Ok(report) => {
+                            text.push('\n');
+                            text.push_str(&report.message);
+                        }
+                        Err(err) => {
+                            text.push('\n');
+                            text.push_str(id);
+                            text.push_str(": ");
+                            text.push_str(err.message());
+                        }
+                    }
+                }
+                text
             }
             Err(err) => err.message().to_string(),
         };
+        if message.trim().is_empty() {
+            message = "The lookup finished without a source.".into();
+        }
         let _ = tx.send(message);
     });
     let rx = Rc::new(RefCell::new(Some(rx)));

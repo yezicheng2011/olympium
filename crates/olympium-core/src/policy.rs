@@ -168,7 +168,7 @@ pub fn cell_summary(host: HostPlatform, guest: GuestSystem) -> &'static str {
             "Runs Linux executables, scripts, AppImages, and .deb packages through WSL. Olympium does not install a distribution."
         }
         (H::MacOs, G::Linux) => {
-            "Runs a script on macOS. Other Linux programs go through Lima, or a command prefix you set. Olympium does not download a Linux image."
+            "Runs a script on macOS. Other Linux programs go through Lima, or a command prefix you set. The slim Alpine guest is downloaded with olympium fetch and booted with olympium guest; it is not a general Linux distribution."
         }
         (H::Android, G::Linux) => {
             "A command prefix you configure can start a Linux program. Olympium does not include a root filesystem."

@@ -15,7 +15,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -440,6 +440,59 @@ pub fn host_arch() -> &'static str {
 
 /// The slim Wine loader, when this archive says it is a Linux binary.
 /// Olympium does not treat a Linux ELF as a macOS or Windows program.
+/// Command that boots an extracted slim Linux guest.
+/// `smoke` runs the probe built into the image. `start` boots its init.
+pub struct GuestCommand {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+    pub arch: String,
+}
+
+pub fn linux_guest_command(layout: &Layout, action: &str) -> Result<GuestCommand, Error> {
+    if action != "smoke" && action != "start" {
+        return Err(Error::Target {
+            message: format!("Guest action must be smoke or start, not {action}."),
+        });
+    }
+    let root = layout.runtimes.join("linux");
+    if !root.join("EDITION").is_file() {
+        return Err(Error::NotConfigured {
+            engine: "linux",
+            message: "The slim Linux image is not installed. `olympium fetch --guest linux` downloads it and checks SHA-256.".into(),
+        });
+    }
+    for rel in ["ARCH", "boot/vmlinuz", "boot/initramfs", "rootfs.img", "bin/linkspan-runtime"] {
+        if !root.join(rel).is_file() {
+            return Err(Error::Io {
+                message: format!("The extracted Linux image is missing {rel}."),
+            });
+        }
+    }
+    let arch = fs::read_to_string(root.join("ARCH"))
+        .map_err(|err| Error::io(err, root.join("ARCH").display()))?;
+    let arch = arch.trim().to_string();
+    if arch != "x86_64" && arch != "aarch64" {
+        return Err(Error::Target {
+            message: format!("The extracted Linux image says arch {arch}, which this client does not boot."),
+        });
+    }
+    let program = root.join("bin/linkspan-runtime");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&program)
+            .map_err(|err| Error::io(err, program.display()))?
+            .permissions();
+        perms.set_mode(perms.mode() | 0o755);
+        fs::set_permissions(&program, perms).map_err(|err| Error::io(err, program.display()))?;
+    }
+    Ok(GuestCommand {
+        program,
+        args: vec![action.to_string()],
+        arch,
+    })
+}
+
 pub fn installed_wine(layout: &Layout) -> Option<std::path::PathBuf> {
     let root = layout.runtimes.join("wine");
     let host = fs::read_to_string(root.join("HOST_OS")).unwrap_or_default();
@@ -599,9 +652,32 @@ pub fn read_mirror(layout: &Layout) -> Option<MirrorChoice> {
 
 #[cfg(test)]
 mod ip_parse {
-    use super::{installed_wine, parse_ip_body};
+    use super::{installed_wine, linux_guest_command, parse_ip_body};
     use crate::paths::Layout;
     use std::fs;
+
+    #[test]
+    fn linux_guest_command_requires_the_extracted_image() {
+        let root = std::env::temp_dir().join(format!("olympium-guest-cmd-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let layout = Layout::under(&root);
+        assert!(linux_guest_command(&layout, "smoke").is_err());
+        let dir = layout.runtimes.join("linux");
+        fs::create_dir_all(dir.join("boot")).unwrap();
+        fs::create_dir_all(dir.join("bin")).unwrap();
+        fs::write(dir.join("EDITION"), b"linux-slim 0.1.0\n").unwrap();
+        fs::write(dir.join("ARCH"), b"x86_64\n").unwrap();
+        fs::write(dir.join("boot/vmlinuz"), b"kernel").unwrap();
+        fs::write(dir.join("boot/initramfs"), b"initrd").unwrap();
+        fs::write(dir.join("rootfs.img"), b"disk").unwrap();
+        fs::write(dir.join("bin/linkspan-runtime"), b"#!/bin/sh\n").unwrap();
+        let command = linux_guest_command(&layout, "smoke").unwrap();
+        assert_eq!(command.arch, "x86_64");
+        assert_eq!(command.args, vec!["smoke".to_string()]);
+        assert!(command.program.ends_with("bin/linkspan-runtime"));
+        assert!(linux_guest_command(&layout, "window").is_err());
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn installed_wine_requires_the_linux_marker() {
