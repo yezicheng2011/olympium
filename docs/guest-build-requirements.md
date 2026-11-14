@@ -32,6 +32,16 @@ from that channel is not treated as a redistributable Olympium guest.
 
 ## OpenHarmony
 
+The product `qemu-arm-linux-min` is not a separate small source tree. The
+manifest `chipsets/qemu.xml` includes `ohos/ohos.xml` plus `device_qemu` and
+`vendor_ohemu`. Counted from the master manifest on 2026-11-14, that is 519
+projects. The unrelated `default_mini.xml` is 43 projects for the Hi3861 mini
+system and is not this QEMU guest.
+
+`gitcode.com` returned HTTP 418 for `device_qemu` and `vendor_ohemu`. Gitee
+served those two repositories. A full 519-project sync was not completed on
+this VM; see the measured note below if one was recorded.
+
 The public QEMU board instructions are source and configuration, not a system
 image Olympium can republish:
 

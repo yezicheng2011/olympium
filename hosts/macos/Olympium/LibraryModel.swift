@@ -12,6 +12,10 @@ final class LibraryModel: ObservableObject {
     @Published var programs: [ProgramRow] = []
     @Published var cells: [CellRow] = []
     @Published var limits: [LimitNote] = []
+    @Published var guestBusy = false
+    @Published var guestStatus = "The slim Linux guest has not been started from this window."
+    @Published var guestLog = ""
+    private var guestProcess: Process?
 
     func load() {
         if let document = bundledDocument() ?? repositoryDocument() {
@@ -100,6 +104,76 @@ final class LibraryModel: ObservableObject {
         } catch {
             programStatus = error.localizedDescription
             return []
+        }
+    }
+
+    func downloadCheckAndBootLinuxGuest() {
+        guard !guestBusy else { return }
+        guard let cli = locateCli() else {
+            guestStatus = "The Olympium engine is not in this app, so the guest cannot be downloaded."
+            return
+        }
+        guestBusy = true
+        guestStatus = "Downloading the slim Linux guest. The checksum is checked before it is kept."
+        guestLog = ""
+        let process = Process()
+        process.executableURL = cli
+        process.arguments = ["guest", "--guest", "linux"]
+        var env = ProcessInfo.processInfo.environment
+        let prefix = "/opt/homebrew/bin:/usr/local/bin"
+        if let path = env["PATH"], !path.isEmpty {
+            env["PATH"] = prefix + ":" + path
+        } else {
+            env["PATH"] = prefix + ":/usr/bin:/bin"
+        }
+        process.environment = env
+        let output = Pipe()
+        let errors = Pipe()
+        process.standardOutput = output
+        process.standardError = errors
+        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            Task { @MainActor in
+                self?.appendGuestOutput(data)
+            }
+        }
+        errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            Task { @MainActor in
+                self?.appendGuestOutput(data)
+            }
+        }
+        process.terminationHandler = { [weak self] proc in
+            output.fileHandleForReading.readabilityHandler = nil
+            errors.fileHandleForReading.readabilityHandler = nil
+            let code = proc.terminationStatus
+            Task { @MainActor in
+                guard let self else { return }
+                self.guestProcess = nil
+                self.guestBusy = false
+                if code == 0 {
+                    self.guestStatus = "The slim Linux guest finished. The command reported the guest marker."
+                } else {
+                    self.guestStatus = "The slim Linux guest command failed with exit \(code)."
+                }
+            }
+        }
+        do {
+            guestProcess = process
+            try process.run()
+        } catch {
+            guestProcess = nil
+            guestBusy = false
+            guestStatus = "Could not start the guest command. \(error.localizedDescription)"
+        }
+    }
+
+    private func appendGuestOutput(_ data: Data) {
+        guard !data.isEmpty, let text = String(data: data, encoding: .utf8), !text.isEmpty else {
+            return
+        }
+        Task { @MainActor in
+            self.guestLog += text
         }
     }
 }

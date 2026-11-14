@@ -71,9 +71,26 @@ struct ContentView: View {
         case .overview:
             Text("Programs from other systems, on this Mac.")
                 .font(.title2)
-            Text("Mac apps, disk images, and installer packages open with macOS. Scripts run here too. A Linux program you already have uses Lima when you have it. That is separate from the slim Alpine guest.")
-            Text("The command in this app is Olympium.app/Contents/MacOS/olympium. `olympium fetch --guest linux` downloads the slim guest and checks SHA-256. `olympium guest --guest linux` boots it when QEMU is installed. The guest is Alpine. It is not a general Linux distribution, and this window does not start that boot by itself. The published slim Wine archive is a Linux program and does not run on this Mac. Android and OpenHarmony images are not published. This package does not replace the Linkspan 0.1.0 download.")
-            Text("Windows programs use Wine when a Mac build of Wine is installed. Android APKs use adb or Waydroid if you installed one. OpenHarmony packages need a real OpenHarmony runtime. iOS apps that are already on this Mac can be opened. Olympium does not install IPA files.")
+            Text("Mac apps, disk images, and installer packages open with macOS. Scripts run here too. A Linux program you already have still uses Lima. That is not this guest.")
+            Text("Linux slim guest")
+                .font(.headline)
+            Text("This downloads the published Alpine image, checks SHA-256, extracts it, and boots it. QEMU has to be installed. The guest is not a general Linux distribution.")
+            Button(model.guestBusy ? "Working…" : "Download, check, and boot") {
+                model.downloadCheckAndBootLinuxGuest()
+            }
+            .disabled(model.guestBusy)
+            Text(model.guestStatus)
+            if !model.guestLog.isEmpty {
+                Text(model.guestLog)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            Text("Not available from this window")
+                .font(.headline)
+            Text("Windows: the published slim runtime is a Linux program. It is not downloaded or booted here.")
+            Text("Android: no image is published. This window does not download an SDK or Play image.")
+            Text("OpenHarmony: no image is published. This window does not download a HarmonyOS image.")
+            Text("This package does not replace the Linkspan 0.1.0 download.")
             Text(model.engineLine)
                 .foregroundStyle(.secondary)
         case .programs:
