@@ -1,0 +1,37 @@
+#!/bin/bash
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0
+kmsg() { printf '<6>dev-desktop: %s\n' "$*" > /dev/kmsg 2>/dev/null || true; }
+mkdir -p /run/dev-desktop
+chmod 755 /run/dev-desktop
+kmsg "session start"
+modprobe bochs 2>/dev/null || true
+modprobe virtio_gpu 2>/dev/null || true
+if grep -q 'devdesk.contrast=1' /proc/cmdline 2>/dev/null; then
+	export DEV_DESK_CONTRAST=1
+fi
+if grep -q 'devdesk.gles=1' /proc/cmdline 2>/dev/null; then
+	export WLR_RENDERER=gles2
+	export LIBGL_ALWAYS_SOFTWARE=1
+	export GALLIUM_DRIVER=llvmpipe
+else
+	export WLR_RENDERER="${WLR_RENDERER:-pixman}"
+fi
+kmsg "renderer ${WLR_RENDERER}"
+: > /run/dev-desktop/compositor.log
+tail -n0 -f /run/dev-desktop/compositor.log | while IFS= read -r line; do
+	kmsg "$line"
+done &
+echo $! > /run/dev-desktop/logpipe.pid
+set +e
+/usr/bin/dev-compositor -s /usr/libexec/dev-desktop/startup.sh >> /run/dev-desktop/compositor.log 2>&1
+code=$?
+set -e
+kmsg "compositor exit ${code}"
+if [ "$code" -ne 0 ] && [ "${WLR_RENDERER}" != pixman ]; then
+	export WLR_RENDERER=pixman
+	export DEV_DESK_CONTRAST=1
+	kmsg "retry pixman contrast"
+	exec /usr/bin/dev-compositor -s /usr/libexec/dev-desktop/startup.sh
+fi
+exit "$code"

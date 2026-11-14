@@ -1,0 +1,20 @@
+[Unit]
+Description=Temporary development desktop
+After=systemd-udev-settle.service systemd-user-sessions.service
+Wants=systemd-udev-settle.service
+[Service]
+Type=simple
+ExecStart=/usr/libexec/dev-desktop/run-session
+Restart=on-failure
+RestartSec=2
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Environment=XDG_RUNTIME_DIR=/run/dev-desktop
+Environment=GDK_BACKEND=wayland
+
+[Install]
+WantedBy=multi-user.target

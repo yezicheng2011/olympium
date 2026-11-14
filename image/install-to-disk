@@ -1,0 +1,61 @@
+#!/bin/sh
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Copies the running live system onto a disk. The caller must name the device
+# twice. This is a BIOS or UEFI installer for this image, not a general
+# distribution installer.
+set -eu
+DISK=${1:-${DEV_INSTALL_DISK:-}}
+if [ -z "$DISK" ] || [ ! -b "$DISK" ]; then
+	echo "Usage: install-to-disk /dev/sdX" >&2
+	echo "The device you name will be erased." >&2
+	exit 1
+fi
+printf 'Type %s to erase it: ' "$DISK"
+read -r answer
+if [ "$answer" != "$DISK" ]; then
+	echo "Not confirmed." >&2
+	exit 1
+fi
+if [ -d /sys/firmware/efi ]; then
+	sfdisk "$DISK" <<EOF
+label: gpt
+,512MiB,U
+,,L
+EOF
+	partprobe "$DISK" || true
+	ESP=$(lsblk -lnpo NAME "$DISK" | sed -n '2p')
+	ROOT=$(lsblk -lnpo NAME "$DISK" | sed -n '3p')
+	mkfs.vfat -F 32 "$ESP"
+	mkfs.ext4 -F -L devdesk-root "$ROOT"
+	mkdir -p /mnt/target /mnt/esp
+	mount "$ROOT" /mnt/target
+	mkdir -p /mnt/target/boot/efi
+	mount "$ESP" /mnt/target/boot/efi
+else
+	sfdisk "$DISK" <<EOF
+label: dos
+,,L,*
+EOF
+	partprobe "$DISK" || true
+	ROOT=$(lsblk -lnpo NAME "$DISK" | sed -n '2p')
+	mkfs.ext4 -F -L devdesk-root "$ROOT"
+	mkdir -p /mnt/target
+	mount "$ROOT" /mnt/target
+fi
+tar -C / -cf - --one-file-system \
+	--exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run \
+	--exclude=./tmp --exclude=./mnt . | tar -C /mnt/target -xf -
+mkdir -p /mnt/target/proc /mnt/target/sys /mnt/target/dev /mnt/target/run /mnt/target/tmp
+if [ -d /sys/firmware/efi ]; then
+	mount --bind /dev /mnt/target/dev
+	mount --bind /proc /mnt/target/proc
+	mount --bind /sys /mnt/target/sys
+	chroot /mnt/target grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=devdesk --removable || \
+		chroot /mnt/target grub-install --target=arm64-efi --efi-directory=/boot/efi --bootloader-id=devdesk --removable
+	umount /mnt/target/sys /mnt/target/proc /mnt/target/dev
+else
+	grub-install --boot-directory=/mnt/target/boot "$DISK"
+fi
+echo "Installed onto $ROOT. Firmware support is the path this machine used." 

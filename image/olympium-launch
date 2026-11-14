@@ -1,0 +1,13 @@
+#!/bin/sh
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Read-only integration with Olympium at a pinned revision.
+# This script does not modify that repository.
+PIN=25a592cfd65a4f07449ca03e919bfa97626bb164
+for bin in /usr/bin/olympium-linux /usr/bin/linkspan-linux /usr/local/bin/olympium-linux; do
+	if [ -x "$bin" ]; then
+		exec "$bin" "$@"
+	fi
+done
+exec /usr/bin/dev-settings --page=olympium

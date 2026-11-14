@@ -1,0 +1,12 @@
+desktop/dev-compositor
+desktop/dev-files
+desktop/dev-settings
+desktop/dev-swatch
+desktop/dev-compat
+desktop/test-blur
+desktop/test-macho
+build/
+*.iso
+*.ppm
+*.png
+*.squashfs
