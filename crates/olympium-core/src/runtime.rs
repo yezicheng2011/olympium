@@ -125,8 +125,9 @@ impl Net for SystemNet {
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(|err| Error::io(err, parent.display()))?;
         }
+        let total = content_length(url);
         let mut child = Command::new("curl")
-            .args(["-fL", "--retry", "3", "--retry-delay", "2", "-o"])
+            .args(["-fL", "--retry", "3", "--retry-all-errors", "--retry-delay", "2", "-o"])
             .arg(dest)
             .arg(url)
             .stdin(Stdio::null())
@@ -138,14 +139,14 @@ impl Net for SystemNet {
             let received = dest.metadata().map(|meta| meta.len()).unwrap_or(0);
             progress(Progress {
                 received,
-                total: None,
+                total,
             });
             match child.try_wait() {
                 Ok(Some(status)) => {
                     let received = dest.metadata().map(|meta| meta.len()).unwrap_or(0);
                     progress(Progress {
                         received,
-                        total: Some(received),
+                        total: total.or(Some(received)),
                     });
                     if status.success() {
                         return Ok(());
@@ -628,6 +629,34 @@ fn curl(
         .map_err(|_| missing_curl())
 }
 
+/// The last Content-Length in a curl `-I` transcript. Redirects emit more
+/// than one, and the final response is the file the client will save.
+pub fn last_content_length(headers: &str) -> Option<u64> {
+    let mut found = None;
+    for line in headers.lines() {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("content-length") {
+            if let Ok(size) = value.trim().parse::<u64>() {
+                if size > 0 {
+                    found = Some(size);
+                }
+            }
+        }
+    }
+    found
+}
+
+fn content_length(url: &str) -> Option<u64> {
+    let output = curl(["-fsIL", "--max-time", "20", url]).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let headers = String::from_utf8(output.stdout).ok()?;
+    last_content_length(&headers)
+}
+
 fn missing_curl() -> Error {
     Error::EngineMissing {
         engine: "runtime",
@@ -652,7 +681,7 @@ pub fn read_mirror(layout: &Layout) -> Option<MirrorChoice> {
 
 #[cfg(test)]
 mod ip_parse {
-    use super::{installed_wine, linux_guest_command, parse_ip_body};
+    use super::{installed_wine, last_content_length, linux_guest_command, parse_ip_body};
     use crate::paths::Layout;
     use std::fs;
 
@@ -694,6 +723,13 @@ mod ip_parse {
         fs::write(layout.runtimes.join("wine/HOST_OS"), b"macos\n").unwrap();
         assert!(installed_wine(&layout).is_none());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn content_length_uses_the_final_response() {
+        let headers = "HTTP/1.1 302\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200\r\nContent-Length: 21571731\r\n";
+        assert_eq!(last_content_length(headers), Some(21571731));
+        assert_eq!(last_content_length("HTTP/1.1 200\r\n"), None);
     }
 
     #[test]

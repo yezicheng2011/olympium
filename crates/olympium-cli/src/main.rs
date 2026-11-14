@@ -377,8 +377,9 @@ fn cmd_config(
                 host,
                 json!({ "appearance": config.appearance, "path": layout.config.display().to_string() }),
                 &format!(
-                    "appearance = {}\nconfig = {}\n",
+                    "appearance = {}\nmirrors.prefer = {}\nconfig = {}\n",
                     config.appearance.as_str(),
+                    config.engines.mirrors.prefer,
                     layout.config.display()
                 ),
             )

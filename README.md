@@ -53,7 +53,7 @@ Harmony guests are OpenHarmony packages. Olympium does not translate a HAP into 
 
 ### Slim images
 
-Images are not inside Olympium. When a desktop client starts, it reads the client IP and chooses GitHub or a China mirror. A mirror that changes a file fails the SHA-256 check. There is no macOS or iOS image repository.
+Images are not inside Olympium. When a desktop client starts, it reads the client IP and chooses GitHub or a China mirror. `olympium config set mirrors.prefer github` or `china` overrides that. A mirror that changes a file fails the SHA-256 check, and the GitHub URL is tried next. There is no macOS or iOS image repository. QEMU is GPL-2.0-only and is not bundled; a Mac still needs `brew install qemu` before the guest can boot.
 
 Published image releases:
 
