@@ -26,6 +26,8 @@ jobs:
         run: node hosts/harmony/protocol/launch-gate.test.js
       - name: Check host icon sets
         run: python3 scripts/check-icons.py
+      - name: Check the experimental deb and zip polyglot
+        run: bash scripts/test-polyglot-deb-zip.sh
 
   macos-pkg:
     runs-on: macos-15

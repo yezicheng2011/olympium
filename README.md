@@ -67,6 +67,8 @@ Not published, and not reported as working:
 
 `share/runtime-lock.json` is compiled into the client. The macOS package already published as 0.1.0 does not contain these hashes, so it will not download the new images. This source is 0.1.1 for that follow-up package. Do not replace the 0.1.0 package or its assets.
 
+The English manual prepared for https://olympium.net/manual/ is [site/manual/index.html](site/manual/index.html). Deploying it is described in [site/INTEGRATION.md](site/INTEGRATION.md). This repository does not change the live site. An experimental file that is both a Debian package and a zip archive is described in [docs/polyglot.md](docs/polyglot.md). It is not the Mac download.
+
 ### Google Play
 
 Linkspan does not include Google Play, Play Services, or a Google sign-in. An Android program has to be an APK you already have, or a package already installed in your own Android runtime.
