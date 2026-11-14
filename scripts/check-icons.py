@@ -42,16 +42,16 @@ def main() -> int:
             raise SystemExit(f"missing branding/assets/{name}")
 
     for size in (16, 22, 24, 32, 48, 64, 128, 256, 512):
-        expect_png(ROOT / f"share/icons/hicolor/{size}x{size}/apps/linkspan.png", size)
+        expect_png(ROOT / f"share/icons/hicolor/{size}x{size}/apps/olympium.png", size)
     scalable = ROOT / "share/icons/hicolor/scalable/apps"
-    for name in ("linkspan.svg", "linkspan-symbolic.svg"):
+    for name in ("olympium.svg", "olympium-symbolic.svg"):
         if not (scalable / name).is_file():
             raise SystemExit(f"missing {scalable / name}")
-    desktop = (ROOT / "share/applications/app.linkspan.linux.desktop").read_text()
-    if "Icon=linkspan" not in desktop:
+    desktop = (ROOT / "share/applications/app.olympium.linux.desktop").read_text()
+    if "Icon=olympium" not in desktop:
         raise SystemExit("Linux desktop file does not name the icon")
 
-    ico = (ROOT / "hosts/windows/Linkspan.Windows/Assets/Linkspan.ico").read_bytes()
+    ico = (ROOT / "hosts/windows/Olympium.Windows/Assets/Olympium.ico").read_bytes()
     count = struct.unpack_from("<H", ico, 4)[0]
     found = []
     offset = 6
@@ -61,9 +61,9 @@ def main() -> int:
         offset += 16
     if found != [16, 24, 32, 48, 64, 128, 256]:
         raise SystemExit(f"Windows icon sizes are {found}")
-    csproj = (ROOT / "hosts/windows/Linkspan.Windows/Linkspan.Windows.csproj").read_text()
-    if "ApplicationIcon" not in csproj or "Linkspan.ico" not in csproj:
-        raise SystemExit("Windows project does not embed Linkspan.ico")
+    csproj = (ROOT / "hosts/windows/Olympium.Windows/Olympium.Windows.csproj").read_text()
+    if "ApplicationIcon" not in csproj or "Olympium.ico" not in csproj:
+        raise SystemExit("Windows project does not embed Olympium.ico")
 
     mac_sizes = {
         "icon_16x16.png": 16,
@@ -77,13 +77,13 @@ def main() -> int:
         "icon_512x512.png": 512,
         "icon_512x512@2x.png": 1024,
     }
-    iconset = ROOT / "hosts/macos/Linkspan/Assets.xcassets/AppIcon.appiconset"
+    iconset = ROOT / "hosts/macos/Olympium/Assets.xcassets/AppIcon.appiconset"
     for name, size in mac_sizes.items():
         expect_png(iconset / name, size)
         expect_png(iconset / name.replace(".png", "_light.png"), size)
-    icns = (ROOT / "hosts/macos/Linkspan/Resources/Linkspan.icns").read_bytes()
+    icns = (ROOT / "hosts/macos/Olympium/Resources/Olympium.icns").read_bytes()
     if icns[:4] != b"icns":
-        raise SystemExit("Linkspan.icns is not an icns file")
+        raise SystemExit("Olympium.icns is not an icns file")
     kinds = set()
     cursor = 8
     while cursor + 8 <= len(icns):
@@ -94,7 +94,7 @@ def main() -> int:
     for kind in ("icp4", "icp5", "ic11", "icp6", "ic12", "ic07", "ic08", "ic13", "ic09", "ic14", "ic10"):
         if kind not in kinds:
             raise SystemExit(f"icns is missing {kind}")
-    project = (ROOT / "hosts/macos/Linkspan.xcodeproj/project.pbxproj").read_text()
+    project = (ROOT / "hosts/macos/Olympium.xcodeproj/project.pbxproj").read_text()
     if "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon" not in project:
         raise SystemExit("Mac project does not use the AppIcon catalog")
 

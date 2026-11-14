@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product": "Linkspan",
+  "product": "Olympium",
   "license": "Apache-2.0",
   "copyright": "Copyright 2026 Ye Zicheng",
   "hosts": [
@@ -42,7 +42,7 @@
     {
       "id": "refused",
       "title": "Will not run",
-      "summary": "Linkspan will not run this."
+      "summary": "Olympium will not run this."
     }
   ],
   "cells": [
@@ -53,7 +53,7 @@
       "engine_id": "android-intent",
       "title": "Runs here",
       "summary": "Installs an APK you choose, using Android's own installer, or opens an app that is already installed.",
-      "legal_note": "Linkspan does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
+      "legal_note": "Olympium does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
     },
     {
       "host": "android",
@@ -61,8 +61,8 @@
       "level": "scaffold",
       "engine_id": "windows-hook",
       "title": "Hook only",
-      "summary": "A command prefix you configure can start a Windows program. Linkspan does not include a Windows runtime for Android.",
-      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Linkspan does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
+      "summary": "A command prefix you configure can start a Windows program. Olympium does not include a Windows runtime for Android.",
+      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Olympium does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
     },
     {
       "host": "android",
@@ -70,7 +70,7 @@
       "level": "scaffold",
       "engine_id": "linux-hook",
       "title": "Hook only",
-      "summary": "A command prefix you configure can start a Linux program. Linkspan does not include a root filesystem.",
+      "summary": "A command prefix you configure can start a Linux program. Olympium does not include a root filesystem.",
       "legal_note": ""
     },
     {
@@ -79,8 +79,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on Android. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on Android. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "android",
@@ -88,8 +88,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on Android. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on Android. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "android",
@@ -97,8 +97,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Android is not an OpenHarmony runtime, and Linkspan does not translate a HAP into an Android app.",
-      "legal_note": "Linkspan will not run OpenHarmony software on Android. Android is not an OpenHarmony runtime, and Linkspan does not translate a HAP into an Android app. You can keep the file in the library. Linux, Windows, and macOS run a real OpenHarmony system from the slim image you download. An OpenHarmony device uses its own installer."
+      "summary": "Will not run. Android is not an OpenHarmony runtime, and Olympium does not translate a HAP into an Android app.",
+      "legal_note": "Olympium will not run OpenHarmony software on Android. Android is not an OpenHarmony runtime, and Olympium does not translate a HAP into an Android app. You can keep the file in the library. Linux, Windows, and macOS run a real OpenHarmony system from the slim image you download. An OpenHarmony device uses its own installer."
     },
     {
       "host": "windows",
@@ -106,8 +106,8 @@
       "level": "engine",
       "engine_id": "android-runtime",
       "title": "Needs an engine you install",
-      "summary": "Launches an APK with Waydroid or adb when you have already installed one of them. Linkspan does not download an Android image or Google Play.",
-      "legal_note": "Linkspan does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
+      "summary": "Launches an APK with Waydroid or adb when you have already installed one of them. Olympium does not download an Android image or Google Play.",
+      "legal_note": "Olympium does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
     },
     {
       "host": "windows",
@@ -116,7 +116,7 @@
       "engine_id": "native",
       "title": "Runs here",
       "summary": "Starts a Windows executable or installer directly on Windows.",
-      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Linkspan does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
+      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Olympium does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
     },
     {
       "host": "windows",
@@ -124,7 +124,7 @@
       "level": "engine",
       "engine_id": "wsl",
       "title": "Needs an engine you install",
-      "summary": "Runs Linux executables, scripts, AppImages, and .deb packages through WSL. Linkspan does not install a distribution.",
+      "summary": "Runs Linux executables, scripts, AppImages, and .deb packages through WSL. Olympium does not install a distribution.",
       "legal_note": ""
     },
     {
@@ -133,8 +133,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on Windows. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on Windows. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "windows",
@@ -142,8 +142,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on Windows. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on Windows. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "windows",
@@ -152,7 +152,7 @@
       "engine_id": "openharmony-runtime",
       "title": "Only in some cases",
       "summary": "Runs the package in a real OpenHarmony runtime you connect, or in the slim OpenHarmony image after it is downloaded. No HarmonyOS image is bundled.",
-      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Linkspan does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
+      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Olympium does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
     },
     {
       "host": "linux",
@@ -160,8 +160,8 @@
       "level": "engine",
       "engine_id": "android-runtime",
       "title": "Needs an engine you install",
-      "summary": "Launches an APK with Waydroid or adb when you have already installed one of them. Linkspan does not download an Android image or Google Play.",
-      "legal_note": "Linkspan does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
+      "summary": "Launches an APK with Waydroid or adb when you have already installed one of them. Olympium does not download an Android image or Google Play.",
+      "legal_note": "Olympium does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
     },
     {
       "host": "linux",
@@ -170,7 +170,7 @@
       "engine_id": "wine",
       "title": "Needs an engine you install",
       "summary": "Runs a Windows executable or installer with Wine, kept for Windows guests, or with Proton when you select it. Wine opens native host windows. It is not used for OpenHarmony, and it is not bundled.",
-      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Linkspan does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
+      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Olympium does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
     },
     {
       "host": "linux",
@@ -187,8 +187,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on Linux. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on Linux. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "linux",
@@ -196,8 +196,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on Linux. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on Linux. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "linux",
@@ -206,7 +206,7 @@
       "engine_id": "openharmony-runtime",
       "title": "Only in some cases",
       "summary": "Runs the package in a real OpenHarmony runtime you connect, or in the slim OpenHarmony image after it is downloaded. No HarmonyOS image is bundled.",
-      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Linkspan does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
+      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Olympium does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
     },
     {
       "host": "macos",
@@ -214,8 +214,8 @@
       "level": "engine",
       "engine_id": "android-runtime",
       "title": "Needs an engine you install",
-      "summary": "Launches an APK with Waydroid or adb when you have already installed one of them. Linkspan does not download an Android image or Google Play.",
-      "legal_note": "Linkspan does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
+      "summary": "Launches an APK with Waydroid or adb when you have already installed one of them. Olympium does not download an Android image or Google Play.",
+      "legal_note": "Olympium does not include Google Play, Play Services, or a Google account. This only uses an APK or package you already have the right to use."
     },
     {
       "host": "macos",
@@ -224,7 +224,7 @@
       "engine_id": "wine",
       "title": "Needs an engine you install",
       "summary": "Runs a Windows executable or installer with Wine, kept for Windows guests, or with Proton when you select it. Wine opens native host windows. It is not used for OpenHarmony, and it is not bundled.",
-      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Linkspan does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
+      "legal_note": "Wine is kept for Windows programs. It opens native host windows and is not a Windows license. Olympium does not use Wine for OpenHarmony, and it does not ship a Windows image, product key, or activation workaround."
     },
     {
       "host": "macos",
@@ -232,7 +232,7 @@
       "level": "engine",
       "engine_id": "lima",
       "title": "Needs an engine you install",
-      "summary": "Runs a script on macOS. Other Linux programs go through Lima, or a command prefix you set. Linkspan does not download a Linux image.",
+      "summary": "Runs a script on macOS. Other Linux programs go through Lima, or a command prefix you set. Olympium does not download a Linux image.",
       "legal_note": ""
     },
     {
@@ -250,8 +250,8 @@
       "level": "limited",
       "engine_id": "ios-mac",
       "title": "Only in some cases",
-      "summary": "On a Mac, Linkspan can open an iOS app that is already installed, and it can launch a Simulator build of an app you compiled with Xcode. It will not install an IPA or a device build.",
-      "legal_note": "On a Mac, Linkspan can open an iOS app that is already installed, and it can launch a Simulator build of an app you compiled with Xcode. It will not install an IPA or a device build."
+      "summary": "On a Mac, Olympium can open an iOS app that is already installed, and it can launch a Simulator build of an app you compiled with Xcode. It will not install an IPA or a device build.",
+      "legal_note": "On a Mac, Olympium can open an iOS app that is already installed, and it can launch a Simulator build of an app you compiled with Xcode. It will not install an IPA or a device build."
     },
     {
       "host": "macos",
@@ -260,7 +260,7 @@
       "engine_id": "openharmony-runtime",
       "title": "Only in some cases",
       "summary": "Runs the package in a real OpenHarmony runtime you connect, or in the slim OpenHarmony image after it is downloaded. No HarmonyOS image is bundled.",
-      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Linkspan does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
+      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Olympium does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
     },
     {
       "host": "openharmony",
@@ -268,8 +268,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests.",
-      "legal_note": "On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests."
+      "summary": "On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests.",
+      "legal_note": "On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests."
     },
     {
       "host": "openharmony",
@@ -277,8 +277,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests.",
-      "legal_note": "On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests."
+      "summary": "On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests.",
+      "legal_note": "On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests."
     },
     {
       "host": "openharmony",
@@ -286,8 +286,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests.",
-      "legal_note": "On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests."
+      "summary": "On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests.",
+      "legal_note": "On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run Android, Windows, Linux, macOS, or iOS programs there, because that would be another system or a translation layer. Use the Linux, Windows, or macOS client for those guests."
     },
     {
       "host": "openharmony",
@@ -295,8 +295,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on OpenHarmony. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on OpenHarmony. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "openharmony",
@@ -304,8 +304,8 @@
       "level": "refused",
       "engine_id": null,
       "title": "Will not run",
-      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them.",
-      "legal_note": "Linkspan will not run macOS or iOS software on OpenHarmony. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
+      "summary": "Will not run. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them.",
+      "legal_note": "Olympium will not run macOS or iOS software on OpenHarmony. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them. You can keep the file in the library."
     },
     {
       "host": "openharmony",
@@ -314,7 +314,7 @@
       "engine_id": "openharmony-native",
       "title": "Runs here",
       "summary": "Installs and opens the package with OpenHarmony's own installer. Unsigned packages install only in developer mode.",
-      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Linkspan does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
+      "legal_note": "OpenHarmony packages run in a real OpenHarmony runtime: a device you connect, or the slim OpenHarmony image downloaded from its repository. Olympium does not bundle that image, does not use a HarmonyOS commercial image, and does not translate a HAP into another system. Unsigned packages install only in developer mode, through the official installer."
     }
   ],
   "formats": [
@@ -459,7 +459,7 @@
         {
           "host": "windows",
           "level": "engine",
-          "summary": "Runs the program through WSL. Linkspan does not install a Linux distribution."
+          "summary": "Runs the program through WSL. Olympium does not install a Linux distribution."
         },
         {
           "host": "linux",
@@ -491,7 +491,7 @@
         {
           "host": "windows",
           "level": "engine",
-          "summary": "Runs the program through WSL. Linkspan does not install a Linux distribution."
+          "summary": "Runs the program through WSL. Olympium does not install a Linux distribution."
         },
         {
           "host": "linux",
@@ -523,7 +523,7 @@
         {
           "host": "windows",
           "level": "engine",
-          "summary": "Runs the program through WSL. Linkspan does not install a Linux distribution."
+          "summary": "Runs the program through WSL. Olympium does not install a Linux distribution."
         },
         {
           "host": "linux",
@@ -587,7 +587,7 @@
         {
           "host": "windows",
           "level": "engine",
-          "summary": "Runs the program through WSL. Linkspan does not install a Linux distribution."
+          "summary": "Runs the program through WSL. Olympium does not install a Linux distribution."
         },
         {
           "host": "linux",
@@ -624,7 +624,7 @@
         {
           "host": "linux",
           "level": "engine",
-          "summary": "Runs an installed Flatpak by name. Linkspan does not download Flatpak apps."
+          "summary": "Runs an installed Flatpak by name. Olympium does not download Flatpak apps."
         },
         {
           "host": "macos",
@@ -656,7 +656,7 @@
         {
           "host": "linux",
           "level": "engine",
-          "summary": "Runs an installed snap by name. Linkspan does not install snaps."
+          "summary": "Runs an installed snap by name. Olympium does not install snaps."
         },
         {
           "host": "macos",
@@ -678,17 +678,17 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
@@ -698,7 +698,7 @@
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -710,17 +710,17 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
@@ -730,7 +730,7 @@
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -742,17 +742,17 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
@@ -762,7 +762,7 @@
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -774,17 +774,17 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
@@ -794,7 +794,7 @@
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -806,17 +806,17 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
@@ -826,7 +826,7 @@
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -838,17 +838,17 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
@@ -858,7 +858,7 @@
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -870,27 +870,27 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "windows",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "linux",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         },
         {
           "host": "macos",
           "level": "refused",
-          "summary": "Linkspan does not install IPA files or device app bundles, including on a Mac."
+          "summary": "Olympium does not install IPA files or device app bundles, including on a Mac."
         },
         {
           "host": "openharmony",
           "level": "refused",
-          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Linkspan does not emulate them."
+          "summary": "Not run on this host. Apple licenses macOS and iOS for Apple hardware, and Olympium does not emulate them."
         }
       ]
     },
@@ -902,7 +902,7 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on Android. Linkspan does not translate a HAP into an Android app."
+          "summary": "Not run on Android. Olympium does not translate a HAP into an Android app."
         },
         {
           "host": "windows",
@@ -934,7 +934,7 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on Android. Linkspan does not translate a HAP into an Android app."
+          "summary": "Not run on Android. Olympium does not translate a HAP into an Android app."
         },
         {
           "host": "windows",
@@ -966,7 +966,7 @@
         {
           "host": "android",
           "level": "refused",
-          "summary": "Not run on Android. Linkspan does not translate a HAP into an Android app."
+          "summary": "Not run on Android. Olympium does not translate a HAP into an Android app."
         },
         {
           "host": "windows",
@@ -995,37 +995,37 @@
     {
       "id": "apple-non-apple",
       "title": "macOS and iOS on non-Apple computers",
-      "body": "Linkspan will not run macOS or iOS software on non-Apple hardware. Apple licenses those systems for Apple hardware. Linkspan does not include an emulator, disk image, translation layer, or installer for them, and it does not describe how to build one. A Mac or iOS file can stay in the library so you can see what it is."
+      "body": "Olympium will not run macOS or iOS software on non-Apple hardware. Apple licenses those systems for Apple hardware. Olympium does not include an emulator, disk image, translation layer, or installer for them, and it does not describe how to build one. A Mac or iOS file can stay in the library so you can see what it is."
     },
     {
       "id": "ios-packages",
       "title": "iOS packages",
-      "body": "Linkspan will not install an IPA or a device .app bundle, including on a Mac. It does not decrypt App Store packages, remove DRM, or re-sign apps. On a Mac it can open an iOS app that is already installed, and it can launch a Simulator build of an app you compiled with Xcode."
+      "body": "Olympium will not install an IPA or a device .app bundle, including on a Mac. It does not decrypt App Store packages, remove DRM, or re-sign apps. On a Mac it can open an iOS app that is already installed, and it can launch a Simulator build of an app you compiled with Xcode."
     },
     {
       "id": "no-ios-host",
       "title": "No iOS app",
-      "body": "There is no iOS version of Linkspan. The hosts are Android, Windows, Linux, macOS, and OpenHarmony. iOS software is only a guest, and only where the other limits on this page allow it."
+      "body": "There is no iOS version of Olympium. The hosts are Android, Windows, Linux, macOS, and OpenHarmony. iOS software is only a guest, and only where the other limits on this page allow it."
     },
     {
       "id": "windows-license",
       "title": "Windows",
-      "body": "Wine is kept for Windows programs. It opens native host windows. It is not a Windows license, and it is not used for OpenHarmony. Linkspan does not ship a Windows image, product key, or activation workaround. A slim Wine runtime can be downloaded from its own repository. A full Windows virtual machine needs an image and a license you already have."
+      "body": "Wine is kept for Windows programs. It opens native host windows. It is not a Windows license, and it is not used for OpenHarmony. Olympium does not ship a Windows image, product key, or activation workaround. A slim Wine runtime can be downloaded from its own repository. A full Windows virtual machine needs an image and a license you already have."
     },
     {
       "id": "play",
       "title": "Google Play",
-      "body": "Linkspan does not include Google Play, Play Services, or a Google sign-in. An Android program has to be an APK you already have, or a package already installed in your own Android runtime."
+      "body": "Olympium does not include Google Play, Play Services, or a Google sign-in. An Android program has to be an APK you already have, or a package already installed in your own Android runtime."
     },
     {
       "id": "no-downloads",
       "title": "Programs are not downloaded",
-      "body": "Linkspan does not download applications, Apple system images, Flatpak runtimes, or snaps. Slim guest runtimes for Android, Linux, OpenHarmony, and Wine are downloaded when you open the app, from their own repositories, after the client IP chooses GitHub or a China mirror. Those images are not inside the Linkspan program."
+      "body": "Olympium does not download applications, Apple system images, Flatpak runtimes, or snaps. Slim guest runtimes for Android, Linux, OpenHarmony, and Wine are downloaded when you open the app, from their own repositories, after the client IP chooses GitHub or a China mirror. Those images are not inside the Olympium program."
     },
     {
       "id": "openharmony",
       "title": "OpenHarmony, not HarmonyOS",
-      "body": "Harmony guests are OpenHarmony packages (.hap and OpenHarmony .app bundles). Linkspan runs them on a real OpenHarmony system. It does not translate them into Android or Windows programs, and it does not ship a HarmonyOS commercial image, Huawei signing keys, or an unofficial port. Unsigned packages install only in developer mode through the official installer."
+      "body": "Harmony guests are OpenHarmony packages (.hap and OpenHarmony .app bundles). Olympium runs them on a real OpenHarmony system. It does not translate them into Android or Windows programs, and it does not ship a HarmonyOS commercial image, Huawei signing keys, or an unofficial port. Unsigned packages install only in developer mode through the official installer."
     },
     {
       "id": "openharmony-host",
@@ -1035,7 +1035,7 @@
     {
       "id": "your-rights",
       "title": "Your programs and the engines",
-      "body": "You are responsible for the rights to the programs you run. Wine, Proton, QEMU, Lima, Waydroid, WSL, OpenHarmony, GTK, and the system package tools stay under their own licenses. Linkspan's own source is Apache-2.0 only."
+      "body": "You are responsible for the rights to the programs you run. Wine, Proton, QEMU, Lima, Waydroid, WSL, OpenHarmony, GTK, and the system package tools stay under their own licenses. Olympium's own source is Apache-2.0 only."
     }
   ],
   "engines": [

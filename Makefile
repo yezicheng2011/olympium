@@ -5,11 +5,11 @@
 
 test:
 	cargo test --workspace
-	dotnet test hosts/windows/Linkspan.Protocol.Tests/Linkspan.Protocol.Tests.csproj
-	javac -d /tmp/linkspan-java \
-		hosts/android/protocol/src/main/java/app/linkspan/protocol/LaunchGate.java \
-		hosts/android/protocol/src/test/java/app/linkspan/protocol/LaunchGateTest.java
-	java -cp /tmp/linkspan-java app.linkspan.protocol.LaunchGateTest
+	dotnet test hosts/windows/Olympium.Protocol.Tests/Olympium.Protocol.Tests.csproj
+	javac -d /tmp/olympium-java \
+		hosts/android/protocol/src/main/java/app/olympium/protocol/LaunchGate.java \
+		hosts/android/protocol/src/test/java/app/olympium/protocol/LaunchGateTest.java
+	java -cp /tmp/olympium-java app.olympium.protocol.LaunchGateTest
 
 e2e:
 	./scripts/e2e-linux.sh

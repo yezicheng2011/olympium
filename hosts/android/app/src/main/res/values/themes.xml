@@ -2,5 +2,5 @@
 <!-- Copyright 2026 Ye Zicheng -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <resources>
-    <style name="Theme.Linkspan" parent="android:Theme.DeviceDefault.DayNight.NoActionBar" />
+    <style name="Theme.Olympium" parent="android:Theme.DeviceDefault.DayNight.NoActionBar" />
 </resources>

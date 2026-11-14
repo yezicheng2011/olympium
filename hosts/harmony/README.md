@@ -1,4 +1,4 @@
-# Linkspan for OpenHarmony
+# Olympium for OpenHarmony
 
 This is the OpenHarmony host client. The instruction manual is [docs/openharmony-host.md](../../docs/openharmony-host.md). Read that for the build, the debug install, the first launch, the IP-based download choice, and how guests run.
 

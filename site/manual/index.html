@@ -123,7 +123,7 @@
         <article>
           <h2 id="install">Install</h2>
           <h3>macOS</h3>
-          <p>The published installer is a component package. It puts <code>Linkspan.app</code> in <code>/Applications</code>. The app inside is ad-hoc signed. The <code>.pkg</code> itself is unsigned, and it is not notarized. macOS can warn before it opens. That warning is real. Nothing on this site removes it.</p>
+          <p>The published 0.1.0 installer is a component package. It puts <code>Linkspan.app</code> in <code>/Applications</code>. That file name and the download URL stay as they are. The app inside is ad-hoc signed. The <code>.pkg</code> itself is unsigned, and it is not notarized. macOS can warn before it opens. That warning is real. Nothing on this site removes it. A later build can be named Olympium. It is not this download.</p>
           <p><a href="/download/v0.1.0/Linkspan-0.1.0.pkg">Download Linkspan-0.1.0.pkg</a>. The same file is on <a href="https://github.com/yezicheng2011/olympium/releases/download/v0.1.0/Linkspan-0.1.0.pkg">GitHub</a>.</p>
           <p>SHA-256: <code>ba96038bd318d7ec1a47fb3cbf93dd2e7d0bb92222fcb9f670f3dc2be0130de0</code></p>
           <p>There is no iOS app. This package does not contain a guest image.</p>
@@ -131,21 +131,21 @@
           <p>There is no published <code>.deb</code>, <code>.rpm</code>, AppImage, Windows installer, APK, or HAP on the download page. Build those clients from the <a href="https://github.com/yezicheng2011/olympium">source repository</a> when you have the SDK for that host. The OpenHarmony SDK is not in the repository. Without it, a HAP is not produced.</p>
 
           <h2 id="start">Start</h2>
-          <p>On a Mac, open <code>/Applications/Linkspan.app</code>. If macOS says the app cannot be opened because the developer cannot be verified, that follows from the ad-hoc signature and the lack of notarization. The package does not claim otherwise.</p>
+          <p>On a Mac, open <code>/Applications/Linkspan.app</code> from the 0.1.0 package. The command <code>linkspan</code> remains available as an alias where a newer build also installs <code>olympium</code>. If macOS says the app cannot be opened because the developer cannot be verified, that follows from the ad-hoc signature and the lack of notarization. The package does not claim otherwise.</p>
           <p>On Linux, after you build the command:</p>
-          <pre>linkspan doctor
-linkspan-linux</pre>
+          <pre>olympium doctor
+olympium-linux</pre>
           <p>The desktop window needs GTK 4 and libadwaita from the system. They are not copied into the Mac package.</p>
 
           <h2 id="use">Use</h2>
           <p>Add a program you already have, then run it. Olympium does not download applications.</p>
-          <pre>linkspan add --file ./program.deb
-linkspan list
-linkspan run --file ./program.deb</pre>
-          <p>A legal refusal exits with status 2. A missing engine exits with status 3. <code>linkspan limits</code> prints the rules, including the refusal of macOS and iOS software on non-Apple hardware.</p>
+          <pre>olympium add --file ./program.deb
+olympium list
+olympium run --file ./program.deb</pre>
+          <p>A legal refusal exits with status 2. A missing engine exits with status 3. <code>olympium limits</code> prints the rules, including the refusal of macOS and iOS software on non-Apple hardware.</p>
 
           <h2 id="runtimes">Runtimes</h2>
-          <p>Guest images are not inside the app. <code>linkspan runtime</code> reads the client IP and chooses GitHub, or a China mirror when the country is <code>CN</code>. <code>linkspan fetch</code> downloads a published archive and checks SHA-256. A mismatch is discarded.</p>
+          <p>Guest images are not inside the app. <code>olympium runtime</code> reads the client IP and chooses GitHub, or a China mirror when the country is <code>CN</code>. <code>olympium fetch</code> downloads a published archive and checks SHA-256. A mismatch is discarded.</p>
           <table>
             <thead><tr><th>Guest</th><th>Status</th><th>What was checked</th></tr></thead>
             <tbody>
@@ -162,10 +162,10 @@ linkspan run --file ./program.deb</pre>
           <p>The Mac package 0.1.0 was built before these checksums existed. That package reports the images as not published. A later client build is required before it can fetch them. Version 0.1.1 is in source and is not this download.</p>
 
           <h2 id="progress">Download progress</h2>
-          <p><code>linkspan fetch --guest linux</code> prints <code>downloaded</code> and a byte count while the archive is coming in, then the final count when the transfer finishes. The file is kept only after the SHA-256 matches. The same progress line is used for Wine. Android and OpenHarmony stop with “not published” and do not invent a file.</p>
+          <p><code>olympium fetch --guest linux</code> prints <code>downloaded</code> and a byte count while the archive is coming in, then the final count when the transfer finishes. The file is kept only after the SHA-256 matches. The same progress line is used for Wine. Android and OpenHarmony stop with “not published” and do not invent a file.</p>
 
           <h2 id="uninstall">Uninstall</h2>
-          <p>On a Mac, delete <code>/Applications/Linkspan.app</code>. The package receipt does not delete that app for you. <code>pkgutil --forget app.linkspan.macos</code> only drops the receipt.</p>
+          <p>On a Mac, delete <code>/Applications/Linkspan.app</code> to remove the 0.1.0 install. The package receipt does not delete that app for you. <code>pkgutil --forget app.linkspan.macos</code> only drops the 0.1.0 receipt. A later Olympium build would use its own app name and receipt, and it is not published here.</p>
           <p>A source build on Linux is removed by deleting the binaries you installed. There is no published Linux package on this download page.</p>
 
           <h2 id="signing">Signing</h2>
@@ -189,8 +189,8 @@ linkspan run --file ./program.deb</pre>
           <div class="note">
             <p>This is an experiment. It is not the Mac download, and it is not offered from the button above. Changing the extension does not change the bytes. It also does not turn the file into every installer, and it does not silence a platform warning.</p>
           </div>
-          <p>One tested file is a Debian package with a zip archive after it. The copies named <code>.deb</code> and <code>.zip</code> were the same bytes. <code>dpkg-deb</code> read the package. <code>dpkg -i</code> installed a small probe script, the script printed <code>linkspan-polyglot-probe-ok</code>, and <code>dpkg -r</code> removed it. Python’s zip reader extracted the zip members from those same bytes.</p>
-          <p>The same construction was repeated with the Linkspan 0.1.1 command for Linux amd64. The file is 2487905 bytes, SHA-256 <code>e0336a1fbf6c7ae2967144989fc8a68f7a7f818094f756ed68fbfdc8d77161de</code>. After <code>dpkg -i</code>, <code>/usr/lib/linkspan-polyglot/linkspan --version</code> printed <code>linkspan 0.1.1</code>. The zip member was the same program bytes. Zip extraction does not keep the executable bit; the Debian package does. The package was then removed. It is not signed. It is not published next to the 0.1.0 Mac package.</p>
+          <p>One tested file is a Debian package with a zip archive after it. The copies named <code>.deb</code> and <code>.zip</code> were the same bytes. <code>dpkg-deb</code> read the package. <code>dpkg -i</code> installed a small probe script, the script printed <code>olympium-polyglot-probe-ok</code>, and <code>dpkg -r</code> removed it. Python’s zip reader extracted the zip members from those same bytes.</p>
+          <p>The same construction was repeated with the Olympium 0.1.1 command for Linux amd64. The file is 2487905 bytes, SHA-256 <code>e0336a1fbf6c7ae2967144989fc8a68f7a7f818094f756ed68fbfdc8d77161de</code>. After <code>dpkg -i</code>, <code>/usr/lib/olympium-polyglot/olympium --version</code> printed <code>olympium 0.1.1</code>. The zip member was the same program bytes. Zip extraction does not keep the executable bit; the Debian package does. The package was then removed. It is not signed. It is not published next to the 0.1.0 Mac package.</p>
           <p>Info-ZIP’s <code>unzip</code> prints <code>extra bytes at beginning or within zipfile</code> and exits 1, after extracting the member. <code>file</code> reports only a Debian package. GNU <code>ar</code> rejects the file. <code>rpm</code> and <code>msiinfo</code> reject it.</p>
           <p>A Debian package, an RPM, an MSI, a Windows exe, and a macOS pkg each need a different signature at the first byte. One file cannot start with all of them. An Android APK or OpenHarmony HAP was not built into this file. Their signing covers offsets from the start, so a prefix or a suffix would break that signature. A disk image wants its trailer at the end of the file, and that combination was not tested.</p>
           <p>Rebuild the probe with <code>scripts/test-polyglot-deb-zip.sh</code> from the source tree. The engineering notes are in <code>docs/polyglot.md</code> in that tree.</p>

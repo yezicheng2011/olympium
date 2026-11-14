@@ -30,13 +30,13 @@ mkdir -p "$pkg/DEBIAN"
 
 if [ "$mode" = probe ]; then
   mkdir -p "$pkg/usr/bin"
-  cat > "$pkg/usr/bin/linkspan-polyglot-probe" <<'EOF'
+  cat > "$pkg/usr/bin/olympium-polyglot-probe" <<'EOF'
 #!/bin/sh
-echo linkspan-polyglot-probe-ok
+echo olympium-polyglot-probe-ok
 EOF
-  chmod 755 "$pkg/usr/bin/linkspan-polyglot-probe"
+  chmod 755 "$pkg/usr/bin/olympium-polyglot-probe"
   cat > "$pkg/DEBIAN/control" <<EOF
-Package: linkspan-polyglot-probe
+Package: olympium-polyglot-probe
 Version: ${version}
 Section: misc
 Priority: optional
@@ -47,41 +47,41 @@ Description: experimental deb and zip polyglot probe
 EOF
   zip_dir=$work/zip
   mkdir -p "$zip_dir"
-  cp "$pkg/usr/bin/linkspan-polyglot-probe" "$zip_dir/linkspan-polyglot-probe"
+  cp "$pkg/usr/bin/olympium-polyglot-probe" "$zip_dir/olympium-polyglot-probe"
   printf '%s\n' 'Experimental deb+zip polyglot. Not the official Olympium download.' > "$zip_dir/README.txt"
 else
   if [ ! -f "$binary" ] || [ ! -x "$binary" ]; then
     echo "Binary is missing: $binary" >&2
     exit 1
   fi
-  mkdir -p "$pkg/usr/lib/linkspan-polyglot" "$pkg/usr/share/doc/linkspan-polyglot"
-  cp "$binary" "$pkg/usr/lib/linkspan-polyglot/linkspan"
-  chmod 755 "$pkg/usr/lib/linkspan-polyglot/linkspan"
-  cat > "$pkg/usr/share/doc/linkspan-polyglot/copyright" <<EOF
-Linkspan polyglot experiment
+  mkdir -p "$pkg/usr/lib/olympium-polyglot" "$pkg/usr/share/doc/olympium-polyglot"
+  cp "$binary" "$pkg/usr/lib/olympium-polyglot/olympium"
+  chmod 755 "$pkg/usr/lib/olympium-polyglot/olympium"
+  cat > "$pkg/usr/share/doc/olympium-polyglot/copyright" <<EOF
+Olympium polyglot experiment
 Copyright 2026 Ye Zicheng
 SPDX-License-Identifier: Apache-2.0
 
-The linkspan command in this package is Apache-2.0.
+The olympium command in this package is Apache-2.0.
 This package is not the macOS 0.1.0 download and it is not signed.
 Guest images are not included.
 EOF
   cat > "$pkg/DEBIAN/control" <<EOF
-Package: linkspan-polyglot
+Package: olympium-polyglot
 Version: ${version}
 Section: utils
 Priority: optional
 Architecture: amd64
 Depends: libc6
 Maintainer: Ye Zicheng <yezicheng2011@users.noreply.github.com>
-Description: experimental Linkspan command in a deb+zip polyglot
- Installs the linkspan command under /usr/lib/linkspan-polyglot. The same file is also a zip archive. Not the official macOS package.
+Description: experimental Olympium command in a deb+zip polyglot
+ Installs the olympium command under /usr/lib/olympium-polyglot. The same file is also a zip archive. Not the official macOS package.
 EOF
   zip_dir=$work/zip
   mkdir -p "$zip_dir"
-  cp "$pkg/usr/lib/linkspan-polyglot/linkspan" "$zip_dir/linkspan"
-  cp "$pkg/usr/share/doc/linkspan-polyglot/copyright" "$zip_dir/copyright"
-  printf '%s\n' "Experimental Linkspan ${version} deb+zip polyglot for Linux amd64. Not the macOS download. Not signed." > "$zip_dir/README.txt"
+  cp "$pkg/usr/lib/olympium-polyglot/olympium" "$zip_dir/olympium"
+  cp "$pkg/usr/share/doc/olympium-polyglot/copyright" "$zip_dir/copyright"
+  printf '%s\n' "Experimental Olympium ${version} deb+zip polyglot for Linux amd64. Not the macOS download. Not signed." > "$zip_dir/README.txt"
 fi
 
 dpkg-deb -Zgzip --root-owner-group --build "$pkg" "$work/plain.deb" >/dev/null

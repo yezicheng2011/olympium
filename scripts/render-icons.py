@@ -99,21 +99,21 @@ def main() -> int:
 
     linux_sizes = [16, 22, 24, 32, 48, 64, 128, 256, 512]
     for size in linux_sizes:
-        raster(DARK, size, ROOT / f"share/icons/hicolor/{size}x{size}/apps/linkspan.png")
+        raster(DARK, size, ROOT / f"share/icons/hicolor/{size}x{size}/apps/olympium.png")
     scalable = ROOT / "share/icons/hicolor/scalable/apps"
     scalable.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(DARK, scalable / "linkspan.svg")
-    shutil.copyfile(GLYPH_DARK, scalable / "linkspan-symbolic.svg")
+    shutil.copyfile(DARK, scalable / "olympium.svg")
+    shutil.copyfile(GLYPH_DARK, scalable / "olympium-symbolic.svg")
 
     win_sizes = [16, 24, 32, 48, 64, 128, 256]
-    win_dir = ROOT / "hosts/windows/Linkspan.Windows/Assets"
+    win_dir = ROOT / "hosts/windows/Olympium.Windows/Assets"
     win_pngs = []
     for size in win_sizes:
-        dest = ASSETS / "windows" / f"linkspan-{size}.png"
+        dest = ASSETS / "windows" / f"olympium-{size}.png"
         raster(DARK, size, dest)
         win_pngs.append(dest)
-    write_ico(win_pngs, win_dir / "Linkspan.ico")
-    shutil.copyfile(win_dir / "Linkspan.ico", ASSETS / "Linkspan.ico")
+    write_ico(win_pngs, win_dir / "Olympium.ico")
+    shutil.copyfile(win_dir / "Olympium.ico", ASSETS / "Olympium.ico")
 
     mac_specs = [
         ("icon_16x16.png", 16),
@@ -127,9 +127,9 @@ def main() -> int:
         ("icon_512x512.png", 512),
         ("icon_512x512@2x.png", 1024),
     ]
-    iconset = ROOT / "hosts/macos/Linkspan/Assets.xcassets/AppIcon.appiconset"
+    iconset = ROOT / "hosts/macos/Olympium/Assets.xcassets/AppIcon.appiconset"
     iconset.mkdir(parents=True, exist_ok=True)
-    (ROOT / "hosts/macos/Linkspan/Assets.xcassets").mkdir(parents=True, exist_ok=True)
+    (ROOT / "hosts/macos/Olympium/Assets.xcassets").mkdir(parents=True, exist_ok=True)
     icns_map: dict[bytes, Path] = {}
     icns_types = {
         16: [b"icp4"],
@@ -151,9 +151,9 @@ def main() -> int:
     for size, kinds in icns_types.items():
         for kind in kinds:
             icns_map[kind] = cached[size]
-    icns_path = ROOT / "hosts/macos/Linkspan/Resources/Linkspan.icns"
+    icns_path = ROOT / "hosts/macos/Olympium/Resources/Olympium.icns"
     write_icns(icns_map, icns_path)
-    shutil.copyfile(icns_path, ASSETS / "Linkspan.icns")
+    shutil.copyfile(icns_path, ASSETS / "Olympium.icns")
 
     densities = {
         "mipmap-mdpi": 48,
@@ -164,7 +164,7 @@ def main() -> int:
     }
     android_res = ROOT / "hosts/android/app/src/main/res"
     for folder, size in densities.items():
-        full = ASSETS / "android" / f"linkspan-{size}.png"
+        full = ASSETS / "android" / f"olympium-{size}.png"
         raster(DARK, size, full)
         dest_dir = android_res / folder
         dest_dir.mkdir(parents=True, exist_ok=True)

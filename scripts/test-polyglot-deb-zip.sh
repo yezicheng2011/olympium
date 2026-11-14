@@ -51,9 +51,9 @@ PY
   file -b "$work/same.deb" | grep -q 'Debian binary package' || fail "file(1) did not identify the Debian side"
   if [ "$expect_deb" = install ] && [ "$(id -u)" -eq 0 ]; then
     dpkg -i "$work/same.deb" >/dev/null
-    /usr/bin/linkspan-polyglot-probe | grep -q 'linkspan-polyglot-probe-ok'
-    dpkg -r linkspan-polyglot-probe >/dev/null
-    if [ -e /usr/bin/linkspan-polyglot-probe ]; then
+    /usr/bin/olympium-polyglot-probe | grep -q 'olympium-polyglot-probe-ok'
+    dpkg -r olympium-polyglot-probe >/dev/null
+    if [ -e /usr/bin/olympium-polyglot-probe ]; then
       fail "dpkg remove left the probe script behind"
     fi
   fi

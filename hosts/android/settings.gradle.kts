@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "linkspan-android"
+rootProject.name = "olympium-android"
 include(":app")

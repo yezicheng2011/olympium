@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product": "Linkspan",
+  "product": "Olympium",
   "license": "Apache-2.0",
   "copyright": "Copyright 2026 Ye Zicheng",
   "note": "Metadata only. The slim images are not in this repository. They are published from the per-system repositories and downloaded at runtime. This file is compiled into the client. The published 0.1.0 macOS package does not contain these hashes.",

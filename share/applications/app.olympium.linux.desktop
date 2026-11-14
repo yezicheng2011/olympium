@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Olympium
+Comment=Run a program from another system on this computer
+Exec=olympium-linux
+Icon=olympium
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupNotify=true
+StartupWMClass=app.olympium.linux

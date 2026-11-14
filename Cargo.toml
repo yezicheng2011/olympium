@@ -4,9 +4,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/linkspan-core",
-    "crates/linkspan-cli",
-    "crates/linkspan-linux",
+    "crates/olympium-core",
+    "crates/olympium-cli",
+    "crates/olympium-linux",
     "examples/hello-linux",
 ]
 exclude = ["hosts/android"]

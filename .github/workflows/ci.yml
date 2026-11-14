@@ -15,13 +15,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Test the engine
-        run: cargo test --workspace --exclude linkspan-linux
+        run: cargo test --workspace --exclude olympium-linux
       - name: Test the Android refusal rule
         run: |
-          javac -d /tmp/linkspan-java \
-            hosts/android/protocol/src/main/java/app/linkspan/protocol/LaunchGate.java \
-            hosts/android/protocol/src/test/java/app/linkspan/protocol/LaunchGateTest.java
-          java -cp /tmp/linkspan-java app.linkspan.protocol.LaunchGateTest
+          javac -d /tmp/olympium-java \
+            hosts/android/protocol/src/main/java/app/olympium/protocol/LaunchGate.java \
+            hosts/android/protocol/src/test/java/app/olympium/protocol/LaunchGateTest.java
+          java -cp /tmp/olympium-java app.olympium.protocol.LaunchGateTest
       - name: Test the OpenHarmony refusal rule
         run: node hosts/harmony/protocol/launch-gate.test.js
       - name: Check host icon sets
@@ -48,7 +48,7 @@ jobs:
         run: bash scripts/package-macos.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: linkspan-macos-pkg
+          name: olympium-macos-pkg
           path: |
             dist/*.pkg
             dist/SIGNING.txt

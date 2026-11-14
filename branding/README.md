@@ -1,6 +1,6 @@
 # Olympium mark
 
-Linkspan uses the official Olympium mark. The letterform and the dark tile (`#0a0b0d` with `#c5f04a`) are the mark from the Olympium site. Light tiles use the same path in `#0a0b0d` on `#f4f5f0`. Nothing here is copied from another product.
+Olympium uses the official Olympium mark. The letterform and the dark tile (`#0a0b0d` with `#c5f04a`) are the mark from the Olympium site. Light tiles use the same path in `#0a0b0d` on `#f4f5f0`. Nothing here is copied from another product.
 
 ## Masters
 
@@ -25,9 +25,9 @@ python3 scripts/check-icons.py
 
 The script writes:
 
-- Linux hicolor PNGs, a scalable SVG, and a symbolic SVG under `share/icons`. The desktop file is `share/applications/app.linkspan.linux.desktop` with `Icon=linkspan`.
+- Linux hicolor PNGs, a scalable SVG, and a symbolic SVG under `share/icons`. The desktop file is `share/applications/app.olympium.linux.desktop` with `Icon=olympium`.
 - A Windows `.ico` at 16, 24, 32, 48, 64, 128, and 256. The Windows project embeds it as the executable icon.
-- A macOS asset catalog with 16 through 1024, including the `@2x` sizes, plus light and dark appearances, and `Linkspan.icns`.
+- A macOS asset catalog with 16 through 1024, including the `@2x` sizes, plus light and dark appearances, and `Olympium.icns`.
 - Android mipmaps from mdpi through xxxhdpi, including round icons. The adaptive icon adds the lime foreground, the dark background, and a monochrome glyph.
 - OpenHarmony layered icons, start-window icons, and density variants for both the light and dark color modes.
 

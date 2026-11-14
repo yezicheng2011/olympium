@@ -5,12 +5,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "LinkspanKit",
+    name: "OlympiumKit",
     products: [
-        .library(name: "LinkspanKit", targets: ["LinkspanKit"]),
+        .library(name: "OlympiumKit", targets: ["OlympiumKit"]),
     ],
     targets: [
-        .target(name: "LinkspanKit"),
-        .testTarget(name: "LinkspanKitTests", dependencies: ["LinkspanKit"]),
+        .target(name: "OlympiumKit"),
+        .testTarget(name: "OlympiumKitTests", dependencies: ["OlympiumKit"]),
     ]
 )

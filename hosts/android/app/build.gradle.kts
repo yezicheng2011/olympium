@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "app.linkspan.android"
+    namespace = "app.olympium.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.linkspan.android"
+        applicationId = "app.olympium.android"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

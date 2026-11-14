@@ -1,7 +1,7 @@
 {
   "name": "entry",
   "version": "0.1.0",
-  "description": "Linkspan OpenHarmony entry module",
+  "description": "Olympium OpenHarmony entry module",
   "license": "Apache-2.0",
   "main": "",
   "author": "Ye Zicheng",

@@ -1,0 +1,15 @@
+<!-- Copyright 2026 Ye Zicheng -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<Application x:Class="Olympium.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="AppBackground" Color="#F3F3F3" />
+    <SolidColorBrush x:Key="AppSurface" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="AppText" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="AppMuted" Color="#5C5C5C" />
+    <SolidColorBrush x:Key="AppAccent" Color="#0F6CBD" />
+    <SolidColorBrush x:Key="AppLine" Color="#E0E0E0" />
+  </Application.Resources>
+</Application>

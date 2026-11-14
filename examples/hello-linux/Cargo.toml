@@ -3,7 +3,7 @@
 
 [package]
 name = "hello-linux"
-description = "Sample Linux program used to prove Linkspan can launch a guest."
+description = "Sample Linux program used to prove Olympium can launch a guest."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
