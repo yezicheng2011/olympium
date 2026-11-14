@@ -1,7 +1,7 @@
 {
   "string": [
-    { "name": "app_name", "value": "Linkspan" },
-    { "name": "module_desc", "value": "OpenHarmony client for Linkspan" },
+    { "name": "app_name", "value": "Olympium" },
+    { "name": "module_desc", "value": "OpenHarmony client for Olympium" },
     { "name": "ability_desc", "value": "Install and open OpenHarmony packages" },
     { "name": "internet_reason", "value": "Used only to choose GitHub or a China mirror for a slim runtime that is not bundled in this app." }
   ]

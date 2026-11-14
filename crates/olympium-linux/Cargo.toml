@@ -1,0 +1,25 @@
+# Copyright 2026 Ye Zicheng
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "olympium-linux"
+description = "Linux desktop app for Olympium."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "olympium-linux"
+path = "src/main.rs"
+
+[[bin]]
+name = "linkspan-linux"
+path = "src/main.rs"
+
+[dependencies]
+gtk4 = { version = "0.9", features = ["v4_14"] }
+libadwaita = { version = "0.7", features = ["v1_5"] }
+olympium-core = { path = "../olympium-core" }

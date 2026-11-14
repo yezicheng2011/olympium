@@ -583,7 +583,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello-linux"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "indexmap"
@@ -645,37 +645,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
-name = "linkspan-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "linkspan-core",
- "serde_json",
-]
-
-[[package]]
-name = "linkspan-core"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "thiserror",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "linkspan-linux"
-version = "0.1.0"
-dependencies = [
- "gtk4",
- "libadwaita",
- "linkspan-core",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -704,6 +673,37 @@ checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
 dependencies = [
  "adler2",
  "simd-adler32",
+]
+
+[[package]]
+name = "olympium-cli"
+version = "0.1.1"
+dependencies = [
+ "clap",
+ "olympium-core",
+ "serde_json",
+]
+
+[[package]]
+name = "olympium-core"
+version = "0.1.1"
+dependencies = [
+ "flate2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "thiserror",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "olympium-linux"
+version = "0.1.1"
+dependencies = [
+ "gtk4",
+ "libadwaita",
+ "olympium-core",
 ]
 
 [[package]]

@@ -18,11 +18,11 @@ export class LaunchGate {
 
   static refusalMessage(host: string, guest: string): string {
     if (guest === 'openharmony' && host === 'android') {
-      return 'Linkspan will not run OpenHarmony software on Android. Android is not an OpenHarmony runtime, and Linkspan does not translate a HAP into an Android app.';
+      return 'Olympium will not run OpenHarmony software on Android. Android is not an OpenHarmony runtime, and Olympium does not translate a HAP into an Android app.';
     }
     if (host === 'openharmony' && guest !== 'openharmony') {
-      return 'On an OpenHarmony device, Linkspan runs OpenHarmony software with the system itself. It does not run other guest systems there.';
+      return 'On an OpenHarmony device, Olympium runs OpenHarmony software with the system itself. It does not run other guest systems there.';
     }
-    return 'Linkspan will not run macOS or iOS software on this computer. Apple licenses those systems for Apple hardware.';
+    return 'Olympium will not run macOS or iOS software on this computer. Apple licenses those systems for Apple hardware.';
   }
 }

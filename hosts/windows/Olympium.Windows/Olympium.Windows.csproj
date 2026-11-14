@@ -1,0 +1,24 @@
+<!-- Copyright 2026 Ye Zicheng -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Olympium.Windows</RootNamespace>
+    <AssemblyName>Olympium</AssemblyName>
+    <ApplicationTitle>Olympium</ApplicationTitle>
+    <ApplicationIcon>Assets\Olympium.ico</ApplicationIcon>
+    <Description>Windows client for Olympium. Apache-2.0. Build from source; this project does not replace the published Mac 0.1.0 package.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Assets\Olympium.ico" />
+    <Resource Include="Assets\Olympium.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Olympium.Protocol\Olympium.Protocol.csproj" />
+    <Content Include="Assets\compatibility.json" CopyToOutputDirectory="PreserveNewest" Link="compatibility.json" />
+  </ItemGroup>
+</Project>

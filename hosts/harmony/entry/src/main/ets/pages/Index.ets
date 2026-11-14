@@ -6,7 +6,7 @@ import { LaunchGate } from '../common/LaunchGate';
 @Entry
 @Component
 struct Index {
-  @State note: string = 'Linkspan on OpenHarmony installs OpenHarmony packages with the system installer. Guest images are not bundled in this app.';
+  @State note: string = 'Olympium on OpenHarmony installs OpenHarmony packages with the system installer. Guest images are not bundled in this app.';
   @State guest: string = 'openharmony';
   @State bundleName: string = '';
   @State developerMode: string = 'Developer mode has not been read yet.';
@@ -17,7 +17,7 @@ struct Index {
 
   build() {
     Column() {
-      Text('Linkspan')
+      Text('Olympium')
         .fontSize(28)
         .fontWeight(FontWeight.Bold)
         .width('100%')
@@ -62,7 +62,7 @@ struct Index {
       this.note = LaunchGate.refusalMessage('openharmony', guest);
       return;
     }
-    this.note = 'OpenHarmony software can be installed with the system bundle installer when developer mode allows it. Linkspan does not translate the package and does not download a HarmonyOS image.';
+    this.note = 'OpenHarmony software can be installed with the system bundle installer when developer mode allows it. Olympium does not translate the package and does not download a HarmonyOS image.';
   }
 
   installNoted(): void {
@@ -75,7 +75,7 @@ struct Index {
       this.note = 'Choose a HAP from hdc on a computer in developer mode: hdc install entry.hap. This app does not embed a guest image. See the OpenHarmony host manual.';
       return;
     }
-    this.note = 'Ask OpenHarmony to open ' + name + ' after hdc install. Unsigned packages are refused unless developer mode is on. Linkspan does not add a certificate.';
+    this.note = 'Ask OpenHarmony to open ' + name + ' after hdc install. Unsigned packages are refused unless developer mode is on. Olympium does not add a certificate.';
   }
 
   readDeveloperMode(): void {

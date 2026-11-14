@@ -1,12 +1,12 @@
 # OpenHarmony host manual
 
-This is the instruction manual for the Linkspan client that runs on OpenHarmony (the 鸿蒙 host, built from OpenHarmony). The source is in `hosts/harmony`. The client is English. Linkspan's own source is Apache-2.0 only.
+This is the instruction manual for the Olympium client that runs on OpenHarmony (the 鸿蒙 host, built from OpenHarmony). The source is in `hosts/harmony`. The client is English. Olympium's own source is Apache-2.0 only.
 
 There is no iOS host. This manual does not describe one.
 
 ## What this client is
 
-The OpenHarmony client is a normal OpenHarmony application. It runs on a phone, tablet, or 2-in-1 that is itself OpenHarmony. OpenHarmony packages (`.hap` files and OpenHarmony `.app` bundles) are installed with OpenHarmony's own installer. The window is the system's window. Linkspan does not draw a second desktop inside the app.
+The OpenHarmony client is a normal OpenHarmony application. It runs on a phone, tablet, or 2-in-1 that is itself OpenHarmony. OpenHarmony packages (`.hap` files and OpenHarmony `.app` bundles) are installed with OpenHarmony's own installer. The window is the system's window. Olympium does not draw a second desktop inside the app.
 
 Guest system images are not inside the application. A slim OpenHarmony, Android, Linux, or Wine runtime, when one is published, is downloaded by the desktop clients from a separate repository. This client does not embed those files.
 
@@ -16,7 +16,7 @@ Guest system images are not inside the application. A slim OpenHarmony, Android,
 - It will not translate a HAP into an Android APK, a Windows program, or a Linux program.
 - It will not run Android, Windows, Linux, macOS, or iOS software on the OpenHarmony device. Those guests run on the Linux, Windows, or macOS clients, and only where that client has a real runtime. macOS and iOS guests still do not run on non-Apple hardware.
 - It will not install an unsigned HAP when developer mode is off. It does not add a certificate, remove a signature, or skip the system verifier.
-- It does not ship a product website, a Mac disk image, or an iOS build of Linkspan.
+- It does not ship a product website, a Mac disk image, or an iOS build of Olympium.
 
 ## What you need
 
@@ -45,7 +45,7 @@ That test is the same rule the desktop clients use: Apple guests do not run off 
 
 ## Sign and debug-install
 
-1. In DevEco Studio, create a debug certificate and a debug profile for `app.linkspan.openharmony`. Keep them outside the git repository.
+1. In DevEco Studio, create a debug certificate and a debug profile for `app.olympium.openharmony`. Keep them outside the git repository.
 2. Turn on developer mode on the device. The client reads `const.security.developermode.state` when it can. If the read fails, it says so and does not pretend developer mode is on.
 3. Connect the device and install the client itself:
 
@@ -53,12 +53,12 @@ That test is the same rule the desktop clients use: Apple guests do not run off 
 hdc install entry/build/default/outputs/default/entry-default-signed.hap
 ```
 
-The exact file name follows the SDK. Use the HAP the build just produced. `hdc install` is OpenHarmony's installer. If the package has no signature block, this succeeds only in developer mode. If it is signed, OpenHarmony checks the signature. Linkspan does not replace that check.
+The exact file name follows the SDK. Use the HAP the build just produced. `hdc install` is OpenHarmony's installer. If the package has no signature block, this succeeds only in developer mode. If it is signed, OpenHarmony checks the signature. Olympium does not replace that check.
 
 4. Start the client from the home screen, or:
 
 ```bash
-hdc shell aa start -b app.linkspan.openharmony -a EntryAbility
+hdc shell aa start -b app.olympium.openharmony -a EntryAbility
 ```
 
 Do not copy a Huawei commercial signing key into the project. Do not disable signature verification.
@@ -96,7 +96,7 @@ hdc shell aa start -b com.example.app -a EntryAbility
 
 Replace the bundle name and ability with the values in the package's `module.json`. If you type a bundle name in the client, the window tells you the same `hdc` command. It does not invent a certificate to make an unsigned package look signed.
 
-A package that contains both `AndroidManifest.xml` and `module.json` is rejected by the engine. Linkspan will not guess which system it belongs to.
+A package that contains both `AndroidManifest.xml` and `module.json` is rejected by the engine. Olympium will not guess which system it belongs to.
 
 ## Guests that are refused on this device
 
@@ -125,13 +125,13 @@ There is no macOS image repository and no iOS image repository.
 
 When a desktop client looks for a download, it reads the client IP from `engines.mirrors.ip_lookup_url` (default `https://ipinfo.io/json`). A country code of `CN` selects the China mirror prefix (`engines.mirrors.china_prefix`, default `https://gh-proxy.com/`). Any other country uses GitHub directly. If the lookup does not return a country, the client probes `engines.mirrors.probe_url` (default `https://github.com`), the same way AeroAndroid picks a mirror when GitHub does not answer. Set `engines.mirrors.prefer` to `github` or `china` to skip the lookup.
 
-Every downloaded file is checked with SHA-256 from `share/runtime-lock.json`. A mirror that changes the bytes is discarded, and the original repository URL is tried next. Until an image is published, the lock says `published: false` and the client reports that instead of inventing a file.
+Every downloaded file is checked with SHA-256 from `share/runtime-lock.json`. A mirror that changes the bytes is discarded, and the original repository URL is tried next. Linux and Wine have published archives. Android and OpenHarmony still say `published: false`, and the client reports that instead of inventing a file.
 
 On this OpenHarmony device you do not need the slim OpenHarmony image. The device is the runtime. The manual still describes the lookup so the same rule is visible here.
 
 ## Settings the desktop engine also stores
 
-These are changed with `linkspan config set` on a desktop, and the OpenHarmony window follows the system appearance on its own:
+These are changed with `olympium config set` on a desktop, and the OpenHarmony window follows the system appearance on its own:
 
 | Key | Values |
 | --- | --- |
@@ -153,7 +153,7 @@ Memory in automatic mode uses about a quarter of the memory left after a 2 GiB r
 | --- | --- |
 | Developer mode could not be read | The system parameter API is missing or blocked. Use `hdc` and check developer mode in system settings. |
 | Unsigned package refused | Developer mode is off, or the package has no signature block. Turn developer mode on or install a package the device already trusts. Do not strip the signature. |
-| The runtime reports HarmonyOS | That is a commercial image. Linkspan will not use it. |
+| The runtime reports HarmonyOS | That is a commercial image. Olympium will not use it. |
 | `hvigorw` is not found | Install the OpenHarmony SDK. The repository does not vendor it. |
 | A download says the image is not published | The slim image repository has no release yet. The client will not substitute another system. |
 

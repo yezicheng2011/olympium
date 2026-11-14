@@ -4,15 +4,15 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/linkspan-core",
-    "crates/linkspan-cli",
-    "crates/linkspan-linux",
+    "crates/olympium-core",
+    "crates/olympium-cli",
+    "crates/olympium-linux",
     "examples/hello-linux",
 ]
 exclude = ["hosts/android"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Ye Zicheng"]
