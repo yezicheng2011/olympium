@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crypto tips</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0a0b0d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="support.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1 id="page-title">Crypto tips</h1>
+      <div class="langs" role="group" aria-label="Language">
+        <button type="button" id="lang-en" data-lang="en" aria-pressed="true">English</button>
+        <button type="button" id="lang-zh" data-lang="zh" aria-pressed="false">中文</button>
+      </div>
+    </header>
+    <p class="lede" id="intro">A public address for optional crypto tips. This page does not connect a wallet and does not send a transaction.</p>
+    <section class="card">
+      <label id="address-label" for="address">Address</label>
+      <p id="address" class="address" tabindex="0">0x53f421bb0192cfcafd9a46a798a377e15c555027</p>
+      <div class="row">
+        <button type="button" id="copy-button">Copy address</button>
+      </div>
+      <p id="copy-status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="card">
+      <div class="qr-plate">
+        <img id="qr" src="address-qr.svg" width="240" height="240" alt="QR code of the address 0x53f421bb0192cfcafd9a46a798a377e15c555027" data-payload="0x53f421bb0192cfcafd9a46a798a377e15c555027">
+      </div>
+      <p class="note" id="qr-caption">QR code of the address only. It does not encode a chain, a token, or an amount. Select the network and the token in your wallet.</p>
+    </section>
+    <section class="card">
+      <h2 id="network-title">Network</h2>
+      <p id="network-help">Select Arbitrum One in your wallet before you send. Also select a token your wallet supports on Arbitrum One. The QR code is the address only. It does not choose the network or the token.</p>
+      <p class="note" id="token-note">This address is not for Bitcoin, Solana, or Tron. This page does not claim that every chain or every coin works.</p>
+      <p class="note" id="not-do">No wallet connection, seed phrase, or private key. No payment processor, no cash-out to fiat, and no smart contract on this page.</p>
+    </section>
+  </div>
+  <script src="support.js"></script>
+</body>
+</html>

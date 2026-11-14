@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Olympium manual</title>
+  <meta name="description" content="How to install Olympium, start it, download a published runtime, and what is not available yet.">
+  <link rel="canonical" href="https://olympium.net/manual/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0a0b0d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)">
+  <link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-display-700.woff2" as="font" type="font/woff2" crossorigin>
+  <style>
+    @font-face { font-family: "Inter"; src: url(/fonts/inter-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+    @font-face { font-family: "Inter"; src: url(/fonts/inter-500.woff2) format("woff2"); font-weight: 500; font-display: swap; }
+    @font-face { font-family: "Inter"; src: url(/fonts/inter-600.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+    @font-face { font-family: "Inter Display"; src: url(/fonts/inter-display-600.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+    @font-face { font-family: "Inter Display"; src: url(/fonts/inter-display-700.woff2) format("woff2"); font-weight: 700; font-display: swap; }
+    @font-face { font-family: "JetBrains Mono"; src: url(/fonts/jbmono-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+    :root {
+      --bg: #0a0b0d; --bg-1: #0f1013; --bg-2: #15171b; --bg-3: #1c1f24;
+      --line: rgba(255,255,255,.07); --line-2: rgba(255,255,255,.12);
+      --text: #ecedee; --text-2: #a1a3ab; --text-3: #6c6f78;
+      --lime: #c5f04a; --lime-dim: rgba(197,240,74,.12); --ink: #0a0b0d;
+      --warn: #ffb020; --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --display: "Inter Display", "Inter", ui-sans-serif, system-ui, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --nav-bg: rgba(10,11,13,.72);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f4f3ef; --bg-1: #fffcf7; --bg-2: #f7f4ee; --bg-3: #eeeae3;
+        --line: rgba(20,18,14,.08); --line-2: rgba(20,18,14,.14);
+        --text: #14130f; --text-2: #5c5a53; --text-3: #8a877e;
+        --lime: #5a7d12; --lime-dim: rgba(90,125,18,.12); --ink: #14130f;
+        --warn: #8a4b00; --nav-bg: rgba(244,243,239,.78);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.65 var(--sans); letter-spacing: -0.006em; }
+    a { color: inherit; }
+    a:hover { color: var(--lime); }
+    :focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+    code, pre { font-family: var(--mono); font-size: 0.92em; }
+    code { background: var(--bg-3); padding: 0.1em 0.35em; border-radius: 6px; }
+    pre { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow: auto; }
+    .wrap { width: min(1180px, calc(100% - 48px)); margin: 0 auto; }
+    @media (max-width: 600px) { .wrap { width: calc(100% - 32px); } }
+    .skip { position: absolute; left: 12px; top: -48px; background: var(--lime); color: var(--ink); padding: 6px 10px; border-radius: 8px; z-index: 30; }
+    .skip:focus { top: 12px; }
+    .nav { position: sticky; top: 0; z-index: 20; background: var(--nav-bg); backdrop-filter: blur(14px) saturate(160%); border-bottom: 1px solid var(--line); }
+    .nav .wrap { height: 60px; display: flex; align-items: center; gap: 1.5rem; }
+    .logo { display: inline-flex; align-items: center; gap: 10px; font: 600 15px var(--display); text-decoration: none; }
+    .nav ul { display: flex; gap: 1.25rem; list-style: none; margin: 0; padding: 0; font-size: 14px; color: var(--text-2); }
+    .nav ul a { text-decoration: none; }
+    .nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line-2); text-decoration: none; font-size: 14px; }
+    .btn-lime { background: var(--lime); color: var(--ink); border-color: transparent; font-weight: 600; }
+    .btn-lime:hover { color: var(--ink); }
+    @media (max-width: 860px) { .nav ul { display: none; } }
+    .page { padding: 48px 0 72px; }
+    .page h1 { font: 700 clamp(36px, 5vw, 64px)/1.02 var(--display); letter-spacing: -0.04em; margin: 0 0 12px; }
+    .lede { color: var(--text-2); max-width: 68ch; margin: 0 0 28px; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; gap: 36px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    .toc { position: sticky; top: 84px; align-self: start; }
+    .toc a { display: block; color: var(--text-2); text-decoration: none; font-size: 14px; padding: 4px 0; }
+    .toc a:hover, .toc a:focus-visible { color: var(--text); }
+    h2 { font: 650 28px/1.2 var(--display); letter-spacing: -0.03em; margin: 36px 0 10px; }
+    h3 { font: 600 18px/1.3 var(--display); margin: 22px 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+    th { color: var(--text-3); font-weight: 500; }
+    .note, .warn { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; margin: 14px 0; background: var(--bg-1); }
+    .warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+    footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--text-2); font-size: 14px; }
+    footer a { color: var(--text); }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-mark" viewBox="0 0 32 32">
+      <path d="M10 8.5h6.2c4.15 0 7.05 2.55 7.05 6.55S20.35 21.6 16.2 21.6H13.1V23.5H10V8.5zm3.1 3.05v7.05h3.05c2.35 0 3.85-1.4 3.85-3.52 0-2.13-1.5-3.53-3.85-3.53H13.1z" fill="currentColor"/>
+    </symbol>
+  </svg>
+  <a class="skip" href="#content">Skip to the manual</a>
+  <header class="nav">
+    <div class="wrap">
+      <a class="logo" href="/"><svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><use href="#i-mark"/></svg> Olympium</a>
+      <ul>
+        <li><a href="/#hosts">Hosts</a></li>
+        <li><a href="/#guests">Guests</a></li>
+        <li><a href="/#download">Images</a></li>
+        <li><a href="/manual/">Manual</a></li>
+      </ul>
+      <div class="right">
+        <a class="btn" href="/manual/">Manual</a>
+        <a class="btn" href="https://github.com/yezicheng2011/olympium">GitHub</a>
+        <a class="btn btn-lime" href="/download/v0.1.0/Linkspan-0.1.0.pkg">Mac 0.1.0</a>
+      </div>
+    </div>
+  </header>
+  <main id="content" class="page">
+    <div class="wrap">
+      <h1>Manual</h1>
+      <p class="lede">Install the published Mac package, start Olympium, and see which guest runtimes exist. This page does not add a host or a guest that the software cannot run.</p>
+      <div class="layout">
+        <nav class="toc" aria-label="Manual sections">
+          <a href="#install">Install</a>
+          <a href="#start">Start</a>
+          <a href="#use">Use</a>
+          <a href="#runtimes">Runtimes</a>
+          <a href="#progress">Download progress</a>
+          <a href="#uninstall">Uninstall</a>
+          <a href="#signing">Signing</a>
+          <a href="#troubleshooting">Troubleshooting</a>
+          <a href="#polyglot">One file, two formats</a>
+          <a href="#not-yet">Not available yet</a>
+        </nav>
+        <article>
+          <h2 id="install">Install</h2>
+          <h3>macOS</h3>
+          <p>The published 0.1.0 installer is a component package. It puts <code>Linkspan.app</code> in <code>/Applications</code>. That file name and the download URL stay as they are. The app inside is ad-hoc signed. The <code>.pkg</code> itself is unsigned, and it is not notarized. macOS can warn before it opens. That warning is real. Nothing on this site removes it. A later build can be named Olympium. It is not this download.</p>
+          <p><a href="/download/v0.1.0/Linkspan-0.1.0.pkg">Download Linkspan-0.1.0.pkg</a>. The same file is on <a href="https://github.com/yezicheng2011/olympium/releases/download/v0.1.0/Linkspan-0.1.0.pkg">GitHub</a>.</p>
+          <p>SHA-256: <code>ba96038bd318d7ec1a47fb3cbf93dd2e7d0bb92222fcb9f670f3dc2be0130de0</code></p>
+          <p>There is no iOS app. This package does not contain a guest image.</p>
+          <h3>Linux, Windows, Android, and OpenHarmony</h3>
+          <p>There is no published <code>.deb</code>, <code>.rpm</code>, AppImage, Windows installer, APK, or HAP on the download page. Build those clients from the <a href="https://github.com/yezicheng2011/olympium">source repository</a> when you have the SDK for that host. The OpenHarmony SDK is not in the repository. Without it, a HAP is not produced.</p>
+
+          <h2 id="start">Start</h2>
+          <p>On a Mac, open <code>/Applications/Linkspan.app</code> from the 0.1.0 package. The command <code>linkspan</code> remains available as an alias where a newer build also installs <code>olympium</code>. If macOS says the app cannot be opened because the developer cannot be verified, that follows from the ad-hoc signature and the lack of notarization. The package does not claim otherwise.</p>
+          <p>On Linux, after you build the command:</p>
+          <pre>olympium doctor
+olympium-linux</pre>
+          <p>The desktop window needs GTK 4 and libadwaita from the system. They are not copied into the Mac package.</p>
+
+          <h2 id="use">Use</h2>
+          <p>Add a program you already have, then run it. Olympium does not download applications.</p>
+          <pre>olympium add --file ./program.deb
+olympium list
+olympium run --file ./program.deb</pre>
+          <p>A legal refusal exits with status 2. A missing engine exits with status 3. <code>olympium limits</code> prints the rules, including the refusal of macOS and iOS software on non-Apple hardware.</p>
+
+          <h2 id="runtimes">Runtimes</h2>
+          <p>Guest images are not inside the app. <code>olympium runtime</code> reads the client IP and chooses GitHub, or a China mirror when the country is <code>CN</code>. <code>olympium fetch</code> downloads a published archive and checks SHA-256. A mismatch is discarded.</p>
+          <table>
+            <thead><tr><th>Guest</th><th>Status</th><th>What was checked</th></tr></thead>
+            <tbody>
+              <tr><td>Linux</td><td>Published for x86_64 and aarch64</td><td>Alpine Linux 3.24.4. x86_64 booted with KVM. aarch64 booted with QEMU on an x86_64 host, not on aarch64 hardware. Lima and WSL were not tested. The helper <code>bin/linkspan-surface</code> in the aarch64 archive is an x86_64 Linux executable.</td></tr>
+              <tr><td>Windows programs</td><td>Wine 11.0 for Linux x86_64 only</td><td>A 64-bit console program printed its marker. 32-bit programs failed. No macOS or Windows-host build. No GUI window test.</td></tr>
+              <tr><td>Android</td><td>Not published</td><td>No image was built. No Play Store image is included.</td></tr>
+              <tr><td>OpenHarmony</td><td>Not published</td><td>No image was built. This is not HarmonyOS.</td></tr>
+              <tr><td>macOS and iOS guests</td><td>No image</td><td>Olympium does not download those systems.</td></tr>
+            </tbody>
+          </table>
+          <p>Linux archive, x86_64, 21609442 bytes, SHA-256 <code>ee99f134d87dfcaa898566e79f21a521b97837ab864fceb80ba221396e3e0412</code>. <a href="https://github.com/yezicheng2011/olympium-linux/releases/download/v0.1.0/linux-slim-x86_64.tar.gz">Download</a>.</p>
+          <p>Linux archive, aarch64, 19998115 bytes, SHA-256 <code>b34d347e4454c129fc8ac2190f036827e988bdbe4f1b2a603689f34bb3cd03c0</code>. <a href="https://github.com/yezicheng2011/olympium-linux/releases/download/v0.1.0/linux-slim-aarch64.tar.gz">Download</a>.</p>
+          <p>Wine archive, Linux x86_64, 104010086 bytes, SHA-256 <code>6b0f969d2cd51669709425dccdfe3f9b76ca5ce5f36934f7b469d19b43227320</code>. <a href="https://github.com/yezicheng2011/olympium-wine/releases/download/v0.1.0/wine-slim-x86_64.tar.gz">Download</a>. Wine stays under the LGPL. It is not a Windows license.</p>
+          <p>The Mac package 0.1.0 was built before these checksums existed. That package reports the images as not published. A later client build is required before it can fetch them. Version 0.1.1 is in source and is not this download.</p>
+
+          <h2 id="progress">Download progress</h2>
+          <p><code>olympium fetch --guest linux</code> prints <code>downloaded</code> and a byte count while the archive is coming in, then the final count when the transfer finishes. The file is kept only after the SHA-256 matches. <code>olympium guest --guest linux</code> boots that extracted image and waits until the guest prints <code>olympium-linux-guest-ok</code>. The same progress line is used for Wine. Android and OpenHarmony stop with “not published” and do not invent a file. Wine in that archive is a Linux x86_64 program, so a Mac cannot run it directly.</p>
+
+          <h2 id="uninstall">Uninstall</h2>
+          <p>On a Mac, delete <code>/Applications/Linkspan.app</code> to remove the 0.1.0 install. The package receipt does not delete that app for you. <code>pkgutil --forget app.linkspan.macos</code> only drops the 0.1.0 receipt. A later Olympium build would use its own app name and receipt, and it is not published here.</p>
+          <p>A source build on Linux is removed by deleting the binaries you installed. There is no published Linux package on this download page.</p>
+
+          <h2 id="signing">Signing</h2>
+          <div class="warn">
+            <p>The 0.1.0 app is ad-hoc signed. The installer package is unsigned and not notarized. Open it only if you accept that macOS warning. Guest runtimes are separate downloads. They are not Apple-signed, and this site does not claim they are.</p>
+          </div>
+
+          <h2 id="troubleshooting">Troubleshooting</h2>
+          <table>
+            <thead><tr><th>What you see</th><th>What it means</th></tr></thead>
+            <tbody>
+              <tr><td>macOS blocks the app</td><td>The ad-hoc signature and missing notarization. The package does not bypass that check.</td></tr>
+              <tr><td>SHA-256 does not match</td><td>The download was discarded. Fetch again from the GitHub URL above.</td></tr>
+              <tr><td>The image is not published</td><td>Android and OpenHarmony have no release. The 0.1.0 Mac app says that for every guest, because its lock was compiled earlier.</td></tr>
+              <tr><td>Wine is missing on Linux</td><td>A 0.1.1 build can fetch the Linux x86_64 Wine archive. A Mac cannot run that Linux binary.</td></tr>
+              <tr><td>OpenHarmony SDK is missing</td><td>The repository does not include it, so no HAP is built here. Sideload steps for a HAP you built yourself are in the source manual <code>docs/openharmony-host.md</code>.</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="polyglot">One file, two formats</h2>
+          <div class="note">
+            <p>This is an experiment. It is not the Mac download, and it is not offered from the button above. Changing the extension does not change the bytes. It also does not turn the file into every installer, and it does not silence a platform warning.</p>
+          </div>
+          <p>One tested file is a Debian package with a zip archive after it. The copies named <code>.deb</code> and <code>.zip</code> were the same bytes. <code>dpkg-deb</code> read the package. <code>dpkg -i</code> installed a small probe script and <code>dpkg -r</code> removed it. The recorded install printed <code>linkspan-polyglot-probe-ok</code>. The source script now prints <code>olympium-polyglot-probe-ok</code>. Python’s zip reader extracted the zip members from those same bytes.</p>
+          <p>The same construction was repeated with the 0.1.1 Linux command before this rename. The file is 2487905 bytes, SHA-256 <code>e0336a1fbf6c7ae2967144989fc8a68f7a7f818094f756ed68fbfdc8d77161de</code>. After <code>dpkg -i</code>, <code>/usr/lib/linkspan-polyglot/linkspan --version</code> printed <code>linkspan 0.1.1</code>. The zip member was the same program bytes. Zip extraction does not keep the executable bit; the Debian package does. The package was then removed. It is not signed. It is not published next to the 0.1.0 Mac package. That file was not rebuilt after the command was renamed, so this checksum still belongs to the <code>linkspan</code> binary.</p>
+          <p>Info-ZIP’s <code>unzip</code> prints <code>extra bytes at beginning or within zipfile</code> and exits 1, after extracting the member. <code>file</code> reports only a Debian package. GNU <code>ar</code> rejects the file. <code>rpm</code> and <code>msiinfo</code> reject it.</p>
+          <p>A Debian package, an RPM, an MSI, a Windows exe, and a macOS pkg each need a different signature at the first byte. One file cannot start with all of them. An Android APK or OpenHarmony HAP was not built into this file. Their signing covers offsets from the start, so a prefix or a suffix would break that signature. A disk image wants its trailer at the end of the file, and that combination was not tested.</p>
+          <p>Rebuild the probe with <code>scripts/test-polyglot-deb-zip.sh</code> from the source tree. The engineering notes are in <code>docs/polyglot.md</code> in that tree.</p>
+
+          <h2 id="not-yet">Not available yet</h2>
+          <ul>
+            <li>No iOS host and no iOS or macOS guest image.</li>
+            <li>No published Windows installer, Android APK, or OpenHarmony HAP.</li>
+            <li>No published Android or OpenHarmony guest image.</li>
+            <li>Wine is a Linux x86_64 build only.</li>
+            <li>The aarch64 Linux guest was not booted on aarch64 hardware, and its host helper binary is x86_64.</li>
+            <li>Lima and WSL import of the Linux root filesystem were not tested.</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <p>© 2026 Ye Zicheng. Apache-2.0. Source on <a href="https://github.com/yezicheng2011/olympium">GitHub</a>. The macOS 0.1.0 package is <a href="/download/v0.1.0/Linkspan-0.1.0.pkg">Download for Mac</a>.</p>
+    </div>
+  </footer>
+</body>
+</html>
