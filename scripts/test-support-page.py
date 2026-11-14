@@ -51,6 +51,33 @@ def main() -> int:
     if "prefers-color-scheme: light" not in css or "color-scheme: light dark" not in css:
         print("missing light and dark")
         return 1
+    if "Arbitrum One" not in html or "Arbitrum One" not in js:
+        print("missing Arbitrum One")
+        return 1
+    banned_networks = (
+        "Ethereum",
+        "BNB Chain",
+        "Avalanche",
+        "Polygon",
+        "Base",
+        "Optimism",
+    )
+    for name in banned_networks:
+        if name in html or name in js:
+            print("unverified network listed", name)
+            return 1
+    if 'type="radio"' in html or "input[name='network']" in js:
+        print("network picker still present")
+        return 1
+    if html.count("<script") != 1 or 'src="support.js"' not in html:
+        print("script is not a single local file")
+        return 1
+    if "onclick=" in html:
+        print("inline handler")
+        return 1
+    if 'src="address-qr.svg"' not in html:
+        print("qr is not the local svg")
+        return 1
     svg = SUPPORT / "address-qr.svg"
     png = SUPPORT / "address-qr.png"
     if not svg.is_file() or not png.is_file():
