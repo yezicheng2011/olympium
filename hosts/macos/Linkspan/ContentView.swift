@@ -93,7 +93,7 @@ struct ContentView: View {
         case .compatibility:
             Text("Compatibility")
                 .font(.title2)
-            ForEach(model.cells, id: \.identity) { cell in
+            ForEach(model.cells) { cell in
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(cell.hostLabel) / \(cell.guest) — \(cell.title)")
                     Text(cell.summary)
@@ -120,7 +120,7 @@ struct ProgramRow: Identifiable {
 }
 
 struct CellRow: Identifiable {
-    var identity: String { host + guest }
+    var id: String { host + guest }
     let host: String
     let hostLabel: String
     let guest: String
