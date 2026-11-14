@@ -80,13 +80,13 @@ c0aef0ca0ce2f0c4cfe3f6ca5ee2bd8b29d879a1ae9461a6f8e045f1ff155f74  dev-live-amd64
 
 QEMU `pc`, KVM, standard VGA, 1280×800. The same boot attached an e1000 NIC, a virtio-net NIC, and an NVMe disk. The kernel log shows `e1000 0000:00:03.0`, `virtio_net virtio0`, and `nvme nvme0`. The VGA frames show the menu bar, an open File menu, Launchpad, and live blur (`blur=live` in Settings). Drivers and the optional NVIDIA/Broadcom installer are described in `docs/drivers.md`. `driver-install --detect` lists PCI devices and does not download anything.
 
-aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot.
+aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot, including the same purchase reminder.
 
 ```
-40b936424be926851bf86a14c90354515bd07e397c770bc04499e5a919188bbf  dev-live-arm64.iso
+4ac50d5c524fbf5662395856e06f9ddbe6ca3cd849ac4b14062b3d775d404304  dev-live-arm64.iso
 ```
 
-QEMU `virt`, TCG, AAVMF (`UEFI firmware (version 2024.02-2ubuntu0.10 ...)`), GRUB 2.12. The serial console reached `Development Desktop (temporary name)` and `devdesk login:`. That is this image's userspace, not a stock cloud image. It is not a framebuffer capture: virtio-gpu on that machine has no VGA screendump, and the kernel console name there is not `ttyS0`, so the compositor's kernel log line was not in the serial file. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon.
+An earlier QEMU `virt` + AAVMF serial boot reached a login prompt on a previous arm64 image. That boot is not a framebuffer capture: virtio-gpu on that machine has no VGA screendump. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon. This newer image was checked by reading the squashfs: the reminder text, `olympium-activate`, iris, radeonsi, Nouveau, amdgpu, radeon, and xe are present. The arm64 kernel does not include `i915.ko`.
 
 ## Purchase reminder
 
