@@ -12,7 +12,7 @@ A gzip Debian package produced by `dpkg-deb -Zgzip`, with a zip archive appended
 | --- | --- |
 | `.deb` and `.zip` copies | Byte-identical |
 | `dpkg-deb -I` and `dpkg-deb -x` | Read the package |
-| `dpkg -i` then run, then `dpkg -r` | Installed `/usr/bin/olympium-polyglot-probe`, printed `olympium-polyglot-probe-ok`, and removed it |
+| `dpkg -i` then run, then `dpkg -r` | The recorded install used `/usr/bin/linkspan-polyglot-probe` and printed `linkspan-polyglot-probe-ok`. The script now installs `/usr/bin/olympium-polyglot-probe` and prints `olympium-polyglot-probe-ok`. |
 | Python `zipfile` | Listed and extracted the zip members from the same bytes |
 | `unzip -p` | Printed `README.txt`, then exited 1 because of the warning `extra bytes at beginning or within zipfile` |
 | `file(1)` | Reports only `Debian binary package` |
@@ -20,7 +20,7 @@ A gzip Debian package produced by `dpkg-deb -Zgzip`, with a zip archive appended
 | `rpm -qp` | Rejects it: not an rpm package |
 | `msiinfo tables` | Cannot open it |
 
-The same construction with `target/release/olympium` (version 0.1.1) produced a 2487905-byte file, SHA-256 `e0336a1fbf6c7ae2967144989fc8a68f7a7f818094f756ed68fbfdc8d77161de`. `dpkg -i` installed it at `/usr/lib/olympium-polyglot/olympium` and `olympium --version` printed `olympium 0.1.1`. The zip member `olympium` was byte-identical to the file inside the deb. Zip extraction does not keep the executable bit; the deb does. `dpkg -r olympium-polyglot` removed it. That file is not committed and is not attached to the v0.1.0 release.
+The same construction with `target/release/linkspan` (version 0.1.1, before the command was renamed) produced a 2487905-byte file, SHA-256 `e0336a1fbf6c7ae2967144989fc8a68f7a7f818094f756ed68fbfdc8d77161de`. `dpkg -i` installed it at `/usr/lib/linkspan-polyglot/linkspan` and `linkspan --version` printed `linkspan 0.1.1`. The zip member `linkspan` was byte-identical to the file inside the deb. Zip extraction does not keep the executable bit; the deb does. `dpkg -r linkspan-polyglot` removed it. That file was not rebuilt after the rename, so the checksum still belongs to the `linkspan` binary. It is not committed and is not attached to the v0.1.0 release. The current script would place a newly built `olympium` binary at `/usr/lib/olympium-polyglot/olympium`; that new file has not been produced.
 
 No signature was added. A whole-file signature, Authenticode, APK v2/v3, or a Debian signature over the exact archive bytes would not survive extra bytes. This does not remove Gatekeeper, SmartScreen, or any other warning.
 
