@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copyright 2026 Development Desktop contributors
-# SPDX-License-Identifier: Apache-2.0
+# License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
 #
 # Read-only integration with Olympium at a pinned revision.
 # This script does not modify that repository.

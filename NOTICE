@@ -1,8 +1,8 @@
 Development Desktop
-Copyright 2026 Development Desktop contributors
+Copyright 2026 叶子诚（daniel.ye）
 
-This product includes software developed as first-party desktop code
-under the Apache License, Version 2.0.
+First-party source is under daniel.ye 源码许可证（第 1.0 版）.
+The full text is LICENSE.
 
 The live system also includes third-party Linux packages. Those packages
 remain under their own licenses. See THIRD_PARTY_NOTICES.md and, in a

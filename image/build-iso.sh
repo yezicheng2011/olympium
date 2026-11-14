@@ -1,6 +1,6 @@
 #!/bin/bash
 # Copyright 2026 Development Desktop contributors
-# SPDX-License-Identifier: Apache-2.0
+# License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
 #
 # Builds a live ISO for amd64 or arm64 from Ubuntu 24.04 packages plus the
 # first-party desktop. The image is not Ubuntu. No guest operating-system
@@ -124,7 +124,8 @@ EOF
 		"$REPO/docs/32-bit.md" "$REPO/docs/olympium-integration.md" \
 		"$ROOT/usr/share/doc/dev-desktop/"
 	cat > "$ROOT/usr/share/doc/dev-desktop/SOURCE" <<'EOF'
-First-party desktop source is Apache-2.0 and is the git tree that built this image.
+First-party desktop source is under daniel.ye 源码许可证（第 1.0 版）.
+The full text is the LICENSE file in the git tree that built this image.
 
 Third-party binary packages keep their own licenses. Copyright files are under
 /usr/share/doc. Corresponding Ubuntu source packages for the versions in

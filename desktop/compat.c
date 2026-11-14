@@ -1,6 +1,6 @@
 /*
  * Copyright 2026 Development Desktop contributors
- * SPDX-License-Identifier: Apache-2.0
+ * License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
  *
  * Reports package identity and the layers still required before a macOS or
  * iOS GUI application could run. It does not load, sign, or execute those

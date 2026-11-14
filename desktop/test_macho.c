@@ -1,6 +1,6 @@
 /*
  * Copyright 2026 Development Desktop contributors
- * SPDX-License-Identifier: Apache-2.0
+ * License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
  */
 #include "macho.h"
 

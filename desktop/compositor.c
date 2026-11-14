@@ -1,6 +1,6 @@
 /*
  * Copyright 2026 Development Desktop contributors
- * SPDX-License-Identifier: Apache-2.0
+ * License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
  *
  * Native Wayland compositor and shell. Window buffers are composited by
  * wlroots. The panel, dock, and launcher sample that framebuffer and run a

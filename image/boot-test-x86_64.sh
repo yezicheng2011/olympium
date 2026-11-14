@@ -1,6 +1,6 @@
 #!/bin/bash
 # Copyright 2026 Development Desktop contributors
-# SPDX-License-Identifier: Apache-2.0
+# License: daniel.ye 源码许可证（第 1.0 版）。全文见 LICENSE。
 # Boots the x86_64 ISO in QEMU and stores a VGA screenshot plus the serial log.
 set -euo pipefail
 if [ -e /dev/kvm ] && [ ! -w /dev/kvm ] && [ "$(id -u)" -ne 0 ]; then
