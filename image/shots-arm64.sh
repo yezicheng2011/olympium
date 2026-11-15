@@ -11,6 +11,10 @@ STAGE=${3:-/var/tmp/dev-live/iso-arm64}
 EXTRA=${4:-olympium.openfiles=1}
 NAME=${5:-arm64-files}
 PATTERN=${6:-window mapped: Files}
+# The staged kernel is readable by root only.
+if [ ! -r "$STAGE/boot/vmlinuz" ] && [ "$(id -u)" -ne 0 ]; then
+	exec sudo -E bash "$0" "$@"
+fi
 MON=/tmp/qemu-arm64.sock
 LOG=$OUT/style-${NAME}-serial.log
 mkdir -p "$OUT"
