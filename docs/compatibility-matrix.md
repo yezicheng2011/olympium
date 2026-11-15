@@ -2,7 +2,7 @@
 
 Levels mean what this image and the pinned Olympium revision actually do. They are not a promise that every application in a family runs.
 
-Pinned Olympium revision: `25a592cfd65a4f07449ca03e919bfa97626bb164` on `cursor/guest-runtime-site-9aa9`. This tree does not modify that repository. That revision's own policy refuses macOS and iOS guests on Linux, and it refuses IPA files even on a Mac.
+Olympium revision in the image: `517aaaa5409f227de42444cf16612d546c29251b` on `cursor/guest-runtime-site-9aa9`. This tree does not modify that repository. That revision's own policy refuses macOS and iOS guests on Linux, and it refuses IPA files even on a Mac.
 
 | Target | This live image | Olympium at the pin |
 | --- | --- | --- |

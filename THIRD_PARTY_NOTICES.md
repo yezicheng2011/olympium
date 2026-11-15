@@ -23,6 +23,6 @@ Components the desktop links directly:
 | DejaVu fonts | UI text | Bitstream Vera license |
 | Ubuntu base packages | libc, systemd, and the rest of the userspace | Each package's own copyright file |
 
-Olympium is not copied into this tree. Its license at the pinned commit is Apache-2.0 and stays with that project.
+Olympium source is not copied into this tree. When the image carries the Olympium runtime programs, they are built from commit `517aaaa5409f227de42444cf16612d546c29251b` of that project, and that project's own `LICENSE` and `NOTICE` files are installed unchanged at `/usr/share/doc/olympium-runtime/`. The runtime links the system copies of GTK 4 and libadwaita (LGPL-2.1-or-later), which stay under their own license.
 
 No Apple artwork, font, or framework is included.

@@ -1176,6 +1176,18 @@ static void write_shot(struct server *server, int width, int height) {
 	wl_display_terminate(server->wl_display);
 }
 
+/* The name the shell shows for a window. The Olympium runtime still titles
+ * its own window with its earlier project name; the shell shows the product
+ * name, the same one as its dock entry. Other windows keep their own title. */
+static const char *view_name(const struct view *view) {
+	const char *app_id = view->xdg_toplevel->app_id;
+	if (app_id != NULL && (strstr(app_id, "linkspan") != NULL || strstr(app_id, "olympium") != NULL)) {
+		return "Olympium";
+	}
+	const char *title = view->xdg_toplevel->title;
+	return (title != NULL && title[0] != '\0') ? title : NULL;
+}
+
 static int view_title_box(struct view *view, struct wlr_box *box) {
 	if (view->scene_tree == NULL || !view->scene_tree->node.enabled) {
 		return 0;
@@ -1187,8 +1199,10 @@ static int view_title_box(struct view *view, struct wlr_box *box) {
 	if (width < 80 || height < 40) {
 		return 0;
 	}
-	box->x = view->scene_tree->node.x + geo.x;
-	box->y = view->scene_tree->node.y + geo.y - TITLE_H;
+	/* The scene places the surface so that the tree origin is the window
+	 * geometry origin, whatever margin the client keeps around it. */
+	box->x = view->scene_tree->node.x;
+	box->y = view->scene_tree->node.y - TITLE_H;
 	box->width = width;
 	box->height = TITLE_H;
 	return 1;
@@ -1324,8 +1338,8 @@ static void output_frame(struct wl_listener *listener, void *data) {
 				break;
 			}
 		}
-		if (front != NULL && front->xdg_toplevel->title != NULL && front->xdg_toplevel->title[0] != '\0') {
-			snprintf(server->frame_title, sizeof server->frame_title, "%s", front->xdg_toplevel->title);
+		if (front != NULL && view_name(front) != NULL) {
+			snprintf(server->frame_title, sizeof server->frame_title, "%s", view_name(front));
 		} else {
 			snprintf(server->frame_title, sizeof server->frame_title, "%s", server->title);
 		}
@@ -1334,7 +1348,10 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			if (!view_title_box(view, &title)) {
 				continue;
 			}
-			int frame_h = title.height + view->xdg_toplevel->base->surface->current.height;
+			struct wlr_box frame_geo;
+			wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &frame_geo);
+			int frame_h = title.height + (frame_geo.height > 0 ? frame_geo.height
+				: view->xdg_toplevel->base->surface->current.height);
 			/* The shadow only changes when the window is resized. */
 			if (view->shadow == NULL || view->shadow_w != title.width || view->shadow_h != frame_h) {
 				wlr_texture_destroy(view->shadow);
@@ -1345,9 +1362,9 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			render_texture_at(server, output->wlr_output, view->shadow, title.x - 36, title.y - 36);
 			char saved[128];
 			snprintf(saved, sizeof saved, "%s", server->frame_title);
-			if (view->xdg_toplevel->title != NULL && view->xdg_toplevel->title[0] != '\0') {
+			if (view_name(view) != NULL) {
 				snprintf(server->frame_title, sizeof server->frame_title, "%s",
-					view->xdg_toplevel->title);
+					view_name(view));
 			}
 			struct wlr_texture *bar = make_chrome(server, title.x, title.y,
 				title.width, title.height, -12, 3);
@@ -1386,7 +1403,7 @@ static void output_frame(struct wl_listener *listener, void *data) {
 		/* A dock dot means that application has a window open right now. */
 		server->dock_running = 0;
 		wl_list_for_each(view, &server->views, link) {
-			const char *vt = view->xdg_toplevel->title;
+			const char *vt = view_name(view);
 			const char *va = view->xdg_toplevel->app_id;
 			for (int i = 0; i < APP_COUNT; i++) {
 				if (vt != NULL && strcmp(vt, APPS[i].label) == 0) {
@@ -2735,7 +2752,7 @@ static void release_chrome(struct server *server) {
 		struct view *open = NULL;
 		struct view *each;
 		wl_list_for_each(each, &server->views, link) {
-			const char *vt = each->xdg_toplevel->title;
+			const char *vt = view_name(each);
 			const char *va = each->xdg_toplevel->app_id;
 			if ((vt != NULL && strcmp(vt, APPS[server->press_app].label) == 0) ||
 					(va != NULL && strstr(va, "foot") != NULL &&
@@ -2841,8 +2858,9 @@ static void view_map(struct wl_listener *listener, void *data) {
 		wlr_scene_node_set_position(&view->scene_tree->node, x, y);
 		view->placed = 1;
 	}
-	wlr_log(WLR_INFO, "window mapped: %s",
-		view->xdg_toplevel->title != NULL ? view->xdg_toplevel->title : "untitled");
+	wlr_log(WLR_INFO, "window mapped: %s (app %s)",
+		view_name(view) != NULL ? view_name(view) : "untitled",
+		view->xdg_toplevel->app_id != NULL ? view->xdg_toplevel->app_id : "none");
 	focus_view(view, view->xdg_toplevel->base->surface);
 }
 
@@ -2874,6 +2892,13 @@ static void view_commit(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct view *view = wl_container_of(listener, view, commit);
 	if (view->xdg_toplevel->base->initial_commit) {
+		/* The shell draws the title bar, shadow, and corners. Telling the
+		 * client it is tiled makes toolkits that draw their own frame drop
+		 * their shadow margin, so there is one frame, not two. */
+		if (wl_resource_get_version(view->xdg_toplevel->resource) >= 2) {
+			wlr_xdg_toplevel_set_tiled(view->xdg_toplevel,
+				WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
+		}
 		wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
 	}
 }

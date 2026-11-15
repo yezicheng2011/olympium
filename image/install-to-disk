@@ -1,68 +1,160 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2026 Development Desktop contributors
 # License: daniel.ye Source License, Version 1.0. See LICENSE.
 #
-# Copies the running live system onto a disk. The caller must name the device
-# twice. This is a BIOS or UEFI installer for this image, not a general
-# distribution installer.
-set -eu
+# Copies the running live system onto a whole disk and makes that disk
+# bootable. The disk is erased. BIOS machines get an MBR disk with one
+# ext4 partition. UEFI machines get a GPT disk with an EFI partition and
+# an ext4 partition. It follows whichever firmware this boot used.
+set -euo pipefail
+
 YES=0
 if [ "${1:-}" = "--yes" ]; then
 	YES=1
 	shift
 fi
 DISK=${1:-${DEV_INSTALL_DISK:-}}
+TARGET=/mnt/olympium-target
+LABEL=olympium-root
+
+fail() {
+	echo "install-to-disk: $*" >&2
+	exit 1
+}
+
+if [ "$(id -u)" -ne 0 ]; then
+	fail "run this as root."
+fi
 if [ -z "$DISK" ] || [ ! -b "$DISK" ]; then
-	echo "Usage: install-to-disk /dev/sdX" >&2
-	echo "The device you name will be erased." >&2
+	echo "Usage: install-to-disk [--yes] /dev/sdX" >&2
+	echo "The whole disk you name is erased. Disks on this computer:" >&2
+	lsblk -dno NAME,SIZE,MODEL 2>/dev/null | sed 's/^/  \/dev\//' >&2 || true
 	exit 1
 fi
+if [ "$(lsblk -dno TYPE "$DISK")" != "disk" ]; then
+	fail "$DISK is not a whole disk. Name the disk, not a partition."
+fi
+if lsblk -no MOUNTPOINT "$DISK" | grep -q .; then
+	fail "$DISK has a mounted file system. It may be the disk this session started from."
+fi
+for tool in sfdisk mkfs.ext4 grub-install tar partprobe; do
+	command -v "$tool" >/dev/null || fail "$tool is not on this system, so nothing was changed."
+done
+# The copy needs room for the running system plus the boot files.
+need_kb=$(df -k --output=used / | tail -1 | tr -d ' ')
+have_kb=$(( $(lsblk -bdno SIZE "$DISK") / 1024 ))
+if [ "$have_kb" -lt $(( need_kb + need_kb / 4 + 600000 )) ]; then
+	fail "$DISK is too small: the system needs about $(( (need_kb + need_kb / 4 + 600000) / 1024 )) MB."
+fi
+
 if [ "$YES" -ne 1 ]; then
-	printf 'Type %s to erase it: ' "$DISK"
+	printf 'Everything on %s will be erased. Type %s to continue: ' "$DISK" "$DISK"
 	read -r answer
 	if [ "$answer" != "$DISK" ]; then
-		echo "Not confirmed." >&2
-		exit 1
+		fail "not confirmed. Nothing was changed."
 	fi
 fi
+
+EFI=0
 if [ -d /sys/firmware/efi ]; then
-	sfdisk "$DISK" <<EOF
+	EFI=1
+fi
+
+part() {
+	# /dev/sda -> /dev/sda1, /dev/nvme0n1 -> /dev/nvme0n1p1
+	case "$DISK" in
+		*[0-9]) echo "${DISK}p$1" ;;
+		*) echo "${DISK}$1" ;;
+	esac
+}
+
+cleanup() {
+	umount "$TARGET/boot/efi" 2>/dev/null || true
+	umount "$TARGET" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo "install-to-disk: partitioning $DISK ($([ "$EFI" -eq 1 ] && echo UEFI || echo BIOS))"
+wipefs -a "$DISK" >/dev/null
+if [ "$EFI" -eq 1 ]; then
+	sfdisk --quiet "$DISK" <<'EOF'
 label: gpt
 ,512MiB,U
 ,,L
 EOF
-	partprobe "$DISK" || true
-	ESP=$(lsblk -lnpo NAME "$DISK" | sed -n '2p')
-	ROOT=$(lsblk -lnpo NAME "$DISK" | sed -n '3p')
-	mkfs.vfat -F 32 "$ESP"
-	mkfs.ext4 -F -L devdesk-root "$ROOT"
-	mkdir -p /mnt/target /mnt/esp
-	mount "$ROOT" /mnt/target
-	mkdir -p /mnt/target/boot/efi
-	mount "$ESP" /mnt/target/boot/efi
+	ESP=$(part 1)
+	ROOTDEV=$(part 2)
 else
-	sfdisk "$DISK" <<EOF
+	sfdisk --quiet "$DISK" <<'EOF'
 label: dos
 ,,L,*
 EOF
-	partprobe "$DISK" || true
-	ROOT=$(lsblk -lnpo NAME "$DISK" | sed -n '2p')
-	mkfs.ext4 -F -L devdesk-root "$ROOT"
-	mkdir -p /mnt/target
-	mount "$ROOT" /mnt/target
+	ESP=""
+	ROOTDEV=$(part 1)
 fi
+partprobe "$DISK" || true
+udevadm settle || true
+[ -b "$ROOTDEV" ] || fail "the new partition $ROOTDEV did not appear."
+
+mkfs.ext4 -q -F -L "$LABEL" "$ROOTDEV"
+mkdir -p "$TARGET"
+mount "$ROOTDEV" "$TARGET"
+if [ "$EFI" -eq 1 ]; then
+	mkfs.vfat -F 32 -n OLYMPIUMEFI "$ESP" >/dev/null
+	mkdir -p "$TARGET/boot/efi"
+	mount "$ESP" "$TARGET/boot/efi"
+fi
+
+echo "install-to-disk: copying the system"
 tar -C / -cf - --one-file-system \
 	--exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run \
-	--exclude=./tmp --exclude=./mnt . | tar -C /mnt/target -xf -
-mkdir -p /mnt/target/proc /mnt/target/sys /mnt/target/dev /mnt/target/run /mnt/target/tmp
-if [ -d /sys/firmware/efi ]; then
-	mount --bind /dev /mnt/target/dev
-	mount --bind /proc /mnt/target/proc
-	mount --bind /sys /mnt/target/sys
-	chroot /mnt/target grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=devdesk --removable || \
-		chroot /mnt/target grub-install --target=arm64-efi --efi-directory=/boot/efi --bootloader-id=devdesk --removable
-	umount /mnt/target/sys /mnt/target/proc /mnt/target/dev
+	--exclude=./tmp --exclude=./mnt --exclude=./media \
+	--exclude=./var/lib/olympium --exclude=./etc/fstab . | tar -C "$TARGET" -xf -
+mkdir -p "$TARGET/proc" "$TARGET/sys" "$TARGET/dev" "$TARGET/run" "$TARGET/mnt" "$TARGET/media"
+install -d -m 1777 "$TARGET/tmp"
+
+{
+	echo "LABEL=$LABEL / ext4 errors=remount-ro 0 1"
+	if [ "$EFI" -eq 1 ]; then
+		echo "LABEL=OLYMPIUMEFI /boot/efi vfat umask=0077 0 1"
+	fi
+} > "$TARGET/etc/fstab"
+: > "$TARGET/etc/machine-id"
+
+KERNEL=$(cd "$TARGET/boot" && ls vmlinuz-* 2>/dev/null | sort -V | tail -1)
+[ -n "$KERNEL" ] || fail "no kernel was copied to $TARGET/boot."
+VERSION=${KERNEL#vmlinuz-}
+[ -f "$TARGET/boot/initrd.img-$VERSION" ] || fail "no initrd for kernel $VERSION was copied."
+
+mkdir -p "$TARGET/boot/grub"
+cat > "$TARGET/boot/grub/grub.cfg" <<EOF
+set timeout=3
+set default=0
+insmod part_msdos
+insmod part_gpt
+insmod ext2
+search --no-floppy --label $LABEL --set=root
+menuentry "Olympium" {
+	linux /boot/$KERNEL root=LABEL=$LABEL ro quiet
+	initrd /boot/initrd.img-$VERSION
+}
+menuentry "Olympium, contrast" {
+	linux /boot/$KERNEL root=LABEL=$LABEL ro quiet olympium.contrast=1
+	initrd /boot/initrd.img-$VERSION
+}
+EOF
+
+echo "install-to-disk: installing the boot loader"
+if [ "$EFI" -eq 1 ]; then
+	case "$(uname -m)" in
+		x86_64) grub_target=x86_64-efi ;;
+		aarch64) grub_target=arm64-efi ;;
+		*) fail "no boot loader target for $(uname -m)." ;;
+	esac
+	grub-install --target="$grub_target" --efi-directory="$TARGET/boot/efi" \
+		--boot-directory="$TARGET/boot" --removable --no-nvram
 else
-	grub-install --boot-directory=/mnt/target/boot "$DISK"
+	grub-install --target=i386-pc --boot-directory="$TARGET/boot" "$DISK"
 fi
-echo "Installed onto $ROOT. Firmware support is the path this machine used." 
+sync
+echo "install-to-disk: done. Olympium is on $DISK ($ROOTDEV). Remove the live medium and restart."

@@ -80,7 +80,7 @@ boot menu "olympium.openmenu=1" "demo: menu open" 3
 boot files "olympium.openfiles=1" "window mapped: Files" 4
 boot settings "olympium.opensettings=1" "window mapped: Settings" 4
 boot terminal "olympium.openterm=1" "window mapped" 4
-boot olympium "olympium.openruntime=1" "window mapped" 4
+boot olympium "olympium.openruntime=1" "window mapped" 6
 boot launchpad "olympium.openlaunch=1" "demo: launchpad open" 3
 boot nag "olympium.nag=1" "compositor on WAYLAND_DISPLAY" 6
 boot after-nag "olympium.nag=1 olympium.nagdismiss=1 olympium.openfiles=1" "reminder closed" 8

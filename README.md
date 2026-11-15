@@ -15,7 +15,8 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 - Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
 - Settings: appearance, the driver list, compatibility, Olympium, license, and about.
 - Alt-drag moves a window.
-- The dock entry Olympium runs `olympium-linux` when that binary is installed. Otherwise it opens an explanation. See `docs/olympium-integration.md`.
+- The dock entry Olympium starts the Olympium runtime, a separate program that the image build copies in when a prebuilt copy is on the build machine. Without it the entry opens an explanation. See `docs/olympium-integration.md`.
+- `install-to-disk /dev/sdX` copies the running system onto a whole disk and makes it bootable, for BIOS or UEFI, whichever this boot used.
 
 What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation, no Mission Control, no Spotlight panel behind the search glyph, and no quick-settings panel behind its glyph yet.
 
@@ -67,7 +68,7 @@ qemu-system-aarch64 -machine virt -cpu max -m 2048 \
 
 That aarch64 command is emulated when the host is x86_64. It does not show that the image boots a Raspberry Pi or Apple Silicon. Details are in `docs/firmware.md`. There is no i686 or armhf image; see `docs/32-bit.md`.
 
-`install-to-disk /dev/sdX` from a terminal on the live system copies the running tree onto a disk after the device name is typed a second time.
+`install-to-disk /dev/sdX` from a terminal on the live system erases that disk, copies the running system onto it, and installs the boot loader. It asks you to type the device name before it changes anything.
 
 ## macOS and iOS applications
 
@@ -75,7 +76,7 @@ Instruction translation and an application ABI are different problems. A transla
 
 `dev-compat probe FILE` identifies a Mach-O or fat header and stops. It does not execute it. A Linux program built here is not evidence of an original macOS or iOS GUI application.
 
-Olympium at `25a592cfd65a4f07449ca03e919bfa97626bb164` refuses macOS and iOS guests on Linux. This repository does not change that project. No Apple system image, Google Play image, or Windows image is bundled. See `docs/guest-images.md`.
+The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` keeps macOS and iOS software in its library and does not start it. This repository does not change that project. No Apple system image, Google Play image, or Windows image is bundled. See `docs/guest-images.md`.
 
 ## What this environment actually booted
 

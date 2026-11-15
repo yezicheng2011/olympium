@@ -212,7 +212,9 @@ install_packages() {
 
 stage_desktop() {
 	mount_chroot
-	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends parted dosfstools kmod || true
+	# install-to-disk needs sfdisk (fdisk) and grub-install (grub2-common).
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		parted dosfstools kmod fdisk grub2-common
 	# The shell, Files, and Settings are set in the Ubuntu typeface. Without it
 	# Pango falls back to another face and every label changes width.
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends fonts-ubuntu
@@ -235,6 +237,7 @@ stage_desktop() {
 	install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
 	install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
 	install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
+	install -m 755 "$REPO/image/install-to-disk" "$ROOT/usr/bin/install-to-disk"
 	install -D -m 644 "$REPO/image/foot.ini" "$ROOT/etc/xdg/foot/foot.ini"
 	install -d "$ROOT/usr/share/olympium"
 	install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
@@ -266,14 +269,81 @@ and http://ports.ubuntu.com/ubuntu-ports (arm64). This image does not relicense
 those packages.
 
 No macOS, iOS, Windows, or Google Play image is included. Olympium source is
-not vendored. The integration pin is commit
-25a592cfd65a4f07449ca03e919bfa97626bb164 of the separate Olympium repository.
+not vendored. When this image carries the Olympium runtime programs, their
+commit, license, and notice are in /usr/share/doc/olympium-runtime.
 EOF
 	chroot "$ROOT" dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' \
 		> "$ROOT/usr/share/doc/dev-desktop/sbom.tsv"
 	cp "$ROOT/usr/share/doc/dev-desktop/sbom.tsv" "$WORK-sbom.tsv"
 	rm -f "$ROOT/var/cache/apt/archives/"*.deb || true
 	rm -rf "$ROOT/var/lib/apt/lists/"* || true
+}
+
+# The Olympium runtime is a separate program with its own repository and its
+# own license. This tree never holds its source. When a prebuilt copy for this
+# architecture is on the build machine, it goes into the image together with
+# that repository's LICENSE and NOTICE. Without one, the dock entry opens an
+# explanation instead, and the build says so.
+RUNTIME_COMMIT=517aaaa5409f227de42444cf16612d546c29251b
+stage_runtime() {
+	local dir
+	if [ "$ARCH" = amd64 ]; then
+		dir=${OLYMPIUM_RUNTIME_AMD64:-/var/tmp/aaa-out}
+	else
+		dir=${OLYMPIUM_RUNTIME_ARM64:-/var/tmp/aaa-out-arm64}
+	fi
+	local want="x86-64"
+	if [ "$ARCH" = arm64 ]; then
+		want="aarch64"
+	fi
+	rm -f "$ROOT/usr/bin/olympium-linux" "$ROOT/usr/bin/linkspan-linux" \
+		"$ROOT/usr/bin/olympium" "$ROOT/usr/bin/linkspan"
+	rm -rf "$ROOT/usr/share/doc/olympium-runtime"
+	if [ ! -x "$dir/olympium-linux" ] || ! file "$dir/olympium-linux" | grep -q "$want"; then
+		echo "runtime: no $ARCH build at $dir; the image ships without the Olympium runtime"
+		return
+	fi
+	if [ ! -f "$dir/LICENSE" ] || [ ! -f "$dir/NOTICE" ]; then
+		echo "runtime: $dir has no LICENSE and NOTICE, so the binary is not installed" >&2
+		exit 1
+	fi
+	mount_chroot
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		libadwaita-1-0 libgtk-4-1 curl
+	for name in olympium-linux linkspan-linux olympium linkspan; do
+		if [ -x "$dir/$name" ]; then
+			install -m 755 "$dir/$name" "$ROOT/usr/bin/$name"
+		fi
+	done
+	if [ -d "$dir/share/icons/hicolor" ]; then
+		mkdir -p "$ROOT/usr/share/icons/hicolor"
+		cp -a "$dir/share/icons/hicolor/." "$ROOT/usr/share/icons/hicolor/"
+	fi
+	install -d "$ROOT/usr/share/doc/olympium-runtime"
+	install -m 644 "$dir/LICENSE" "$dir/NOTICE" "$ROOT/usr/share/doc/olympium-runtime/"
+	if [ -f "$dir/LICENSE.zh.txt" ]; then
+		install -m 644 "$dir/LICENSE.zh.txt" "$ROOT/usr/share/doc/olympium-runtime/"
+	fi
+	{
+		echo "The Olympium runtime programs in /usr/bin (olympium-linux, linkspan-linux,"
+		echo "olympium, linkspan) were built without source changes from commit"
+		echo "$RUNTIME_COMMIT of the separate Olympium repository."
+		echo "Their license and notice are the LICENSE and NOTICE files beside this one."
+		echo "They are that project's files, copied as they are."
+		echo
+		(cd "$ROOT/usr/bin" && sha256sum olympium-linux linkspan-linux olympium linkspan 2>/dev/null)
+	} > "$ROOT/usr/share/doc/olympium-runtime/SOURCE"
+	# The shell draws window controls. GTK 4 programs keep their header bar
+	# but leave the buttons to the shell, and use the same typeface.
+	install -d "$ROOT/etc/gtk-4.0"
+	printf '[Settings]\ngtk-decoration-layout=:\ngtk-font-name=Ubuntu 12\n' > "$ROOT/etc/gtk-4.0/settings.ini"
+	if ! chroot "$ROOT" sh -c 'ldd /usr/bin/olympium-linux | grep -q "not found"'; then
+		echo "runtime: olympium-linux installed, all libraries resolve"
+	else
+		chroot "$ROOT" ldd /usr/bin/olympium-linux | grep "not found" >&2
+		echo "runtime: olympium-linux has missing libraries" >&2
+		exit 1
+	fi
 }
 
 pack_iso() {
@@ -338,6 +408,7 @@ fi
 install_drivers
 verify_drivers
 mkdir -p "$WORK"
+stage_runtime
 stage_desktop
 if [ "$ARCH" = arm64 ]; then
 	# Rebuild the desktop against the arm64 sysroot. The host binaries are amd64.

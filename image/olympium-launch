@@ -2,9 +2,12 @@
 # Copyright 2026 Development Desktop contributors
 # License: daniel.ye Source License, Version 1.0. See LICENSE.
 #
-# Read-only integration with Olympium at a pinned revision.
-# This script does not modify that repository.
-PIN=25a592cfd65a4f07449ca03e919bfa97626bb164
+# Starts the Olympium runtime when this image carries it. The runtime is a
+# separate program built from its own repository; this script only runs it.
+# Without it, the dock entry opens the explanation in Settings.
+# The shell has no GPU path for clients, so GTK draws with its software renderer.
+export GDK_BACKEND="${GDK_BACKEND:-wayland}"
+export GSK_RENDERER="${GSK_RENDERER:-cairo}"
 for bin in /usr/bin/olympium-linux /usr/bin/linkspan-linux /usr/local/bin/olympium-linux; do
 	if [ -x "$bin" ]; then
 		exec "$bin" "$@"

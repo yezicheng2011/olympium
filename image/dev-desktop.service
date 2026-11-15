@@ -1,5 +1,5 @@
 [Unit]
-Description=Temporary development desktop
+Description=Olympium desktop
 After=systemd-udev-settle.service systemd-user-sessions.service
 Wants=systemd-udev-settle.service
 [Service]

@@ -19,5 +19,11 @@ if grep -q 'olympium.openruntime=1' /proc/cmdline 2>/dev/null; then
 fi
 install_disk=$(sed -n 's/.*olympium.install=\([^ ]*\).*/\1/p' /proc/cmdline 2>/dev/null || true)
 if [ -n "$install_disk" ]; then
-	/usr/libexec/dev-desktop/install-to-disk --yes "$install_disk" >/tmp/install.log 2>&1 || true
+	# An unattended install for a boot test. The result line reaches the session log.
+	if /usr/libexec/dev-desktop/install-to-disk --yes "$install_disk" >/tmp/install.log 2>&1; then
+		echo "install-to-disk result: ok on $install_disk"
+	else
+		echo "install-to-disk result: failed on $install_disk"
+		tail -n 5 /tmp/install.log
+	fi
 fi
