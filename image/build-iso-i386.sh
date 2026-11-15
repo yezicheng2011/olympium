@@ -153,7 +153,7 @@ install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" \
 	"$ROOT/usr/share/doc/dev-desktop" "$ROOT/etc/xdg/foot"
 install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 	"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
-	"$ROOT/tmp/desktop/dev-compat" "$ROOT/usr/bin/"
+	"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
 install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 	"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
 	"$REPO/image/guest-fetch.sh" "$REPO/image/driver-report" "$REPO/image/driver-install" \

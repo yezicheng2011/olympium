@@ -13,6 +13,7 @@ stage_bitness() {
 		"$ROOT/root/.local/share/olympium"
 	install -m 755 "$bins/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
 	install -m 755 "$bins/olympium-testapp" "$ROOT/usr/bin/olympium-testapp"
+	install -m 755 "$bins/dev-install" "$ROOT/usr/bin/dev-install"
 	install -m 755 "$REPO/image/olympium-run64" "$ROOT/usr/libexec/dev-desktop/olympium-run64"
 	install -m 755 "$REPO/image/olympium-hello32" "$ROOT/usr/bin/olympium-hello32"
 	install -m 644 "$REPO/image/olympium-hello32.desktop" \

@@ -14,7 +14,8 @@ Olympium revision in the image: `517aaaa5409f227de42444cf16612d546c29251b` on `c
 | OpenHarmony HAP | Not bundled. The dock launches Olympium when that binary has been installed separately. | Linux launch/stop of a downloaded image is work in progress there, with host input. The image is not in this ISO. |
 | Android APK via Cuttlefish | Not bundled. No Google Play. | A Linux Cuttlefish path exists there and is still being integrated. It is not a result of this ISO. |
 | Windows executable | Not bundled. Wine is not installed. No Windows license is implied. | Separate from this desktop. |
+| Install window (`dev-install`) | Not in the checksummed ISOs. On the build machine, a native Linux program can be imported after consent and launched; other formats are identified and not installed. | The desktop calls `classify`, `plan`, and, after consent, `add`. It does not call `run`, `fetch`, or `guest`. |
 
-Darling is not built into this image. Integrating it would still not be proof that arbitrary AppKit applications run. iOS is not part of this system.
+Darling is not built into this image. Integrating it would still not be proof that arbitrary AppKit applications run. iOS is not part of this system. The install matrix, including what was actually executed, is `docs/desktop-apps.md`. The fields this desktop reads from the pinned command are `docs/runtime-desktop.md`.
 
 `dev-compat matrix` prints the same distinction on the running system.

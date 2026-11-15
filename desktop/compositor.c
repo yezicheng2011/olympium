@@ -207,6 +207,11 @@ struct server {
 	unsigned dock_running;
 	char pad_filter[64];
 	struct pad_app pad[48];
+	struct pinned_app {
+		char name[48];
+		char path[192];
+	} pinned[4];
+	int pinned_count;
 	char shot_path[256];
 	int shot_written;
 	int control_fd;
@@ -312,8 +317,49 @@ static int app_matches(const struct app_entry *app, const char *filter) {
 	return strcasestr(app->label, filter) != NULL || strcasestr(app->id, filter) != NULL;
 }
 
+static int dock_n(const struct server *server) {
+	return APP_COUNT + server->pinned_count;
+}
+
+static void load_pins(struct server *server) {
+	const char *desk = getenv("OLYMPIUM_DESK_HOME");
+	char path[512];
+	if (desk != NULL && desk[0] != '\0') {
+		snprintf(path, sizeof path, "%s/pinned", desk);
+	} else {
+		const char *home = getenv("HOME");
+		if (home == NULL || home[0] == '\0') {
+			server->pinned_count = 0;
+			return;
+		}
+		snprintf(path, sizeof path, "%s/.local/share/olympium-desk/pinned", home);
+	}
+	FILE *f = fopen(path, "r");
+	server->pinned_count = 0;
+	if (f == NULL) {
+		return;
+	}
+	char line[256];
+	while (server->pinned_count < 4 && fgets(line, sizeof line, f) != NULL) {
+		line[strcspn(line, "\r\n")] = '\0';
+		char *tab = strchr(line, '\t');
+		if (tab == NULL || tab == line || tab[1] == '\0') {
+			continue;
+		}
+		*tab = '\0';
+		struct pinned_app *pin = &server->pinned[server->pinned_count];
+		snprintf(pin->name, sizeof pin->name, "%s", line);
+		snprintf(pin->path, sizeof pin->path, "%s", tab + 1);
+		if (access(pin->path, X_OK) == 0) {
+			server->pinned_count++;
+		}
+	}
+	fclose(f);
+}
+
 static void dock_box(const struct server *server, struct wlr_box *box) {
-	int width = 16 + APP_COUNT * DOCK_SLOT;
+	load_pins((struct server *)server);
+	int width = 16 + dock_n(server) * DOCK_SLOT;
 	if (width > server->screen_w - 48) {
 		width = server->screen_w - 48;
 	}
@@ -344,7 +390,7 @@ static int dock_app_at(const struct server *server, double x, double y) {
 		return -1;
 	}
 	int index = (int)((x - dock.x - 8) / DOCK_SLOT);
-	if (index < 0 || index >= APP_COUNT) {
+	if (index < 0 || index >= dock_n(server)) {
 		return -1;
 	}
 	return index;
@@ -1019,7 +1065,8 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		return;
 	}
 	if (which == 1) {
-		for (int i = 0; i < APP_COUNT; i++) {
+		load_pins(server);
+		for (int i = 0; i < dock_n(server); i++) {
 			double ix = 8 + i * DOCK_SLOT + (DOCK_SLOT - 48) / 2.0;
 			double iy = 14;
 			double scale = (server->hover_app == i) ? 1.18 : 1.0;
@@ -1027,7 +1074,7 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 			cairo_translate(cr, ix + 24, iy + 24);
 			cairo_scale(cr, scale, scale);
 			cairo_translate(cr, -24, -24);
-			draw_icon(cr, APPS[i].id, 0, 0);
+			draw_icon(cr, i < APP_COUNT ? APPS[i].id : "installed", 0, 0);
 			cairo_restore(cr);
 			if (server->dock_running & (1u << i)) {
 				cairo_set_source_rgba(cr, 0.20, 0.22, 0.26, 0.85);
@@ -1450,11 +1497,13 @@ static void output_frame(struct wl_listener *listener, void *data) {
 		dock = make_chrome(server, dockb.x, dockb.y, dockb.width, dockb.height, 20, 1);
 		render_texture_at(server, output->wlr_output, panel, 0, 0);
 		render_texture_at(server, output->wlr_output, dock, dockb.x, dockb.y);
-		if (server->hover_app >= 0 && server->hover_app < APP_COUNT) {
+		if (server->hover_app >= 0 && server->hover_app < dock_n(server)) {
 			char saved[128];
 			snprintf(saved, sizeof saved, "%s", server->frame_title);
-			snprintf(server->frame_title, sizeof server->frame_title, "%s",
-				APPS[server->hover_app].label);
+			const char *tip_label = server->hover_app < APP_COUNT
+				? APPS[server->hover_app].label
+				: server->pinned[server->hover_app - APP_COUNT].name;
+			snprintf(server->frame_title, sizeof server->frame_title, "%s", tip_label);
 			cairo_surface_t *probe = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 4, 4);
 			cairo_t *probe_cr = cairo_create(probe);
 			int tip_w = paint_text(probe_cr, "Ubuntu Medium 12", server->frame_title, 0, 0, 0, 0, 0) + 22;
@@ -2246,6 +2295,73 @@ static void pad_tool(struct server *server, const char *name, const char *progra
 	pad_add(server, name, cmd, icon, group, 0);
 }
 
+static void pad_scan_desktops(struct server *server, const char *dirpath) {
+	DIR *dir = opendir(dirpath);
+	if (dir == NULL) {
+		return;
+	}
+	struct dirent *ent;
+	while ((ent = readdir(dir)) != NULL) {
+		if (!strstr(ent->d_name, ".desktop")) {
+			continue;
+		}
+		char path[512];
+		snprintf(path, sizeof path, "%s/%s", dirpath, ent->d_name);
+		FILE *f = fopen(path, "r");
+		if (f == NULL) {
+			continue;
+		}
+		char name[48] = "";
+		char exec[160] = "";
+		int hidden = 0;
+		int in_term = 0;
+		char line[256];
+		while (fgets(line, sizeof line, f) != NULL) {
+			line[strcspn(line, "\r\n")] = '\0';
+			if (strcmp(line, "NoDisplay=true") == 0) {
+				hidden = 1;
+			} else if (strcmp(line, "Terminal=true") == 0) {
+				in_term = 1;
+			} else if (strncmp(line, "Name=", 5) == 0 && name[0] == '\0') {
+				snprintf(name, sizeof name, "%.47s", line + 5);
+			} else if (strncmp(line, "Exec=", 5) == 0 && exec[0] == '\0') {
+				char *token = line + 5;
+				token[strcspn(token, " \t%")] = '\0';
+				if (token[0] == '/') {
+					snprintf(exec, sizeof exec, "%.159s", token);
+				} else {
+					snprintf(exec, sizeof exec, "/usr/bin/%.140s", token);
+				}
+			}
+		}
+		fclose(f);
+		if (hidden || name[0] == '\0' || exec[0] == '\0' || access(exec, X_OK) != 0) {
+			continue;
+		}
+		if (strncmp(name, "Foot", 4) == 0 || strncmp(name, "Python", 6) == 0) {
+			continue;
+		}
+		int already = 0;
+		for (int j = 0; j < server->pad_count; j++) {
+			if (strcmp(server->pad[j].name, name) == 0) {
+				already = 1;
+				break;
+			}
+		}
+		if (already) {
+			continue;
+		}
+		char cmd[240];
+		if (in_term) {
+			snprintf(cmd, sizeof cmd, "/usr/bin/foot -e %s", exec);
+		} else {
+			snprintf(cmd, sizeof cmd, "%s", exec);
+		}
+		pad_add(server, name, cmd, "installed", "", 0);
+	}
+	closedir(dir);
+}
+
 static void pad_load(struct server *server) {
 	server->pad_count = 0;
 	for (int i = 0; i < APP_COUNT; i++) {
@@ -2288,69 +2404,18 @@ static void pad_load(struct server *server) {
 	pad_tool(server, "Applications", "/usr/bin/dev-files", "/usr/bin/dev-files /usr/bin", "files", "Places");
 	pad_tool(server, "Computer", "/usr/bin/dev-files", "/usr/bin/dev-files /", "disks", "Places");
 	/* Installed desktop entries. Terminal programs open inside the terminal. */
-	DIR *dir = opendir("/usr/share/applications");
-	if (dir != NULL) {
-		struct dirent *ent;
-		while ((ent = readdir(dir)) != NULL) {
-			if (!strstr(ent->d_name, ".desktop")) {
-				continue;
-			}
-			char path[512];
-			snprintf(path, sizeof path, "/usr/share/applications/%s", ent->d_name);
-			FILE *f = fopen(path, "r");
-			if (f == NULL) {
-				continue;
-			}
-			char name[48] = "";
-			char exec[160] = "";
-			int hidden = 0;
-			int in_term = 0;
-			char line[256];
-			while (fgets(line, sizeof line, f) != NULL) {
-				line[strcspn(line, "\r\n")] = '\0';
-				if (strcmp(line, "NoDisplay=true") == 0) {
-					hidden = 1;
-				} else if (strcmp(line, "Terminal=true") == 0) {
-					in_term = 1;
-				} else if (strncmp(line, "Name=", 5) == 0 && name[0] == '\0') {
-					snprintf(name, sizeof name, "%.47s", line + 5);
-				} else if (strncmp(line, "Exec=", 5) == 0 && exec[0] == '\0') {
-					char *token = line + 5;
-					token[strcspn(token, " \t%")] = '\0';
-					if (token[0] == '/') {
-						snprintf(exec, sizeof exec, "%.159s", token);
-					} else {
-						snprintf(exec, sizeof exec, "/usr/bin/%.140s", token);
-					}
-				}
-			}
-			fclose(f);
-			if (hidden || name[0] == '\0' || exec[0] == '\0' || access(exec, X_OK) != 0) {
-				continue;
-			}
-			if (strncmp(name, "Foot", 4) == 0 || strncmp(name, "Python", 6) == 0) {
-				/* The terminal and Python are already listed above. */
-				continue;
-			}
-			int already = 0;
-			for (int j = 0; j < server->pad_count; j++) {
-				if (strcmp(server->pad[j].name, name) == 0) {
-					already = 1;
-					break;
-				}
-			}
-			if (already) {
-				continue;
-			}
-			char cmd[240];
-			if (in_term) {
-				snprintf(cmd, sizeof cmd, "/usr/bin/foot -e %s", exec);
-			} else {
-				snprintf(cmd, sizeof cmd, "%s", exec);
-			}
-			pad_add(server, name, cmd, "generic", "", 0);
-		}
-		closedir(dir);
+	pad_scan_desktops(server, "/usr/share/applications");
+	const char *home = getenv("HOME");
+	if (home != NULL && home[0] != '\0') {
+		char user_apps[512];
+		snprintf(user_apps, sizeof user_apps, "%s/.local/share/applications", home);
+		pad_scan_desktops(server, user_apps);
+	}
+	const char *desk_home = getenv("OLYMPIUM_DESK_HOME");
+	if (desk_home != NULL && desk_home[0] != '\0') {
+		char desk_apps[512];
+		snprintf(desk_apps, sizeof desk_apps, "%s/applications", desk_home);
+		pad_scan_desktops(server, desk_apps);
 	}
 	const char *folders[] = {"Utilities", "Places"};
 	for (int k = 0; k < 2; k++) {
@@ -2785,6 +2850,15 @@ static void release_chrome(struct server *server) {
 			server->contrast ? "Contrast mode" : "Glass mode");
 	} else if (server->press_brand && hit_brand(server, x, y)) {
 		server->open_menu = server->brand_menu_was_open ? -1 : MENU_DRAGON;
+	} else if (server->press_app >= APP_COUNT &&
+			server->press_app == dock_app_at(server, x, y)) {
+		int pin = server->press_app - APP_COUNT;
+		if (pin >= 0 && pin < server->pinned_count) {
+			server->launchpad = 0;
+			spawn2(server->pinned[pin].path, NULL);
+			snprintf(server->notice, sizeof server->notice, "Launched %s",
+				server->pinned[pin].name);
+		}
 	} else if (server->press_app >= 0 && server->press_app == dock_app_at(server, x, y)) {
 		struct view *open = NULL;
 		struct view *each;

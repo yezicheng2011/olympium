@@ -8,7 +8,7 @@ GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 
 .PHONY: all test clean
 
-all: dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp test-blur test-macho splash.png
+all: dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install test-blur test-macho splash.png
 
 splash.png: splash.c
 	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS)
@@ -35,6 +35,9 @@ olympium-run: run.c
 olympium-testapp: testapp.c
 	$(CC) $(CFLAGS) -o $@ testapp.c $(GTK_FLAGS)
 
+dev-install: install.c
+	$(CC) $(CFLAGS) -o $@ install.c $(GTK_FLAGS)
+
 test-blur: test_blur.c blur.c blur.h
 	$(CC) $(CFLAGS) -o $@ test_blur.c blur.c
 
@@ -46,4 +49,4 @@ test: test-blur test-macho
 	./test-macho
 
 clean:
-	rm -f dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp test-blur test-macho splash-gen splash.png
+	rm -f dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install test-blur test-macho splash-gen splash.png

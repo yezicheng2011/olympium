@@ -6,6 +6,7 @@ desktop/dev-swatch
 desktop/dev-compat
 desktop/olympium-run
 desktop/olympium-testapp
+desktop/dev-install
 desktop/test-blur
 desktop/test-macho
 build/

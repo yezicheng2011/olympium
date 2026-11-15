@@ -228,7 +228,7 @@ stage_desktop() {
 		"$ROOT/usr/share/doc/dev-desktop"
 	install -m 755 "$REPO/desktop/dev-compositor" "$REPO/desktop/dev-files" \
 		"$REPO/desktop/dev-settings" "$REPO/desktop/dev-swatch" \
-		"$REPO/desktop/dev-compat" "$ROOT/usr/bin/"
+		"$REPO/desktop/dev-compat" "$REPO/desktop/dev-install" "$ROOT/usr/bin/"
 	install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 		"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
 		"$REPO/image/guest-fetch.sh" \
@@ -559,7 +559,7 @@ if [ "$ARCH" = arm64 ]; then
 	chroot "$ROOT" make -C /tmp/desktop clean all
 	install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 		"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
-		"$ROOT/tmp/desktop/dev-compat" "$ROOT/usr/bin/"
+		"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
 	file "$ROOT/usr/bin/dev-compositor"
 fi
 # shellcheck source=image/stage-bitness.sh

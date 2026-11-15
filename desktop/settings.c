@@ -299,7 +299,11 @@ static GtkWidget *page_compat(void) {
 		"It does not start macOS software. A Mach-O header is identified and not executed. "
 		"No Apple operating system, framework, font, or artwork is included. "
 		"Code signatures and DRM are not bypassed.\n\n"
-		"iOS is not part of this system.", NULL);
+		"iOS is not part of this system.\n\n"
+		"Double-clicking a package opens Install. Nothing runs until you consent. "
+		"A Linux program can then be launched in its own window. "
+		"Other package types are identified and not installed until that exact step has been tested.",
+		NULL);
 	gtk_box_pack_start(GTK_BOX(box), info, FALSE, FALSE, 0);
 	return box;
 }

@@ -201,13 +201,19 @@ static void open_entry(const char *name) {
 		go(next);
 		return;
 	}
-	if (!S_ISREG(st.st_mode) || (st.st_mode & 0111) == 0) {
+	if (!S_ISREG(st.st_mode)) {
+		return;
+	}
+	/* Packages and programs open in the install window. Nothing runs here. */
+	if (access("/usr/bin/dev-install", X_OK) != 0) {
+		gtk_label_set_text(GTK_LABEL(status_label),
+			"Install is not on this image. The file was not run.");
 		return;
 	}
 	char *quoted = g_shell_quote(next);
-	char *cmd = g_strdup_printf(
-		"/usr/bin/foot -T Program -e /usr/libexec/dev-desktop/olympium-run --hold %s", quoted);
+	char *cmd = g_strdup_printf("/usr/bin/dev-install open %s", quoted);
 	g_spawn_command_line_async(cmd, NULL);
+	gtk_label_set_text(GTK_LABEL(status_label), "Opened the install window. Nothing ran yet.");
 	g_free(cmd);
 	g_free(quoted);
 }

@@ -20,3 +20,7 @@ The window opens under this desktop and lists programs, engines, runtimes, compa
 It is work in progress. No guest image is in the ISO; the runtime downloads a guest image only when asked to, from that image's own source. Wine, Flatpak, Android tools, and OpenHarmony tools are not installed, so the engines that need them report them missing. macOS software is kept in its library and is not started; that is the runtime's own policy and this image does not patch it. iOS is not part of this system. The dock's Test App is a Linux program, and the runtime's library lists that same program as a Linux executable. Some guest paths in that revision write their captures to a fixed directory used during its development. http and https links open Firefox, which this image installs from Mozilla's own package archive.
 
 Pure software x86/ARM translation belongs in the Olympium tree. This desktop stays native to each ISO architecture and does not require KVM for its own display. QEMU TCG used to boot an arm64 ISO is not Apple Silicon support and is not the Olympium translator.
+
+## Desktop install window
+
+`dev-install` talks to the `olympium` command that is already installed. It does not assume a newer runtime. The commands it calls, the JSON fields it reads, and the fields it ignores are in `docs/runtime-desktop.md`. A replacement runtime has to keep those results, or the desktop will treat the file as not launchable. This tree does not copy a new binary in place of commit `517aaaa5409f227de42444cf16612d546c29251b`.

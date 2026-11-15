@@ -89,9 +89,15 @@ The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that pr
 
 `dev-compat probe FILE` identifies a Mach-O or fat header and stops. `docs/isa-and-abi.md` and `docs/compatibility-matrix.md` are the current matrix. No Apple, Google Play, or Windows system image is bundled. See `docs/guest-images.md`.
 
+## Installing a program
+
+Double-clicking a file in Files opens Install. The file is not run. A Linux program whose plan is a native process can be imported after a checkbox, then launched. Launch uses `olympium-run` when that helper is installed, so a 32-bit program on a 64-bit CPU still takes the native path and a 64-bit program on the i386 image still takes the swap-backed guest.
+
+A Mach-O file can be kept and is not started. An iOS package is refused. A `.deb`, `.rpm`, `.apk`, `.hap`, or `.exe` is identified and not installed. Nothing is downloaded. The checksummed ISOs in the next section do not contain `dev-install` yet; the next image build installs it. `desktop/test-install.sh` is the host test. The matrix is `docs/desktop-apps.md`. The contract for the runtime is `docs/runtime-desktop.md`.
+
 ## What this environment actually booted
 
-Three images, volume id `OLYMPIUM`. The x86_64 and aarch64 images carry `/usr/bin/olympium-linux` from commit `517aaaa5409f227de42444cf16612d546c29251b`. The i386 image has no runtime binary for that architecture, so its Olympium dock entry opens Settings. The interface font on all three is Ubuntu. `install-to-disk` was verified on an earlier x86_64 image (`25ee807c92c2e7bf7b96fbd5309d0858e996b81202824fee1d1db8d4c51e0f20`) and was not run again for the checksums below. Older part trees, including `a97dabb9…` and `8fc90725…`, were left in place.
+Three images, volume id `OLYMPIUM`. These checksums predate `dev-install` and do not contain it. The x86_64 and aarch64 images carry `/usr/bin/olympium-linux` from commit `517aaaa5409f227de42444cf16612d546c29251b`. The i386 image has no runtime binary for that architecture, so its Olympium dock entry opens Settings. The interface font on all three is Ubuntu. `install-to-disk` was verified on an earlier x86_64 image (`25ee807c92c2e7bf7b96fbd5309d0858e996b81202824fee1d1db8d4c51e0f20`) and was not run again for the checksums below. Older part trees, including `a97dabb9…` and `8fc90725…`, were left in place.
 
 x86_64 ISO `build/dev-live-amd64.iso`, 1,465,339,904 bytes, hybrid BIOS and UEFI.
 
