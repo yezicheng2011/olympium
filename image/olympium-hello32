@@ -1,0 +1,4 @@
+#!/bin/sh
+# Copyright 2026 Development Desktop contributors
+# License: daniel.ye Source License, Version 1.0. See LICENSE.
+exec /usr/libexec/dev-desktop/olympium-run --hold /usr/share/olympium/samples/hello32

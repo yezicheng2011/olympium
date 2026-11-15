@@ -190,15 +190,31 @@ static void set_path(const char *path) {
 
 static void go(const char *path);
 
-static void on_icon(GtkButton *button, gpointer data) {
-	(void)button;
-	const char *name = data;
+static void open_entry(const char *name) {
 	char next[8192];
 	snprintf(next, sizeof next, "%s/%s", strcmp(current, "/") == 0 ? "" : current, name);
 	struct stat st;
-	if (stat(next, &st) == 0 && S_ISDIR(st.st_mode)) {
-		go(next);
+	if (stat(next, &st) != 0) {
+		return;
 	}
+	if (S_ISDIR(st.st_mode)) {
+		go(next);
+		return;
+	}
+	if (!S_ISREG(st.st_mode) || (st.st_mode & 0111) == 0) {
+		return;
+	}
+	char *quoted = g_shell_quote(next);
+	char *cmd = g_strdup_printf(
+		"/usr/bin/foot -T Program -e /usr/libexec/dev-desktop/olympium-run --hold %s", quoted);
+	g_spawn_command_line_async(cmd, NULL);
+	g_free(cmd);
+	g_free(quoted);
+}
+
+static void on_icon(GtkButton *button, gpointer data) {
+	(void)button;
+	open_entry(data);
 }
 
 static void free_name(gpointer data, GClosure *closure) {
@@ -378,10 +394,8 @@ static void on_activate(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn 
 	char *name = NULL;
 	char *kind = NULL;
 	gtk_tree_model_get(model, &iter, 0, &name, 1, &kind, -1);
-	if (name != NULL && kind != NULL && strcmp(kind, "Folder") == 0) {
-		char next[8192];
-		snprintf(next, sizeof next, "%s/%s", strcmp(current, "/") == 0 ? "" : current, name);
-		go(next);
+	if (name != NULL) {
+		open_entry(name);
 	}
 	g_free(name);
 	g_free(kind);

@@ -5,9 +5,15 @@
 # Starts the real Firefox program. The desktop session runs as root, and
 # Firefox refuses that, so the window runs as the olympium user. This script
 # does not start a snap.
-REAL=/usr/lib/firefox/firefox
-if [ ! -x "$REAL" ]; then
-	echo "firefox: /usr/lib/firefox/firefox is not installed" >&2
+REAL=""
+for cand in /usr/lib/firefox/firefox /usr/lib/firefox-esr/firefox-esr; do
+	if [ -x "$cand" ]; then
+		REAL=$cand
+		break
+	fi
+done
+if [ -z "$REAL" ]; then
+	echo "firefox: no Firefox program is installed" >&2
 	exit 1
 fi
 if ! id olympium >/dev/null 2>&1; then

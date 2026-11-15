@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=64-bit Bash
+Exec=/usr/bin/olympium-bash64
+Terminal=true
+NoDisplay=false
+Categories=Utility;

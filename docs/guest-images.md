@@ -5,7 +5,7 @@ Guest images are not stored in git and are not placed in the ISO unless the exac
 | Artifact | Bundled | Why |
 | --- | --- | --- |
 | macOS recovery, installer, or IPSW | No | Apple's license does not allow this redistribution. |
-| iOS firmware or App Store packages | No | Proprietary, and no DRM or signature bypass is implemented. |
+| iOS firmware or App Store packages | No | iOS is not part of this system. |
 | Windows installation media | No | Proprietary. A wrapper license does not cover it. |
 | Google Play or GMS | No | Not redistributable here. |
 | OpenHarmony factory images | No | The pinned Olympium revision downloads a checksummed image when its own terms allow and does not treat the image as part of the Apache-2.0 source. This ISO does not copy that download. |

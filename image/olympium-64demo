@@ -1,0 +1,22 @@
+#!/bin/sh
+# Copyright 2026 Development Desktop contributors
+# License: daniel.ye Source License, Version 1.0. See LICENSE.
+#
+# Runs the 64-bit samples on a 32-bit system and leaves the transcript up.
+echo "64-bit programs on this 32-bit system"
+echo "machine $(uname -m) kernel $(uname -r)"
+run=/usr/libexec/dev-desktop/olympium-run
+for prog in \
+	/usr/lib/olympium/amd64/bin/hello64 \
+	/usr/lib/olympium/amd64/bin/highmap64 \
+	/usr/lib/olympium/amd64/bin/bash \
+	/usr/lib/olympium/amd64/bin/payload64
+do
+	echo
+	echo "== $(basename "$prog") =="
+	"$run" "$prog" || echo "exit $?"
+done
+echo
+echo "done"
+printf '<6>olympium-64demo: done\n' >/dev/kmsg 2>/dev/null || true
+sleep 180

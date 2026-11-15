@@ -4,6 +4,8 @@ desktop/dev-files
 desktop/dev-settings
 desktop/dev-swatch
 desktop/dev-compat
+desktop/olympium-run
+desktop/olympium-testapp
 desktop/test-blur
 desktop/test-macho
 build/

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=64-bit Hello
+Exec=/usr/bin/olympium-hello64
+Terminal=true
+NoDisplay=false
+Categories=Utility;

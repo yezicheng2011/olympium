@@ -68,37 +68,54 @@ qemu-system-aarch64 -machine virt -cpu max -m 2048 \
   -device virtio-gpu-pci -device usb-kbd -device usb-tablet
 ```
 
-That aarch64 command is emulated when the host is x86_64. It does not show that the image boots a Raspberry Pi or Apple Silicon. Details are in `docs/firmware.md`. There is no i686 or armhf image; see `docs/32-bit.md`.
+That aarch64 command is emulated when the host is x86_64. It does not show that the image boots a Raspberry Pi or Apple Silicon. Details are in `docs/firmware.md`.
+
+i386, a 32-bit kernel, tested in QEMU as an emulated PC:
+
+```sh
+qemu-system-i386 -M pc -m 2048 -cdrom build/dev-live-i386.iso -boot d \
+  -vga virtio -serial stdio
+```
+
+Use `-vga virtio`. Debian 6.1's bochs display does not advertise PRIME import, and this compositor will not open that device. There is no armhf image. See `docs/32-bit.md`.
 
 `install-to-disk /dev/sdX` from a terminal on the live system erases that disk, copies the running system onto it, and installs the boot loader. It asks you to type the device name before it changes anything.
 
-## macOS and iOS applications
+## macOS applications
 
-Instruction translation and an application ABI are different problems. A translator that rewrites x86_64 and aarch64 instructions does not load Mach-O, dyld, AppKit, or UIKit. `docs/isa-and-abi.md` and `docs/compatibility-matrix.md` are the current matrix.
+The dock, Launchpad, and Files open the Lawful test app. It is a Linux window. It is not a Mac application. This image does not include Apple trademarks, fonts, artwork, an Apple SDK, or a macOS system image, and it does not bypass code signing or DRM.
 
-`dev-compat probe FILE` identifies a Mach-O or fat header and stops. It does not execute it. A Linux program built here is not evidence of an original macOS or iOS GUI application.
+The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that program as a Linux executable. It also lists a Mach-O header fixture and does not start it. This repository does not change that runtime. iOS is not part of this system.
 
-The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` keeps macOS and iOS software in its library and does not start it. This repository does not change that project. No Apple system image, Google Play image, or Windows image is bundled. See `docs/guest-images.md`.
+`dev-compat probe FILE` identifies a Mach-O or fat header and stops. `docs/isa-and-abi.md` and `docs/compatibility-matrix.md` are the current matrix. No Apple, Google Play, or Windows system image is bundled. See `docs/guest-images.md`.
 
 ## What this environment actually booted
 
-Both images below were built from the same tree. Each carries `/usr/bin/olympium-linux` from the separate Olympium repository at `517aaaa5409f227de42444cf16612d546c29251b`, the Ubuntu font family as the interface face, and Mozilla Firefox 160.0 from `packages.mozilla.org` (not Ubuntu's snap transitional package). `install-to-disk` copies that whole root onto a disk, so an installed system gets the same browser and Settings program. The disposable-disk boot test was run on the previous x86_64 image (`25ee807c92c2e7bf7b96fbd5309d0858e996b81202824fee1d1db8d4c51e0f20`) and was not repeated for the checksums below.
+Three images, volume id `OLYMPIUM`. The x86_64 and aarch64 images carry `/usr/bin/olympium-linux` from commit `517aaaa5409f227de42444cf16612d546c29251b`. The i386 image has no runtime binary for that architecture, so its Olympium dock entry opens Settings. The interface font on all three is Ubuntu. `install-to-disk` was verified on an earlier x86_64 image (`25ee807c92c2e7bf7b96fbd5309d0858e996b81202824fee1d1db8d4c51e0f20`) and was not run again for the checksums below. Older part trees, including `a97dabb9…` and `8fc90725…`, were left in place.
 
-x86_64 ISO `build/dev-live-amd64.iso`, 1,459,703,808 bytes, volume id `OLYMPIUM`, hybrid BIOS and UEFI (GRUB El Torito plus an EFI image).
-
-```
-a97dabb9745fbab571615229c8390dbbc21c0de0a401c7dcb88bacab20bfc2b0  dev-live-amd64.iso
-```
-
-QEMU `pc`, KVM, standard VGA, 1280×800, one e1000 NIC. A boot with `olympium.opensettings=1` opened Settings: search field, icon sidebar, grouped rows, the Liquid Glass switch on, and the system font named Ubuntu. A second boot recorded `window mapped: Mozilla Firefox (app firefox)` and showed Firefox's own window in front of that Settings pane. The first Firefox window is Firefox's welcome screen. Earlier pictures of the desktop, menus, Files, Launchpad, the reminder, and the Olympium runtime are from the previous image `25ee807c…`. An earlier boot of a previous image attached e1000, virtio-net, and NVMe devices and the kernel bound all three; see `docs/drivers.md`.
-
-aarch64 ISO `build/dev-live-arm64.iso`, 1,523,171,328 bytes, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot. `/usr/lib/firefox/firefox` in this image is an aarch64 ELF. Inside the build chroot it printed `Mozilla Firefox 160.0`. A full arm64 desktop boot that draws the Firefox window was not run; instruction emulation of that browser is slow, and the live window was checked on x86_64.
+x86_64 ISO `build/dev-live-amd64.iso`, 1,465,339,904 bytes, hybrid BIOS and UEFI.
 
 ```
-8fc90725754dcadfab92c3d849f8774f7a0e86730e12ead4092600097ba3028e  dev-live-arm64.iso
+6258fda904f660ce2011f9e7f4e27e99548e99fa1e0d2818f64b0388dfece955  dev-live-amd64.iso
 ```
 
-QEMU `virt`, AAVMF, a `virtio-gpu-pci` display, software emulation on an x86_64 host. The existing arm64 Files picture is from an earlier image (`8600cb65c4c04caa15ed69d39743d9a955e34106d06758466c036cd2f5975027`), which did not carry the runtime or Firefox. That boot is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon. The arm64 kernel does not include `i915.ko`.
+QEMU `pc`, KVM, on an x86_64 host. The desktop ran a real i386 ELF by the kernel's IA-32 path. The log says `olympium-run: native IA-32` and the program printed `hello32 bits=32 machine=i386`. The same boot mapped the Lawful test app window. Mozilla Firefox in this image is `160.0~build1` from `packages.mozilla.org`. The picture is `olympium-x86_64-13-hello32-testapp.png`. Settings, the Ubuntu font row, and the Firefox window were drawn on the previous image `a97dabb9…`. That Firefox window is Firefox's welcome screen.
+
+aarch64 ISO `build/dev-live-arm64.iso`, 1,575,903,232 bytes. It contains `/efi/boot/bootaa64.efi`. Desktop binaries are aarch64. `/usr/lib/firefox/firefox` is aarch64 and printed `Mozilla Firefox 160.0` in the build chroot.
+
+```
+2ce330f0d42a6aff714dbc7d80490c13ec2e02e93a004c764c4f69592f9272df  dev-live-arm64.iso
+```
+
+The kernel has `CONFIG_ARM64=y` and `CONFIG_COMPAT=y`. QEMU `virt`, `-cpu cortex-a57`, software emulation on an x86_64 host, booted that kernel and executed the image's armhf `hello32`. It printed `hello32 bits=32 machine=arm` and exited 0. That is not a Raspberry Pi, a generic ARM board, or Apple Silicon, and it is not a full desktop draw of this image. The earlier arm64 Files picture is from `8600cb65…`. The arm64 kernel does not include `i915.ko`.
+
+i386 ISO `build/dev-live-i386.iso`, 724,064,256 bytes. The boot kernel is Debian `6.1.0-54-686-pae` (`CONFIG_X86_32=y`, `CONFIG_64BIT` unset). Userspace is Debian 12. The browser is Debian `firefox-esr` `153.7.0esr-1~deb12u1`, labeled as a Debian rebuild. It is not Mozilla's packages.mozilla.org build, and its window was not drawn in this boot.
+
+```
+bef87685bdebc51f24a8b1117a652a01aea65189a50bb3cc0e43dcfbac16d7a2  dev-live-i386.iso
+```
+
+`qemu-system-i386 -M pc -vga virtio`, KVM, 2 GiB, on an x86_64 host. The session log says `arch i686 6.1.0-54-686-pae`. The compositor started. The Lawful test app opened (the log says `window mapped: Olympium (app olympium-testapp)`; the window's own subtitle is "Lawful test app"). A terminal then ran four 64-bit programs with the image's 32-bit `qemu-system-x86_64`, TCG, 512 MiB of guest RAM in a file on an extra virtio disk, and a 2 GiB swap file on that disk. All four exited 0: `hello64 bits=64 machine=x86_64` in 7 seconds, a mapped page at `0x100000000` in 6 seconds, GNU bash 5.2.21 reporting `x86_64` in 5 seconds, and `payload64 bits=64` in 5 seconds. SwapTotal was 2,097,148 kB and SwapFree fell to 2,096,884 kB, so 264 KiB was in swap. This is an emulated PC, not a physical 32-bit computer. The pictures are `olympium-i386-01-desktop.png` and `olympium-i386-02-64bit.png` (2:02 AM ET, Sunday, November 15, 2026). A boot with `-vga std` reached the same kernel and then the compositor exited, because bochs-drm does not advertise PRIME import. There is no armhf ISO. A 64-bit program that needs more than about 2 GiB of guest RAM still does not run: the translator is a 32-bit process.
 
 On the build machine the Firefox content sandbox cannot create a user namespace (`clone` returns `EPERM`). The live image sets `kernel.apparmor_restrict_unprivileged_userns` to 0 so the sandbox can. If a boot still blocks it, `firefox-launch` starts Firefox again with the content sandbox off and writes that fact to the session log.
 

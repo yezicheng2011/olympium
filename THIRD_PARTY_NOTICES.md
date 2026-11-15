@@ -23,9 +23,14 @@ Components the desktop links directly:
 | DejaVu fonts | Fallback glyphs for scripts the Ubuntu fonts do not cover | Bitstream Vera license |
 | Ubuntu fonts (`fonts-ubuntu`) | Default interface and monospace face | Ubuntu Font License 1.0 |
 | Noto fonts (`fonts-noto-core`, `fonts-noto-mono`, `fonts-noto-cjk`) | Fallback for scripts outside the Ubuntu fonts | SIL Open Font License 1.1 |
-| Firefox | Preinstalled browser, from Mozilla's package archive, not Ubuntu's snap transitional package | Mozilla Public License 2.0 |
-| Ubuntu base packages | libc, systemd, and the rest of the userspace | Each package's own copyright file |
+| Firefox | Preinstalled browser on the x86_64 and aarch64 images, from Mozilla's package archive, not Ubuntu's snap transitional package | Mozilla Public License 2.0 |
+| Ubuntu base packages | libc, systemd, and the rest of the userspace on those two images | Each package's own copyright file |
+| Debian 12 (bookworm) i386 | Userspace of the i386 image, including `linux-image-686-pae`, `firefox-esr`, and `qemu-system-x86` | Each package's own copyright file, from Debian |
+| Firefox ESR | The i386 browser. Debian's rebuild, not Mozilla's packages.mozilla.org build | Mozilla Public License 2.0 |
+| QEMU | The i386 image's `qemu-system-x86_64`, a 32-bit program, boots the 64-bit guest | GPL-2.0 |
 
 Olympium source is not copied into this tree. When the image carries the Olympium runtime programs, they are built from commit `517aaaa5409f227de42444cf16612d546c29251b` of that project, and that project's own `LICENSE` and `NOTICE` files are installed unchanged at `/usr/share/doc/olympium-runtime/`. The runtime links the system copies of GTK 4 and libadwaita (LGPL-2.1-or-later), which stay under their own license.
 
-No Apple artwork, font, or framework is included.
+The i386 image also carries a small 64-bit guest used only to run 64-bit programs. That guest's kernel is the Ubuntu amd64 `vmlinuz` already built for the x86_64 image, plus Ubuntu's bash, libc, and libtinfo. Their copyright files are copied to `/usr/share/doc/olympium-amd64-guest/`. That kernel does not boot the 32-bit machine.
+
+No Apple artwork, font, or framework is included. iOS is not part of this system.

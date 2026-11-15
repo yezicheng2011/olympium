@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=32-bit Hello
+Exec=/usr/bin/olympium-hello32
+Terminal=true
+NoDisplay=false
+Categories=Utility;

@@ -275,7 +275,7 @@ sbom.tsv are published by Ubuntu at http://archive.ubuntu.com/ubuntu (amd64)
 and http://ports.ubuntu.com/ubuntu-ports (arm64). This image does not relicense
 those packages.
 
-No macOS, iOS, Windows, or Google Play image is included. Olympium source is
+No macOS, Windows, or Google Play image is included. iOS is not part of this system. Olympium source is
 not vendored. When this image carries the Olympium runtime programs, their
 commit, license, and notice are in /usr/share/doc/olympium-runtime.
 EOF
@@ -407,7 +407,7 @@ EOF
 		printf 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nBROWSER=/usr/bin/firefox\n' \
 			> "$ROOT/etc/environment"
 	fi
-	printf '%s\n' "$ver" > "$ROOT/usr/share/olympium/firefox-version.txt"
+	printf 'Mozilla Firefox %s\n' "$ver" > "$ROOT/usr/share/olympium/firefox-version.txt"
 	chroot "$ROOT" fc-cache -f >/dev/null 2>&1 || true
 	# The build chroot often cannot create a user namespace, so the sandbox
 	# prints EPERM before any version line. Ask for the version with that
@@ -562,5 +562,11 @@ if [ "$ARCH" = arm64 ]; then
 		"$ROOT/tmp/desktop/dev-compat" "$ROOT/usr/bin/"
 	file "$ROOT/usr/bin/dev-compositor"
 fi
+# shellcheck source=image/stage-bitness.sh
+. "$REPO/image/stage-bitness.sh"
+if [ "$ARCH" = arm64 ]; then
+	DESKTOP_BINS=$ROOT/tmp/desktop
+fi
+stage_bitness
 pack_iso
 echo "built $REPO/build/dev-live-${ARCH}.iso"

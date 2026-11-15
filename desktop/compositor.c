@@ -79,6 +79,7 @@ static const struct app_entry APPS[] = {
 	{"settings", "Settings", "/usr/bin/dev-settings", NULL},
 	{"olympium", "Olympium", "/usr/libexec/dev-desktop/olympium-launch", NULL},
 	{"compat", "Compatibility", "/usr/bin/dev-settings", "--page=compat"},
+	{"testapp", "Test App", "/usr/bin/olympium-testapp", NULL},
 };
 
 enum { APP_COUNT = sizeof APPS / sizeof APPS[0] };
@@ -529,6 +530,7 @@ static const struct icon_style ICON_STYLES[] = {
 	{"olympium", {0.20, 0.36, 0.62}, {0.07, 0.14, 0.30}},
 	{"launchpad", {1.00, 1.00, 1.00}, {0.86, 0.88, 0.92}},
 	{"compat", {0.66, 0.50, 0.98}, {0.38, 0.26, 0.84}},
+	{"testapp", {0.20, 0.55, 0.95}, {0.10, 0.32, 0.72}},
 	{"activity", {0.22, 0.25, 0.30}, {0.06, 0.07, 0.09}},
 	{"disks", {0.93, 0.94, 0.96}, {0.70, 0.73, 0.78}},
 	{"network", {0.36, 0.78, 1.00}, {0.10, 0.48, 0.94}},
@@ -656,6 +658,13 @@ static void draw_icon(cairo_t *cr, const char *id, double x, double y) {
 		cairo_fill(cr);
 		cairo_set_source_rgba(cr, 1, 1, 1, 1);
 		rrect(cr, 18, 18, 20, 20, 5);
+		cairo_fill(cr);
+	} else if (strcmp(kind, "testapp") == 0) {
+		cairo_set_source_rgba(cr, 1, 1, 1, 0.96);
+		rrect(cr, 12, 11, 24, 26, 4);
+		cairo_fill(cr);
+		cairo_set_source_rgba(cr, 0.15, 0.45, 0.85, 1);
+		rrect(cr, 12, 11, 24, 7, 3);
 		cairo_fill(cr);
 	} else if (strcmp(kind, "activity") == 0) {
 		cairo_set_source_rgba(cr, 0.36, 0.96, 0.56, 1);

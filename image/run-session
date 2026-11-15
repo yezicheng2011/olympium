@@ -19,7 +19,7 @@ kmsg() {
 }
 mkdir -p /run/dev-desktop
 chmod 755 /run/dev-desktop
-kmsg "session start"
+kmsg "session start arch $(uname -m) $(uname -r)"
 modprobe bochs 2>/dev/null || true
 modprobe virtio_gpu 2>/dev/null || true
 modprobe e1000 2>/dev/null || true

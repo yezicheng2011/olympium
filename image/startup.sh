@@ -17,6 +17,15 @@ fi
 if grep -q 'olympium.openruntime=1' /proc/cmdline 2>/dev/null; then
 	(sleep 20; /usr/libexec/dev-desktop/olympium-launch >/dev/null 2>&1) &
 fi
+if grep -q 'olympium.open32=1' /proc/cmdline 2>/dev/null; then
+	(sleep 14; /usr/bin/foot -T "32-bit Hello" -e /usr/bin/olympium-hello32 >/tmp/hello32.log 2>&1) &
+fi
+if grep -q 'olympium.open64=1' /proc/cmdline 2>/dev/null && [ -x /usr/bin/olympium-64demo ]; then
+	(sleep 18; /usr/bin/foot -T "64-bit programs" -e /usr/bin/olympium-64demo >/tmp/hello64.log 2>&1) &
+fi
+if grep -q 'olympium.opentest=1' /proc/cmdline 2>/dev/null; then
+	(sleep 12; /usr/bin/olympium-testapp >/tmp/testapp.log 2>&1) &
+fi
 if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
 	(sleep 10; /usr/bin/dev-settings --page=appearance >/dev/null 2>&1) &
 	(

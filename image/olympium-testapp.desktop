@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Lawful test app
+Exec=/usr/bin/olympium-testapp
+Terminal=false
+NoDisplay=false
+Categories=Utility;

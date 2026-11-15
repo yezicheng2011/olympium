@@ -288,13 +288,18 @@ static GtkWidget *page_compat(void) {
 	GtkWidget *box = pane("Compatibility");
 	GtkWidget *info = card();
 	add_text(info,
-		"Instruction translation and an application ABI are different layers.\n\n"
-		"A pure software translator changes machine instructions between x86_64 and aarch64. "
-		"It does not parse Mach-O, run dyld, or provide libSystem, Objective-C, AppKit, or UIKit.\n\n"
-		"This desktop can identify a Mach-O or fat header. It does not execute it. "
-		"A Linux ELF built here is not an original macOS or iOS GUI application.\n\n"
-		"No Apple operating-system image or framework is bundled. "
-		"Code signatures and DRM are not bypassed. Applications are not downloaded.", NULL);
+		"A 32-bit program for this CPU runs as an ordinary process on the 64-bit systems. "
+		"x86_64 uses the kernel's IA-32 path. aarch64 uses the kernel's 32-bit ARM path. "
+		"That is the fast path.\n\n"
+		"A 64-bit x86 program on the 32-bit system runs in a 64-bit guest. "
+		"The guest address space is 64-bit. Its memory can sit in a file and the 32-bit kernel can page the translator to swap. "
+		"That path is slow. It is not used for a 32-bit program on a 64-bit CPU.\n\n"
+		"Test App opens a Linux program. It is not a Mac application. "
+		"The Olympium runtime can start that Linux program from its library. "
+		"It does not start macOS software. A Mach-O header is identified and not executed. "
+		"No Apple operating system, framework, font, or artwork is included. "
+		"Code signatures and DRM are not bypassed.\n\n"
+		"iOS is not part of this system.", NULL);
 	gtk_box_pack_start(GTK_BOX(box), info, FALSE, FALSE, 0);
 	return box;
 }
@@ -305,12 +310,11 @@ static GtkWidget *page_olympium(void) {
 	add_text(info,
 		"If olympium-linux or linkspan-linux is installed, the dock entry starts it. "
 		"This image does not vendor that source and does not write back to it.\n\n"
-		"The Olympium project refuses macOS and iOS guests on Linux. That policy lives in "
-		"the other repository and is not changed here.\n\n"
+		"The Olympium runtime does not start macOS software on Linux. That policy lives in "
+		"the other repository and is not changed here. Test App is a Linux program, not a Mac application.\n\n"
 		"Guest images are not embedded: redistribution is not assumed when the artifact "
 		"license is unresolved.\n\n"
-		"x86/ARM pure software translation is an Olympium task. This desktop does not require KVM, "
-		"and it does not claim that translation is finished or that it runs macOS or iOS applications.",
+		"iOS is not part of this system.",
 		NULL);
 	gtk_box_pack_start(GTK_BOX(box), info, FALSE, FALSE, 0);
 	return box;
@@ -345,7 +349,14 @@ static GtkWidget *page_about(void) {
 		add_row(info, "Processor", uts.machine);
 		add_row(info, "Kernel", uts.release);
 	}
-	add_row(info, "Browser", "Firefox");
+	char *browser = read_file("/usr/share/olympium/firefox-version.txt", "Firefox");
+	browser[strcspn(browser, "\r\n")] = '\0';
+	if (browser[0] == '\0') {
+		g_free(browser);
+		browser = g_strdup("Firefox");
+	}
+	add_row(info, "Browser", browser);
+	g_free(browser);
 	gtk_box_pack_start(GTK_BOX(box), info, FALSE, FALSE, 0);
 	add_note(box, "Olympium is a native Linux system with its own desktop. It is not macOS and does not contain Apple software.");
 	return box;
