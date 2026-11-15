@@ -213,6 +213,13 @@ install_packages() {
 stage_desktop() {
 	mount_chroot
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends parted dosfstools kmod || true
+	# The shell, Files, and Settings are set in the Ubuntu typeface. Without it
+	# Pango falls back to another face and every label changes width.
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends fonts-ubuntu
+	if ! chroot "$ROOT" sh -c 'ls /usr/share/fonts/truetype/ubuntu/Ubuntu*.ttf >/dev/null 2>&1'; then
+		echo "the Ubuntu typeface is missing from the image" >&2
+		exit 1
+	fi
 	make -C "$REPO/desktop" all
 	install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" \
 		"$ROOT/etc/dev-desktop" "$ROOT/etc/systemd/system/multi-user.target.wants" \
