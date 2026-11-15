@@ -17,6 +17,15 @@ fi
 if grep -q 'olympium.openruntime=1' /proc/cmdline 2>/dev/null; then
 	(sleep 20; /usr/libexec/dev-desktop/olympium-launch >/dev/null 2>&1) &
 fi
+if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
+	(sleep 10; /usr/bin/dev-settings --page=appearance >/dev/null 2>&1) &
+	(
+		sleep 16
+		/usr/libexec/dev-desktop/firefox-launch /usr/share/olympium/browser-home.html >/tmp/firefox.log 2>&1
+		echo "firefox: exit $? (log follows)"
+		tail -n 20 /tmp/firefox.log 2>/dev/null || true
+	) &
+fi
 install_disk=$(sed -n 's/.*olympium.install=\([^ ]*\).*/\1/p' /proc/cmdline 2>/dev/null || true)
 if [ -n "$install_disk" ]; then
 	# An unattended install for a boot test. The result line reaches the session log.

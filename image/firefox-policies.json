@@ -1,0 +1,18 @@
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DontCheckDefaultBrowser": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "Homepage": {
+      "URL": "file:///usr/share/olympium/browser-home.html",
+      "StartPage": "homepage"
+    },
+    "UserMessaging": {
+      "SkipOnboarding": true,
+      "WhatsNew": false,
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false
+    }
+  }
+}

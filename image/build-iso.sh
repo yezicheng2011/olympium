@@ -241,6 +241,13 @@ stage_desktop() {
 	install -D -m 644 "$REPO/image/foot.ini" "$ROOT/etc/xdg/foot/foot.ini"
 	install -d "$ROOT/usr/share/olympium"
 	install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
+	install -m 644 "$REPO/image/browser-home.html" "$ROOT/usr/share/olympium/browser-home.html"
+	install -m 755 "$REPO/image/firefox-launch" "$ROOT/usr/libexec/dev-desktop/firefox-launch"
+	install -D -m 644 "$REPO/image/99-olympium-ui.conf" \
+		"$ROOT/etc/fonts/conf.d/99-olympium-ui.conf"
+	install -D -m 644 "$REPO/image/gtk-3.0-settings.ini" "$ROOT/etc/gtk-3.0/settings.ini"
+	install -D -m 644 "$REPO/image/gtk-4.0-settings.ini" "$ROOT/etc/gtk-4.0/settings.ini"
+	stage_firefox
 	install -m 644 "$REPO/branding/branding.conf" "$ROOT/etc/dev-desktop/branding.conf"
 	install -m 644 "$REPO/image/dev-desktop.service" "$ROOT/etc/systemd/system/dev-desktop.service"
 	ln -sfn /etc/systemd/system/dev-desktop.service \
@@ -277,6 +284,145 @@ EOF
 	cp "$ROOT/usr/share/doc/dev-desktop/sbom.tsv" "$WORK-sbom.tsv"
 	rm -f "$ROOT/var/cache/apt/archives/"*.deb || true
 	rm -rf "$ROOT/var/lib/apt/lists/"* || true
+}
+
+# Mozilla publishes a real Firefox package for amd64 and arm64. Ubuntu's
+# firefox package is a transitional wrapper around a snap, and a snap is not
+# a browser in this live image, so that package is pinned out.
+stage_firefox() {
+	mount_chroot
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		curl ca-certificates fonts-noto-core fonts-noto-mono fonts-noto-cjk
+	install -d -m 0755 "$ROOT/etc/apt/keyrings" "$ROOT/etc/apt/preferences.d"
+	curl -fsSL https://packages.mozilla.org/apt/repo-signing-key.gpg \
+		-o "$ROOT/etc/apt/keyrings/packages.mozilla.org.asc"
+	cat > "$ROOT/etc/apt/sources.list.d/mozilla.sources" <<'EOF'
+Types: deb
+URIs: https://packages.mozilla.org/apt
+Suites: mozilla
+Components: main
+Signed-By: /etc/apt/keyrings/packages.mozilla.org.asc
+EOF
+	cat > "$ROOT/etc/apt/preferences.d/mozilla" <<'EOF'
+Package: firefox
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+
+Package: firefox
+Pin: release o=Ubuntu
+Pin-Priority: -1
+EOF
+	chroot "$ROOT" apt-get update
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends firefox
+	if chroot "$ROOT" dpkg -s snapd 2>/dev/null | grep -q '^Status: install ok installed'; then
+		echo "firefox: snapd was installed; refusing the transitional package" >&2
+		exit 1
+	fi
+	local ver
+	ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' firefox)
+	case "$ver" in
+		*snap*)
+			echo "firefox: version $ver is the Ubuntu snap transitional package" >&2
+			exit 1
+			;;
+	esac
+	if [ ! -x "$ROOT/usr/lib/firefox/firefox" ]; then
+		echo "firefox: /usr/lib/firefox/firefox is missing after install" >&2
+		exit 1
+	fi
+	local want="x86-64"
+	if [ "$ARCH" = arm64 ]; then
+		want="aarch64"
+	fi
+	if ! file "$ROOT/usr/lib/firefox/firefox" | grep -q "$want"; then
+		echo "firefox: binary is not $want" >&2
+		file "$ROOT/usr/lib/firefox/firefox" >&2
+		exit 1
+	fi
+	if chroot "$ROOT" ldd /usr/lib/firefox/firefox | grep -q "not found"; then
+		chroot "$ROOT" ldd /usr/lib/firefox/firefox | grep "not found" >&2
+		echo "firefox: missing libraries" >&2
+		exit 1
+	fi
+	# The package's /usr/bin/firefox stays available for http handlers. The
+	# dock starts firefox-launch, which runs this ELF as a normal user.
+	if ! chroot "$ROOT" id -u olympium >/dev/null 2>&1; then
+		chroot "$ROOT" useradd -m -s /bin/bash -u 1000 olympium
+	fi
+	# install -o looks up the host passwd. The account exists only in the image.
+	local uid gid
+	uid=$(chroot "$ROOT" id -u olympium)
+	gid=$(chroot "$ROOT" id -g olympium)
+	install -d \
+		"$ROOT/home/olympium/.mozilla/firefox/olympium.default" \
+		"$ROOT/home/olympium/.config/gtk-3.0" \
+		"$ROOT/home/olympium/.config/gtk-4.0"
+	cat > "$ROOT/home/olympium/.mozilla/firefox/profiles.ini" <<'EOF'
+[Profile0]
+Name=olympium
+IsRelative=1
+Path=olympium.default
+Default=1
+
+[General]
+StartWithLastProfile=1
+Version=2
+EOF
+	install -m 644 "$REPO/image/firefox-user.js" \
+		"$ROOT/home/olympium/.mozilla/firefox/olympium.default/user.js"
+	cat > "$ROOT/home/olympium/.mozilla/firefox/olympium.default/xulstore.json" <<'EOF'
+{"chrome://browser/content/browser.xhtml":{"main-window":{"width":"760","height":"560","screenX":"470","screenY":"36","sizemode":"normal"}}}
+EOF
+	install -d "$ROOT/etc/firefox/policies" "$ROOT/usr/lib/firefox/distribution"
+	install -m 644 "$REPO/image/firefox-policies.json" "$ROOT/etc/firefox/policies/policies.json"
+	install -m 644 "$REPO/image/firefox-policies.json" "$ROOT/usr/lib/firefox/distribution/policies.json"
+	install -m 644 "$ROOT/etc/gtk-3.0/settings.ini" "$ROOT/home/olympium/.config/gtk-3.0/settings.ini"
+	install -m 644 "$ROOT/etc/gtk-4.0/settings.ini" "$ROOT/home/olympium/.config/gtk-4.0/settings.ini"
+	chown -R "$uid:$gid" "$ROOT/home/olympium"
+	cat > "$ROOT/etc/xdg/mimeapps.list" <<'EOF'
+[Default Applications]
+text/html=firefox.desktop
+application/xhtml+xml=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/ftp=firefox.desktop
+
+[Added Associations]
+text/html=firefox.desktop;
+application/xhtml+xml=firefox.desktop;
+x-scheme-handler/http=firefox.desktop;
+x-scheme-handler/https=firefox.desktop;
+EOF
+	install -D -m 644 "$ROOT/etc/xdg/mimeapps.list" \
+		"$ROOT/usr/share/applications/mimeapps.list"
+	if [ -x "$ROOT/usr/bin/firefox" ]; then
+		chroot "$ROOT" update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox 200
+		chroot "$ROOT" update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/firefox 200
+	fi
+	if [ -f "$ROOT/etc/environment" ]; then
+		grep -v '^BROWSER=' "$ROOT/etc/environment" > "$ROOT/etc/environment.tmp" || true
+		printf 'BROWSER=/usr/bin/firefox\n' >> "$ROOT/etc/environment.tmp"
+		mv "$ROOT/etc/environment.tmp" "$ROOT/etc/environment"
+	else
+		printf 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nBROWSER=/usr/bin/firefox\n' \
+			> "$ROOT/etc/environment"
+	fi
+	printf '%s\n' "$ver" > "$ROOT/usr/share/olympium/firefox-version.txt"
+	chroot "$ROOT" fc-cache -f >/dev/null 2>&1 || true
+	# The build chroot often cannot create a user namespace, so the sandbox
+	# prints EPERM before any version line. Ask for the version with that
+	# sandbox off. The live image still tries the sandbox first.
+	local shown
+	shown=$(chroot "$ROOT" runuser -u olympium -- env MOZ_DISABLE_CONTENT_SANDBOX=1 \
+		/usr/lib/firefox/firefox --version 2>&1 || true)
+	echo "firefox: package $ver binary [$want]"
+	printf '%s\n' "$shown" | head -5
+	if ! printf '%s\n' "$shown" | grep -q 'Mozilla Firefox'; then
+		echo "firefox: --version did not identify Mozilla Firefox" >&2
+		exit 1
+	fi
+	printf 'kernel.apparmor_restrict_unprivileged_userns = 0\n' \
+		> "$ROOT/etc/sysctl.d/60-olympium-userns.conf"
 }
 
 # The Olympium runtime is a separate program with its own repository and its
@@ -333,10 +479,6 @@ stage_runtime() {
 		echo
 		(cd "$ROOT/usr/bin" && sha256sum olympium-linux linkspan-linux olympium linkspan 2>/dev/null)
 	} > "$ROOT/usr/share/doc/olympium-runtime/SOURCE"
-	# The shell draws window controls. GTK 4 programs keep their header bar
-	# but leave the buttons to the shell, and use the same typeface.
-	install -d "$ROOT/etc/gtk-4.0"
-	printf '[Settings]\ngtk-decoration-layout=:\ngtk-font-name=Ubuntu 12\n' > "$ROOT/etc/gtk-4.0/settings.ini"
 	if ! chroot "$ROOT" sh -c 'ldd /usr/bin/olympium-linux | grep -q "not found"'; then
 		echo "runtime: olympium-linux installed, all libraries resolve"
 	else

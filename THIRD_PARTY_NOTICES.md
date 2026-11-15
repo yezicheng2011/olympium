@@ -20,7 +20,10 @@ Components the desktop links directly:
 | Linux kernel | Boots the machine | GPL-2.0 |
 | GRUB | ISO bootloader | GPL-3.0 |
 | live-boot | Mounts the squashfs and the writable overlay | GPL-3.0 |
-| DejaVu fonts | UI text | Bitstream Vera license |
+| DejaVu fonts | Fallback glyphs for scripts the Ubuntu fonts do not cover | Bitstream Vera license |
+| Ubuntu fonts (`fonts-ubuntu`) | Default interface and monospace face | Ubuntu Font License 1.0 |
+| Noto fonts (`fonts-noto-core`, `fonts-noto-mono`, `fonts-noto-cjk`) | Fallback for scripts outside the Ubuntu fonts | SIL Open Font License 1.1 |
+| Firefox | Preinstalled browser, from Mozilla's package archive, not Ubuntu's snap transitional package | Mozilla Public License 2.0 |
 | Ubuntu base packages | libc, systemd, and the rest of the userspace | Each package's own copyright file |
 
 Olympium source is not copied into this tree. When the image carries the Olympium runtime programs, they are built from commit `517aaaa5409f227de42444cf16612d546c29251b` of that project, and that project's own `LICENSE` and `NOTICE` files are installed unchanged at `/usr/share/doc/olympium-runtime/`. The runtime links the system copies of GTK 4 and libadwaita (LGPL-2.1-or-later), which stay under their own license.

@@ -44,6 +44,8 @@ if grep -q 'olympium.gles=1' /proc/cmdline 2>/dev/null; then
 else
 	export WLR_RENDERER="${WLR_RENDERER:-pixman}"
 fi
+export BROWSER=/usr/bin/firefox
+export MOZ_ENABLE_WAYLAND=1
 kmsg "renderer ${WLR_RENDERER}"
 : > /run/dev-desktop/compositor.log
 tail -n0 -f /run/dev-desktop/compositor.log | while IFS= read -r line; do

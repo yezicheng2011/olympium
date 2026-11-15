@@ -36,7 +36,7 @@ static gboolean draw(GtkWidget *widget, cairo_t *cr, gpointer data) {
 		cairo_fill(cr);
 	}
 	cairo_set_source_rgba(cr, 1, 1, 1, 0.92);
-	cairo_select_font_face(cr, "DejaVu Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+	cairo_select_font_face(cr, "Ubuntu", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
 	cairo_set_font_size(cr, 22);
 	cairo_move_to(cr, 16, 36);
 	cairo_show_text(cr, "Live color field");

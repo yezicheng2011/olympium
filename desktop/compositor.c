@@ -74,6 +74,7 @@ struct app_entry {
 static const struct app_entry APPS[] = {
 	{"launchpad", "Launchpad", "", NULL},
 	{"files", "Files", "/usr/bin/dev-files", NULL},
+	{"firefox", "Firefox", "/usr/libexec/dev-desktop/firefox-launch", NULL},
 	{"terminal", "Terminal", "/usr/bin/foot", NULL},
 	{"settings", "Settings", "/usr/bin/dev-settings", NULL},
 	{"olympium", "Olympium", "/usr/libexec/dev-desktop/olympium-launch", NULL},
@@ -521,6 +522,7 @@ struct icon_style {
 /* Background gradient per icon. The glyph on top is drawn in draw_icon. */
 static const struct icon_style ICON_STYLES[] = {
 	{"files", {0.42, 0.76, 1.00}, {0.16, 0.50, 0.94}},
+	{"firefox", {0.27, 0.62, 0.98}, {0.10, 0.34, 0.78}},
 	{"terminal", {0.26, 0.28, 0.33}, {0.07, 0.08, 0.10}},
 	{"shell", {0.20, 0.20, 0.24}, {0.03, 0.03, 0.05}},
 	{"settings", {0.78, 0.80, 0.84}, {0.50, 0.53, 0.59}},
@@ -587,6 +589,22 @@ static void draw_icon(cairo_t *cr, const char *id, double x, double y) {
 		cairo_set_source_rgba(cr, 0.20, 0.52, 0.94, 0.55);
 		rrect(cr, 13, 30, 12, 2.6, 1.3);
 		cairo_fill(cr);
+	} else if (strcmp(kind, "firefox") == 0) {
+		/* An original globe. It is not the Firefox mark. */
+		cairo_set_source_rgba(cr, 1, 1, 1, 0.96);
+		cairo_arc(cr, 24, 24, 13, 0, 6.2832);
+		cairo_fill(cr);
+		cairo_set_source_rgba(cr, 0.12, 0.38, 0.78, 1);
+		cairo_set_line_width(cr, 1.6);
+		cairo_arc(cr, 24, 24, 9, 0, 6.2832);
+		cairo_stroke(cr);
+		cairo_move_to(cr, 15, 24);
+		cairo_curve_to(cr, 20, 14, 28, 14, 33, 24);
+		cairo_curve_to(cr, 28, 34, 20, 34, 15, 24);
+		cairo_stroke(cr);
+		cairo_move_to(cr, 24, 12);
+		cairo_line_to(cr, 24, 36);
+		cairo_stroke(cr);
 	} else if (strcmp(kind, "terminal") == 0 || strcmp(kind, "shell") == 0) {
 		if (strcmp(kind, "shell") == 0) {
 			cairo_set_source_rgba(cr, 1.00, 0.76, 0.28, 1);
@@ -2303,6 +2321,16 @@ static void pad_load(struct server *server) {
 			}
 			if (strncmp(name, "Foot", 4) == 0 || strncmp(name, "Python", 6) == 0) {
 				/* The terminal and Python are already listed above. */
+				continue;
+			}
+			int already = 0;
+			for (int j = 0; j < server->pad_count; j++) {
+				if (strcmp(server->pad[j].name, name) == 0) {
+					already = 1;
+					break;
+				}
+			}
+			if (already) {
 				continue;
 			}
 			char cmd[240];

@@ -1,0 +1,17 @@
+user_pref("browser.startup.homepage", "file:///usr/share/olympium/browser-home.html");
+user_pref("browser.startup.page", 1);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("trailhead.firstrun.didSeeAboutWelcome", true);
+user_pref("app.normandy.first_run", false);
+user_pref("gfx.webrender.all", false);
+user_pref("gfx.webrender.software", true);
+user_pref("layers.acceleration.disabled", true);
+user_pref("security.sandbox.content.level", 4);
+user_pref("font.name.sans-serif.x-western", "Ubuntu");
+user_pref("font.name.serif.x-western", "Noto Serif");
+user_pref("font.name.monospace.x-western", "Ubuntu Mono");
+user_pref("font.name-list.sans-serif.x-western", "Ubuntu, Noto Sans, Noto Sans CJK SC, DejaVu Sans");
+user_pref("font.name-list.monospace.x-western", "Ubuntu Mono, Noto Sans Mono, DejaVu Sans Mono");
