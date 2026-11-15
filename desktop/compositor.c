@@ -38,7 +38,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
-#include <wlr/xwayland/xwayland.h>
+#include "xwayland-compat.h"
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_damage_ring.h>

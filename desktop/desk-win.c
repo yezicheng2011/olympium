@@ -122,7 +122,12 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 			return 0;
 		}
 		if (wparam == 3) {
-			KillTimer(hwnd, 3);
+			/* A few times, because how long the window takes to come to
+			 * the front depends on the machine. */
+			static int copies;
+			if (++copies >= 5) {
+				KillTimer(hwnd, 3);
+			}
 			claim_clipboard(hwnd);
 			return 0;
 		}

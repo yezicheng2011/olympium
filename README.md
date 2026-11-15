@@ -153,7 +153,9 @@ Of that 43.3 s, about 22 s was the boot test sleeping so its pictures could be t
 
 `make -C desktop test-wine` on the build machine also copied text from the Wine window to a Wayland program and from a Wayland program to the Wine window. That is the compositor with the headless backend, not a booted ISO. There is no Android runtime in the image, so nothing connects an Android clipboard.
 
-The pictures were taken at about 5:21 AM ET, Sunday, November 15, 2026. i386 and arm64 were not rebuilt with Wine. An x86_64 `.exe` does not run on the arm64 image without another translator, and that translator is not in this draft. The earlier `.deb` boot remains `c30c081c…`.
+`dev-install` now reads which CPU a `.exe` was built for and offers Launch only when this system can run it. A 32-bit Windows program on the x86_64 image needs `wine32`, which `9c1b41e4…` does not have: there it opened no window and Wine exited 0. `image/install-wine.sh` installs the right packages per image, and `docs/wine-architectures.md` has the table and what was run.
+
+The pictures were taken at about 5:21 AM ET, Sunday, November 15, 2026. i386 and arm64 were not rebuilt with Wine. An x86 or x86_64 `.exe` does not run on the arm64 image without an x86 translator. That translator is not in this tree, and `dev-install` refuses the file instead of starting it. Nothing here runs on macOS. The earlier `.deb` boot remains `c30c081c…`.
 
 ## Purchase reminder
 

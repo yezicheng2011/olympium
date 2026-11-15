@@ -21,6 +21,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -316,6 +317,90 @@ static int real_pe(const char *path) {
 	return ok;
 }
 
+/* The CPU a PE file was built for, from its COFF header. 0 when unreadable. */
+static unsigned pe_machine(const char *path) {
+	FILE *f = fopen(path, "rb");
+	if (f == NULL) {
+		return 0;
+	}
+	unsigned char hdr[64];
+	unsigned machine = 0;
+	if (fread(hdr, 1, sizeof hdr, f) == sizeof hdr && hdr[0] == 'M' && hdr[1] == 'Z') {
+		unsigned long lfanew = (unsigned long)hdr[0x3c] | ((unsigned long)hdr[0x3d] << 8) |
+			((unsigned long)hdr[0x3e] << 16) | ((unsigned long)hdr[0x3f] << 24);
+		unsigned char pe[6];
+		if (lfanew >= 64 && lfanew <= 1024 * 1024 && fseek(f, (long)lfanew, SEEK_SET) == 0 &&
+				fread(pe, 1, 6, f) == 6 && pe[0] == 'P' && pe[1] == 'E') {
+			machine = (unsigned)pe[4] | ((unsigned)pe[5] << 8);
+		}
+	}
+	fclose(f);
+	return machine;
+}
+
+static const char *pe_machine_name(unsigned machine) {
+	switch (machine) {
+	case 0x014c: return "32-bit x86";
+	case 0x8664: return "64-bit x86";
+	case 0xaa64: return "64-bit ARM";
+	case 0x01c0:
+	case 0x01c4: return "32-bit ARM";
+	default: return "an unknown CPU";
+	}
+}
+
+/* Whether the Wine on this system can start a program built for that CPU.
+ * Wine is not an emulator: it runs the program's own instructions. Starting
+ * one this system cannot run does not fail cleanly. Wine prints an error to a
+ * log nobody sees, opens no window, and exits 0. So the answer is decided
+ * here, before anything is started. OLYMPIUM_HOST_MACHINE is for the test. */
+static int wine_can_run(unsigned machine, char *why, size_t n) {
+	const char *host = getenv("OLYMPIUM_HOST_MACHINE");
+	struct utsname u;
+	if (host == NULL || host[0] == '\0') {
+		host = uname(&u) == 0 ? u.machine : "";
+	}
+	int host_x64 = strcmp(host, "x86_64") == 0;
+	int host_x86 = host[0] == 'i' && strcmp(host + 2, "86") == 0;
+	int host_arm64 = strcmp(host, "aarch64") == 0 || strcmp(host, "arm64") == 0;
+	const char *what = pe_machine_name(machine);
+	if (machine == 0x8664) {
+		if (host_x64) {
+			return 1;
+		}
+		snprintf(why, n, host_arm64
+			? "Windows program for %s. This is an ARM computer, and this image has no x86 translator for Windows programs, so it was not started."
+			: "Windows program for %s. This system is 32-bit and cannot run it.", what);
+		return 0;
+	}
+	if (machine == 0x014c) {
+		if (host_x86) {
+			return 1;
+		}
+		if (host_x64) {
+			const char *forced = getenv("OLYMPIUM_WINE32");
+			if (forced != NULL ? strcmp(forced, "1") == 0 :
+					(access("/usr/lib/wine/wine", X_OK) == 0 ||
+					access("/usr/lib/i386-linux-gnu/wine/wine", X_OK) == 0)) {
+				return 1;
+			}
+			snprintf(why, n, "Windows program for %s. The 32-bit half of Wine (wine32) is not installed on this image, so it was not started.", what);
+			return 0;
+		}
+		snprintf(why, n, "Windows program for %s. This is an ARM computer, and this image has no x86 translator for Windows programs, so it was not started.", what);
+		return 0;
+	}
+	if (machine == 0xaa64) {
+		if (host_arm64) {
+			return 1;
+		}
+		snprintf(why, n, "Windows program for %s. This computer is not ARM, so it was not started.", what);
+		return 0;
+	}
+	snprintf(why, n, "Windows program for %s. Wine on this system cannot run it.", what);
+	return 0;
+}
+
 static void decide(struct review *r) {
 	r->launchable = 0;
 	r->action = "refuse";
@@ -360,6 +445,12 @@ static void decide(struct review *r) {
 			strcmp(r->engine, "wine") == 0 &&
 			strcmp(r->launch_type, "process") == 0 &&
 			r->program[0] != '\0' && access(r->program, X_OK) == 0) {
+		char why[320];
+		if (!wine_can_run(pe_machine(r->file), why, sizeof why)) {
+			r->action = "review";
+			snprintf(r->message, sizeof r->message, "%s", why);
+			return;
+		}
 		r->action = "wine";
 		r->launchable = 1;
 		snprintf(r->message, sizeof r->message,
@@ -1362,7 +1453,16 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		struct review again;
 		fill_review(rec->path, &again);
 		if (strcmp(again.action, "wine") != 0 || again.program[0] == '\0') {
-			fprintf(stderr, "dev-install: Wine is not available, so %s was not started\n", rec->name);
+			fprintf(stderr, "dev-install: %s was not started. %s\n", rec->name,
+				again.message[0] != '\0' ? again.message : "Wine is not available.");
+			return 3;
+		}
+		const char *xdisplay = getenv("DISPLAY");
+		if (xdisplay == NULL || xdisplay[0] == '\0') {
+			/* Wine draws through X. Without Xwayland it would start, fail to
+			 * create its window, and take the program down with it. */
+			fprintf(stderr, "dev-install: %s was not started. This desktop has no X display "
+				"for Wine (Xwayland is not running).\n", rec->name);
 			return 3;
 		}
 		char prefix[640];

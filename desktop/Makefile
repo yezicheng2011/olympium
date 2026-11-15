@@ -14,7 +14,7 @@ splash.png: splash.c
 	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS)
 	./splash-gen splash.png
 
-dev-compositor: compositor.c blur.c blur.h
+dev-compositor: compositor.c blur.c blur.h xwayland-compat.h
 	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
 
 dev-files: files.c

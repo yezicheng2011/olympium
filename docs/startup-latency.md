@@ -47,4 +47,4 @@ The ISO was not rebuilt and not booted for this change. The build machine for th
 
 `install-to-disk` does not copy `/var/lib/olympium`, so an installed system starts without a prefix and seeds one on the first launch. That costs about 690 MB on the disk on top of the 690 MB prebuilt copy. `install-to-disk` was not changed and not run.
 
-The arm64 and i386 images have no Wine. `repack-install.sh` builds the prefix for amd64 only.
+The arm64 and i386 images have no Wine yet. `repack-install.sh` builds the prefix for amd64 and i386 roots. With `wine32` installed next to `wine64` the prefix is 1.3 GB before deduplication, not 690 MB; see `docs/wine-architectures.md`.

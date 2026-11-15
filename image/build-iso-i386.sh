@@ -138,9 +138,24 @@ fi
 if ! chroot "$ROOT" pkg-config --exists libdisplay-info; then
 	build_tree "$SRC/libdisplay-info-0.1.1.tar.gz" libdisplay-info-0.1.1
 fi
-if ver_lt "$(pkg_ver wlroots)" 0.17.0; then
+# A Wine window is an X window, so Wine needs wlroots built with Xwayland.
+# OLYMPIUM_WINE=1 asks for that and for Debian's wine32. The default build is
+# unchanged: no Xwayland, no Wine, and dev-install refuses a Windows program.
+XWAYLAND_OPT=disabled
+if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
+	XWAYLAND_OPT=enabled
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		xwayland libxcb-res0-dev libxcb-util-dev
+fi
+have_xwayland=$(chroot "$ROOT" pkg-config --variable=have_xwayland wlroots 2>/dev/null || true)
+if ver_lt "$(pkg_ver wlroots)" 0.17.0 ||
+		{ [ "$XWAYLAND_OPT" = enabled ] && [ "$have_xwayland" != true ]; }; then
 	build_tree "$SRC/wlroots-0.17.1.tar.gz" wlroots-0.17.1 \
-		-Dexamples=false -Dxwayland=disabled -Drenderers=gles2 -Dbackends=drm,libinput
+		-Dexamples=false -Dxwayland=$XWAYLAND_OPT -Drenderers=gles2 -Dbackends=drm,libinput
+fi
+if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
+	bash "$REPO/image/install-wine.sh" "$ROOT" i386
+	bash "$REPO/image/wine-prefix.sh" "$ROOT"
 fi
 echo "wlroots $(pkg_ver wlroots)"
 

@@ -50,6 +50,10 @@ if [ "$ARCH" = amd64 ]; then
 		x86_64-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/usr/share/olympium/samples/desk-win.exe" \
 			"$REPO/desktop/desk-win.c"
 	fi
+	if [ -x /usr/bin/i686-w64-mingw32-gcc ]; then
+		i686-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/usr/share/olympium/samples/desk-win32.exe" \
+			"$REPO/desktop/desk-win.c"
+	fi
 	if [ -x /usr/bin/rpmbuild ]; then
 		top=$(mktemp -d)
 		mkdir -p "$top/SOURCES" "$top/SPECS" "$top/BUILD" "$top/RPMS" "$top/BUILDROOT"
@@ -91,8 +95,17 @@ cp -L "$initrd" "$WORK/boot/initrd.img"
 if [ -f "$REPO/desktop/splash.png" ]; then
 	cp "$REPO/desktop/splash.png" "$WORK/boot/grub/splash.png"
 fi
+# OLYMPIUM_WINE=1 installs the distribution's Wine for this architecture.
+# Without it the root is used as it is.
+if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
+	mount_chroot
+	bash "$REPO/image/install-wine.sh" "$ROOT" "$ARCH"
+	umount_chroot
+fi
 # A prefix built now is one the first Windows program does not wait for.
-if [ "$ARCH" = amd64 ] && [ -x "$ROOT/usr/bin/wineboot" ]; then
+# amd64 and i386 roots run natively on an x86_64 builder. An arm64 root
+# would run wineboot under qemu-user, which was not tried.
+if [ "$ARCH" != arm64 ] && [ -x "$ROOT/usr/bin/wineboot" ]; then
 	mount_chroot
 	bash "$REPO/image/wine-prefix.sh" "$ROOT"
 	umount_chroot

@@ -9,7 +9,12 @@
 # then copies text in both directions between a Windows program and a
 # Wayland program.
 #
-# Needs wine, Xwayland, and x86_64-w64-mingw32-gcc. This is a host test on the
+# It then runs a 32-bit Windows program, checks that programs for a CPU this
+# system cannot run are refused before Wine starts, and checks the compositor
+# built without Xwayland.
+#
+# Needs wine, Xwayland, and x86_64-w64-mingw32-gcc. The 32-bit part also needs
+# wine32 and i686-w64-mingw32-gcc and says so when they are missing. This is a host test on the
 # build machine. It is not a boot of the ISO, and its times are not the ISO's.
 # The stand-in for the olympium command below answers classify and plan the
 # way the pinned runtime does for a PE file when Wine is installed.
@@ -157,7 +162,7 @@ before=$(mapped_count 'Desk Win')
 ./dev-install launch "$id" >"$ROOT/win-copy.log" 2>&1 &
 copy_pid=$!
 wait_mapped 'Desk Win' "$before" >/dev/null || { echo "FAIL copy window"; fail=1; }
-sleep 2
+sleep 4
 mkdir -p "$OLYMPIUM_DESK_HOME/exchange"
 timeout 20 ./desk-paste >"$ROOT/paste.log" 2>&1 &
 paste_pid=$!
@@ -200,6 +205,93 @@ else
 	fail=1
 fi
 kill "$note_pid" "$winpaste_pid" 2>/dev/null
+wineserver_wait
+
+# 8. A 32-bit Windows program. It needs the 32-bit half of Wine.
+if command -v i686-w64-mingw32-gcc >/dev/null 2>&1; then
+	i686-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/desk-win32.exe" desk-win.c || exit 1
+	action32=$(./dev-install inspect "$ROOT/desk-win32.exe" | sed -n 's/.*"action": "\([a-z]*\)".*/\1/p')
+	if [ -x /usr/lib/wine/wine ] || [ -x /usr/lib/i386-linux-gnu/wine/wine ]; then
+		[ "$action32" = wine ] || { echo "FAIL 32-bit program not offered: $action32"; fail=1; }
+		./dev-install import --consent "$ROOT/desk-win32.exe" >"$ROOT/import32.log" 2>&1
+		id64=$id
+		id=$(awk -F '\t' -v p="$ROOT/desk-win32.exe" '$3==p {print $1; exit}' "$OLYMPIUM_DESK_HOME/library.tsv")
+		if [ -n "$id" ]; then
+			launch_timed "32-bit program"
+		else
+			echo "FAIL 32-bit import produced no id"
+			cat "$ROOT/import32.log"
+			fail=1
+		fi
+		id=$id64
+		wineserver_wait
+	else
+		[ "$action32" = review ] || { echo "FAIL 32-bit program offered without wine32: $action32"; fail=1; }
+		echo "32-bit program: wine32 is not installed here; refused, as it should be"
+	fi
+	# The same file on an image without wine32 must be refused, not started.
+	out=$(OLYMPIUM_WINE32=0 ./dev-install inspect "$ROOT/desk-win32.exe")
+	echo "$out" | grep -q '"action": "review"' && echo "$out" | grep -q 'wine32' ||
+		{ echo "FAIL 32-bit program without wine32 was not refused"; fail=1; }
+	if OLYMPIUM_WINE32=0 ./dev-install import --consent "$ROOT/desk-win32.exe" >/dev/null 2>&1; then
+		echo "FAIL import without wine32 succeeded"
+		fail=1
+	fi
+	echo "32-bit program without wine32: refused"
+else
+	echo "32-bit program: i686-w64-mingw32-gcc is not installed; not tested"
+fi
+
+# 9. A program for a CPU this system does not have is refused before Wine starts.
+out=$(OLYMPIUM_HOST_MACHINE=aarch64 ./dev-install inspect "$ROOT/desk-win.exe")
+echo "$out" | grep -q '"action": "review"' && echo "$out" | grep -q 'x86 translator' ||
+	{ echo "FAIL x86 program on ARM was not refused"; fail=1; }
+out=$(OLYMPIUM_HOST_MACHINE=i686 ./dev-install inspect "$ROOT/desk-win.exe")
+echo "$out" | grep -q '"action": "review"' ||
+	{ echo "FAIL 64-bit program on a 32-bit system was not refused"; fail=1; }
+python3 - "$ROOT/desk-win.exe" "$ROOT/desk-arm64.exe" <<'PYEOF'
+import struct, sys
+data = bytearray(open(sys.argv[1], "rb").read())
+off = struct.unpack_from("<I", data, 0x3c)[0]
+struct.pack_into("<H", data, off + 4, 0xAA64)
+open(sys.argv[2], "wb").write(data)
+PYEOF
+out=$(./dev-install inspect "$ROOT/desk-arm64.exe")
+echo "$out" | grep -q '"action": "review"' && echo "$out" | grep -q '64-bit ARM' ||
+	{ echo "FAIL ARM64 program on x86 was not refused"; fail=1; }
+echo "wrong-CPU programs: refused"
+
+# 10. No X display: the launch is refused and Wine is not started.
+before=$(mapped_count 'Desk Win')
+(unset DISPLAY; ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
+rc=$?
+sleep 1
+if [ "$rc" -ne 3 ] || [ "$(mapped_count 'Desk Win')" -ne "$before" ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
+	echo "FAIL launch without an X display: exit $rc"
+	fail=1
+else
+	echo "launch without an X display: refused"
+fi
+
+# 11. The compositor built without Xwayland still starts a session.
+cc -O2 -DDEV_DESK_NO_XWAYLAND -o "$ROOT/comp-nox" compositor.c blur.c \
+	$(pkg-config --cflags --libs wlroots wayland-server cairo pango pangocairo xkbcommon libdrm pixman-1) \
+	-DWLR_USE_UNSTABLE -Iprotocol -lm 2>/dev/null || { echo "FAIL build without Xwayland"; fail=1; }
+if [ -x "$ROOT/comp-nox" ]; then
+	mkdir -p "$ROOT/run2"
+	chmod 700 "$ROOT/run2"
+	printf '#!/bin/sh\necho "display=[${DISPLAY:-}]" > "%s/nox.env"\n' "$ROOT" > "$ROOT/nox.sh"
+	chmod 755 "$ROOT/nox.sh"
+	(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run2 WLR_BACKENDS=headless WLR_RENDERER=pixman \
+		DEV_DESK_HEADLESS=1 timeout 6 "$ROOT/comp-nox" -s "$ROOT/nox.sh" >"$ROOT/nox.log" 2>&1)
+	if [ "$(cat "$ROOT/nox.env" 2>/dev/null)" = "display=[]" ]; then
+		echo "compositor without Xwayland: session started, no DISPLAY"
+	else
+		echo "FAIL compositor without Xwayland did not start a session"
+		tail -n 5 "$ROOT/nox.log"
+		fail=1
+	fi
+fi
 if [ "$fail" -ne 0 ]; then
 	echo '--- compositor log ---'
 	grep -E 'window mapped|xwayland|rror' "$LOG" | tail -30
