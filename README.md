@@ -79,21 +79,23 @@ Olympium at `25a592cfd65a4f07449ca03e919bfa97626bb164` refuses macOS and iOS gue
 
 ## What this environment actually booted
 
+Both images below were built from the same commit. Each view was captured from a real boot of the ISO, not from a mock-up.
+
 x86_64 ISO `build/dev-live-amd64.iso`, 1.2 GB, volume id `OLYMPIUM`, hybrid BIOS and UEFI (GRUB El Torito plus an EFI image).
 
 ```
-c0aef0ca0ce2f0c4cfe3f6ca5ee2bd8b29d879a1ae9461a6f8e045f1ff155f74  dev-live-amd64.iso
+7dee4632db470f77784767d6b87a0502d16b98382635d21bf5559849926d6ba3  dev-live-amd64.iso
 ```
 
-QEMU `pc`, KVM, standard VGA, 1280×800. The same boot attached an e1000 NIC, a virtio-net NIC, and an NVMe disk. The kernel log shows `e1000 0000:00:03.0`, `virtio_net virtio0`, and `nvme nvme0`. The VGA frames show the menu bar, an open File menu, Launchpad, and live blur (`blur=live` in Settings). Drivers and the optional NVIDIA/Broadcom installer are described in `docs/drivers.md`. `driver-install --detect` lists PCI devices and does not download anything.
+QEMU `pc`, KVM, standard VGA, 1280×800, one e1000 NIC. `image/shots-x86_64.sh` boots the ISO once per view, waits for that view's line on the serial console, and saves the VGA frame: the clean desktop, an open File menu, Files, Settings, Launchpad, the purchase reminder, the same session after the reminder closes with Files open, the terminal, and the Olympium dock entry. Settings reports glass as on in that boot. An earlier boot of a previous image attached e1000, virtio-net, and NVMe devices and the kernel bound all three; see `docs/drivers.md`.
 
-aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot, including the same purchase reminder.
+aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot.
 
 ```
-4ac50d5c524fbf5662395856e06f9ddbe6ca3cd849ac4b14062b3d775d404304  dev-live-arm64.iso
+8600cb65c4c04caa15ed69d39743d9a955e34106d06758466c036cd2f5975027  dev-live-arm64.iso
 ```
 
-An earlier QEMU `virt` + AAVMF serial boot reached a login prompt on a previous arm64 image. That boot is not a framebuffer capture: virtio-gpu on that machine has no VGA screendump. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon. This newer image was checked by reading the squashfs: the reminder text, `olympium-activate`, iris, radeonsi, Nouveau, amdgpu, radeon, and xe are present. The arm64 kernel does not include `i915.ko`.
+QEMU `virt`, AAVMF, a `virtio-gpu-pci` display, software emulation on an x86_64 host. `image/shots-arm64.sh` waits for the Files window on the serial console and saves the virtio-gpu frame, so there is a real picture of the arm64 desktop with Files open. That boot is slow because every instruction is emulated. It is a QEMU machine. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon. The arm64 kernel does not include `i915.ko`.
 
 ## Purchase reminder
 
