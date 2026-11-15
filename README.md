@@ -93,7 +93,9 @@ The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that pr
 
 Double-clicking a file in Files opens Install. The file is not run. A Linux program whose plan is a native process can be imported after a checkbox, then launched. Launch uses `olympium-run` when that helper is installed, so a 32-bit program on a 64-bit CPU still takes the native path and a 64-bit program on the i386 image still takes the swap-backed guest.
 
-A Mach-O file can be kept and is not started. An iOS package is refused. A `.deb`, `.rpm`, `.apk`, `.hap`, or `.exe` is identified and not installed. Nothing is downloaded. The checksummed ISOs in the next section do not contain `dev-install` yet; the next image build installs it. `desktop/test-install.sh` is the host test. The matrix is `docs/desktop-apps.md`. The contract for the runtime is `docs/runtime-desktop.md`.
+A Mach-O file can be kept and is not started. The pinned runtime refuses macOS software on this Linux builder (`apple-platform-on-non-apple-hardware`). This desktop does not invent a launch for that refusal, and it does not download a macOS guest. An iOS package is refused. Nothing is downloaded.
+
+A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, `.msi`, and `.dmg` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
 
 ## What this environment actually booted
 
@@ -124,6 +126,27 @@ bef87685bdebc51f24a8b1117a652a01aea65189a50bb3cc0e43dcfbac16d7a2  dev-live-i386.
 `qemu-system-i386 -M pc -vga virtio`, KVM, 2 GiB, on an x86_64 host. The session log says `arch i686 6.1.0-54-686-pae`. The compositor started. The Lawful test app opened (the log says `window mapped: Olympium (app olympium-testapp)`; the window's own subtitle is "Lawful test app"). A terminal then ran four 64-bit programs with the image's 32-bit `qemu-system-x86_64`, TCG, 512 MiB of guest RAM in a file on an extra virtio disk, and a 2 GiB swap file on that disk. All four exited 0: `hello64 bits=64 machine=x86_64` in 7 seconds, a mapped page at `0x100000000` in 6 seconds, GNU bash 5.2.21 reporting `x86_64` in 5 seconds, and `payload64 bits=64` in 5 seconds. SwapTotal was 2,097,148 kB and SwapFree fell to 2,096,884 kB, so 264 KiB was in swap. This is an emulated PC, not a physical 32-bit computer. The pictures are `olympium-i386-01-desktop.png` and `olympium-i386-02-64bit.png` (2:02 AM ET, Sunday, November 15, 2026). A boot with `-vga std` reached the same kernel and then the compositor exited, because bochs-drm does not advertise PRIME import. There is no armhf ISO. A 64-bit program that needs more than about 2 GiB of guest RAM still does not run: the translator is a 32-bit process.
 
 On the build machine the Firefox content sandbox cannot create a user namespace (`clone` returns `EPERM`). The live image sets `kernel.apparmor_restrict_unprivileged_userns` to 0 so the sandbox can. If a boot still blocks it, `firefox-launch` starts Firefox again with the content sandbox off and writes that fact to the session log.
+
+## Install window on a booted desktop
+
+x86_64 ISO `build/dev-live-amd64-install.iso`, gzip squashfs, 2,256,891,904 bytes. This is not one of the three images above, and it does not replace their part files. Ubuntu Wine `9.0~repack-4build3` and Xwayland are installed from Ubuntu packages. The compositor keeps Xwayland running so a Wine window is a window on this desktop.
+
+```
+9c1b41e427bd891a6887a305de0a3cbfc8024a6f8786875ab1620c9e601c07a1  dev-live-amd64-install.iso
+```
+
+QEMU `pc`, KVM, `-vga std`, on an x86_64 host, append `olympium.showwine=1 olympium.importwine=1`. Those flags are the boot test's consent. A normal boot does not import anything. The session log, from the compositor clock:
+
+- `xwayland on DISPLAY=:0` at 1.1s, then the session started.
+- Install mapped at 9.6s for `desk-win.exe`. The checkbox was off and the window said nothing had been run. Picture: `wine-review.png`.
+- Import exited 0 and did not start the program. Id `wine-9425039c`.
+- A Wine setup window mapped at 24.6s (`wineboot.exe`).
+- `Desk Win` mapped at 43.3s and painted `Desk Win ready`. Picture: `wine-window.png`. The program's own timer, from its process start to `WM_CREATE`, was 26 ms. That number is not the time from the click to the window.
+- The exchange file read back `Desk Win ready`. A Wayland client was not shown pasting the Wine clipboard.
+- `rpm2cpio` extracted `desk-rpm` and the program wrote `desk-rpm-ready`. It is a shell script, not a window.
+- Launchpad at 55.6s listed `desk-win.exe` and `desk-rpm.rpm`, and the dock had a pin for each. Picture: `wine-launchpad.png`.
+
+The pictures were taken at about 5:21 AM ET, Sunday, November 15, 2026. i386 and arm64 were not rebuilt with Wine. An x86_64 `.exe` does not run on the arm64 image without another translator, and that translator is not in this draft. The earlier `.deb` boot remains `c30c081c…`.
 
 ## Purchase reminder
 

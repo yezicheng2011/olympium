@@ -1,0 +1,4 @@
+#!/bin/sh
+out="${OLYMPIUM_DESK_HOME:-/tmp}/exchange"
+mkdir -p "$out"
+printf 'desk-rpm-ready\n' > "$out/desk-rpm.txt"

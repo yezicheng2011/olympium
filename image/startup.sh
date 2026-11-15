@@ -26,6 +26,10 @@ fi
 if grep -q 'olympium.opentest=1' /proc/cmdline 2>/dev/null; then
 	(sleep 12; /usr/bin/olympium-testapp >/tmp/testapp.log 2>&1) &
 fi
+if grep -q -e 'olympium.showinstall=1' -e 'olympium.importsample=1' \
+		-e 'olympium.showwine=1' -e 'olympium.importwine=1' /proc/cmdline 2>/dev/null; then
+	(sleep 8; /usr/libexec/dev-desktop/install-sample.sh >/tmp/install-sample.log 2>&1) &
+fi
 if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
 	(sleep 10; /usr/bin/dev-settings --page=appearance >/dev/null 2>&1) &
 	(

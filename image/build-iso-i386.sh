@@ -157,7 +157,8 @@ install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" 
 install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 	"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
 	"$REPO/image/guest-fetch.sh" "$REPO/image/driver-report" "$REPO/image/driver-install" \
-	"$REPO/image/firefox-launch" "$ROOT/usr/libexec/dev-desktop/"
+	"$REPO/image/firefox-launch" "$REPO/image/install-sample.sh" \
+	"$ROOT/usr/libexec/dev-desktop/"
 install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
 install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
 install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"

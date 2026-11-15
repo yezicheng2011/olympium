@@ -233,6 +233,7 @@ stage_desktop() {
 		"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
 		"$REPO/image/guest-fetch.sh" \
 		"$REPO/image/driver-report" "$REPO/image/driver-install" \
+		"$REPO/image/install-sample.sh" \
 		"$ROOT/usr/libexec/dev-desktop/"
 	install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
 	install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"

@@ -7,6 +7,8 @@ desktop/dev-compat
 desktop/olympium-run
 desktop/olympium-testapp
 desktop/dev-install
+desktop/desk-note
+desktop/desk-paste
 desktop/test-blur
 desktop/test-macho
 build/

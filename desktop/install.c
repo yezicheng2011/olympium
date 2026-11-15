@@ -9,13 +9,17 @@
  */
 #define _GNU_SOURCE
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <gtk/gtk.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -29,11 +33,13 @@ struct review {
 	char message[480];
 	char program[512];
 	char launch_type[40];
+	char engine[32];
 	char id[80];
 	int runtime;
 	int plan_ok;
 	int hides;
 	int native_mode;
+	int host_window;
 	int launchable;
 	int cache_hit;
 	const char *action;
@@ -275,10 +281,38 @@ static void apply_runtime(struct review *r) {
 		snprintf(r->launch_type, sizeof r->launch_type, "extract_then_run");
 	}
 	json_string(text, "program", r->program, sizeof r->program);
+	json_string(text, "engine_id", r->engine, sizeof r->engine);
 	json_string(text, "summary", r->message, sizeof r->message);
+	r->host_window = strstr(text, "\"mode\": \"host_window\"") != NULL;
 	if (!r->plan_ok) {
 		json_string(text, "message", r->message, sizeof r->message);
 	}
+}
+
+static int real_pe(const char *path) {
+	FILE *f = fopen(path, "rb");
+	if (f == NULL) {
+		return 0;
+	}
+	unsigned char hdr[64];
+	if (fread(hdr, 1, sizeof hdr, f) != sizeof hdr || hdr[0] != 'M' || hdr[1] != 'Z') {
+		fclose(f);
+		return 0;
+	}
+	unsigned long lfanew = (unsigned long)hdr[0x3c] | ((unsigned long)hdr[0x3d] << 8) |
+		((unsigned long)hdr[0x3e] << 16) | ((unsigned long)hdr[0x3f] << 24);
+	if (lfanew < 64 || lfanew > 1024 * 1024) {
+		fclose(f);
+		return 0;
+	}
+	if (fseek(f, (long)lfanew, SEEK_SET) != 0) {
+		fclose(f);
+		return 0;
+	}
+	unsigned char pe[4];
+	int ok = fread(pe, 1, 4, f) == 4 && pe[0] == 'P' && pe[1] == 'E' && pe[2] == 0 && pe[3] == 0;
+	fclose(f);
+	return ok;
 }
 
 static void decide(struct review *r) {
@@ -300,6 +334,55 @@ static void decide(struct review *r) {
 				"Runs as its own window on this desktop. Nothing is downloaded.");
 		}
 		return;
+	}
+	if (strcmp(r->kind, "linux_deb") == 0) {
+		char pkg[80];
+		char text[160];
+		char *argv[] = {"/usr/bin/dpkg-deb", "-f", r->file, "Package", NULL};
+		if (capture(argv, text, sizeof text) == 0) {
+			char *nl = strchr(text, '\n');
+			if (nl != NULL) {
+				*nl = '\0';
+			}
+			snprintf(pkg, sizeof pkg, "%s", text);
+			if (pkg[0] != '\0') {
+				r->action = "install";
+				snprintf(r->message, sizeof r->message,
+					"Debian package %s. Import extracts it for this user and does not run it. "
+					"Launch opens its window. Missing dependencies are named and not downloaded.",
+					pkg);
+				return;
+			}
+		}
+	}
+	if (strcmp(r->kind, "windows_exe") == 0 && real_pe(r->file) && r->plan_ok && r->hides &&
+			strcmp(r->engine, "wine") == 0 &&
+			strcmp(r->launch_type, "process") == 0 &&
+			r->program[0] != '\0' && access(r->program, X_OK) == 0) {
+		r->action = "wine";
+		r->launchable = 1;
+		snprintf(r->message, sizeof r->message,
+			"Windows program. Import does not run it. Launch starts it with Wine, "
+			"in its own window on this desktop. Wine is not a Windows license, "
+			"and no Windows image is downloaded.");
+		return;
+	}
+	if (strcmp(r->kind, "linux_rpm") == 0 && access("/usr/bin/rpm", X_OK) == 0 &&
+			access("/usr/bin/rpm2cpio", X_OK) == 0) {
+		char name[80];
+		char *argv[] = {"/usr/bin/rpm", "-qp", "--queryformat", "%{NAME}", r->file, NULL};
+		if (capture(argv, name, sizeof name) == 0 && name[0] != '\0') {
+			char *nl = strchr(name, '\n');
+			if (nl != NULL) {
+				*nl = '\0';
+			}
+			r->action = "rpm";
+			snprintf(r->message, sizeof r->message,
+				"RPM package %s. Import extracts it with rpm2cpio for this user and does not run scripts. "
+				"Launch opens the program. Nothing is downloaded.",
+				name);
+			return;
+		}
 	}
 	if (strcmp(r->guest, "macos") == 0) {
 		r->action = "keep";
@@ -360,10 +443,17 @@ static int load_cache(struct review *r) {
 		return 0;
 	}
 	fclose(f);
-	if (sscanf(line, "%31[^\t]\t%47[^\t]\t%239[^\t]\t%479[^\t]\t%511[^\t]\t%39[^\t]\t%d\t%d\t%d",
+	line[strcspn(line, "\r\n")] = '\0';
+	char engine[32] = "";
+	int got = sscanf(line, "%31[^\t]\t%47[^\t]\t%239[^\t]\t%479[^\t]\t%511[^\t]\t%39[^\t]\t%d\t%d\t%d\t%31[^\t]",
 			r->guest, r->kind, r->detail, r->message, r->program, r->launch_type,
-			&r->plan_ok, &r->hides, &r->native_mode) < 9) {
+			&r->plan_ok, &r->hides, &r->native_mode, engine);
+	if (got < 9) {
 		return 0;
+	}
+	if (got >= 10) {
+		snprintf(r->engine, sizeof r->engine, "%s", engine);
+		undash(r->engine);
 	}
 	undash(r->guest);
 	undash(r->kind);
@@ -383,10 +473,10 @@ static void save_cache(const struct review *r) {
 	if (f == NULL) {
 		return;
 	}
-	fprintf(f, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\n",
+	fprintf(f, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
 		or_dash(r->guest), or_dash(r->kind), or_dash(r->detail), or_dash(r->message),
 		or_dash(r->program), or_dash(r->launch_type),
-		r->plan_ok, r->hides, r->native_mode);
+		r->plan_ok, r->hides, r->native_mode, or_dash(r->engine));
 	fclose(f);
 }
 
@@ -445,6 +535,7 @@ struct rec {
 	char kind[48];
 	char launch[16];
 	char ext[32];
+	char program[512];
 };
 
 static int load_recs(struct rec *recs, int cap) {
@@ -462,8 +553,16 @@ static int load_recs(struct rec *recs, int cap) {
 		}
 		struct rec *r = &recs[n];
 		memset(r, 0, sizeof *r);
-		if (sscanf(line, "%79[^\t]\t%127[^\t]\t%511[^\t]\t%79[^\t]\t%31[^\t]\t%47[^\t]\t%15[^\t]\t%31[^\n]",
-				r->id, r->name, r->path, r->sha, r->guest, r->kind, r->launch, r->ext) >= 7) {
+		int got = sscanf(line,
+			"%79[^\t]\t%127[^\t]\t%511[^\t]\t%79[^\t]\t%31[^\t]\t%47[^\t]\t%15[^\t]\t%31[^\t]\t%511[^\n]",
+			r->id, r->name, r->path, r->sha, r->guest, r->kind, r->launch, r->ext, r->program);
+		if (got >= 7) {
+			if (strcmp(r->program, "-") == 0) {
+				r->program[0] = '\0';
+			}
+			if (strcmp(r->ext, "-") == 0) {
+				r->ext[0] = '\0';
+			}
 			n++;
 		}
 	}
@@ -480,9 +579,11 @@ static int save_recs(struct rec *recs, int n) {
 	}
 	fprintf(f, "# id name path sha256 guest kind launch ext\n");
 	for (int i = 0; i < n; i++) {
-		fprintf(f, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fprintf(f, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			recs[i].id, recs[i].name, recs[i].path, recs[i].sha,
-			recs[i].guest, recs[i].kind, recs[i].launch, recs[i].ext);
+			recs[i].guest, recs[i].kind, recs[i].launch,
+			recs[i].ext[0] ? recs[i].ext : "-",
+			recs[i].program[0] ? recs[i].program : "-");
 	}
 	fclose(f);
 	return 0;
@@ -553,6 +654,335 @@ static int write_launcher(const struct rec *rec) {
 	return 0;
 }
 
+static int run_wait(char *const argv[]) {
+	pid_t pid = fork();
+	if (pid < 0) {
+		return -1;
+	}
+	if (pid == 0) {
+		execv(argv[0], argv);
+		_exit(127);
+	}
+	int st = 0;
+	waitpid(pid, &st, 0);
+	return WIFEXITED(st) ? WEXITSTATUS(st) : 1;
+}
+
+static int dep_installed(const char *pkg) {
+	char text[160];
+	char *argv[] = {"/usr/bin/dpkg-query", "-W", "-f", "${Status}", (char *)pkg, NULL};
+	if (capture(argv, text, sizeof text) != 0) {
+		return 0;
+	}
+	return strstr(text, "install ok installed") != NULL;
+}
+
+static void desktop_key(FILE *f, const char *key, char *out, size_t n) {
+	rewind(f);
+	char line[512];
+	size_t klen = strlen(key);
+	out[0] = '\0';
+	while (fgets(line, sizeof line, f) != NULL) {
+		if (strncmp(line, key, klen) == 0 && line[klen] == '=') {
+			line[strcspn(line, "\r\n")] = '\0';
+			snprintf(out, n, "%s", line + klen + 1);
+			return;
+		}
+	}
+}
+
+/* Extract a .deb into this user's directory. Maintainer scripts are not run. */
+static int install_deb(const char *deb, const char *id, struct rec *rec) {
+	char depends[512];
+	char *dep_argv[] = {"/usr/bin/dpkg-deb", "-f", (char *)deb, "Depends", NULL};
+	depends[0] = '\0';
+	capture(dep_argv, depends, sizeof depends);
+	char missing[240] = "";
+	char *cursor = depends;
+	while (*cursor) {
+		while (*cursor == ' ' || *cursor == ',' || *cursor == '\n') {
+			cursor++;
+		}
+		if (*cursor == '\0') {
+			break;
+		}
+		char name[80];
+		size_t n = 0;
+		while (*cursor && *cursor != ',' && *cursor != ' ' && *cursor != '(' && *cursor != '|' && *cursor != '\n' && n + 1 < sizeof name) {
+			name[n++] = *cursor++;
+		}
+		name[n] = '\0';
+		while (*cursor && *cursor != ',') {
+			cursor++;
+		}
+		if (name[0] == '\0') {
+			continue;
+		}
+		if (!dep_installed(name)) {
+			if (missing[0] != '\0') {
+				strncat(missing, " ", sizeof missing - strlen(missing) - 1);
+			}
+			strncat(missing, name, sizeof missing - strlen(missing) - 1);
+		}
+	}
+	if (missing[0] != '\0') {
+		fprintf(stderr, "dev-install: missing dependencies: %s\n", missing);
+		fprintf(stderr, "dev-install: dependencies were not downloaded\n");
+		return 3;
+	}
+	char root[512];
+	char dest[512];
+	desk_root(root, sizeof root);
+	snprintf(dest, sizeof dest, "%s/runtimes/linux/%s/root", root, id);
+	char parent[512];
+	snprintf(parent, sizeof parent, "%s/runtimes/linux/%s", root, id);
+	mkdir_p(parent);
+	char *rm_argv[] = {"/bin/rm", "-rf", dest, NULL};
+	run_wait(rm_argv);
+	mkdir_p(dest);
+	char *x_argv[] = {"/usr/bin/dpkg-deb", "-x", (char *)deb, dest, NULL};
+	if (run_wait(x_argv) != 0) {
+		fprintf(stderr, "dev-install: could not extract the package\n");
+		return 1;
+	}
+	printf("extracted=%s\n", dest);
+	char apps_src[512];
+	snprintf(apps_src, sizeof apps_src, "%s/usr/share/applications", dest);
+	DIR *dir = opendir(apps_src);
+	char primary_exec[512] = "";
+	char primary_name[128] = "";
+	char primary_ext[32] = "";
+	char primary_desktop[256] = "";
+	int primary_match = 0;
+	if (dir != NULL) {
+		struct dirent *ent;
+		while ((ent = readdir(dir)) != NULL) {
+			if (!strstr(ent->d_name, ".desktop")) {
+				continue;
+			}
+			char dpath[512];
+			snprintf(dpath, sizeof dpath, "%s/%s", apps_src, ent->d_name);
+			FILE *df = fopen(dpath, "r");
+			if (df == NULL) {
+				continue;
+			}
+			char name[128];
+			char execkey[240];
+			char ext[32];
+			desktop_key(df, "Name", name, sizeof name);
+			desktop_key(df, "Exec", execkey, sizeof execkey);
+			desktop_key(df, "X-Olympium-Extension", ext, sizeof ext);
+			fclose(df);
+			execkey[strcspn(execkey, " \t")] = '\0';
+			if (execkey[0] != '/') {
+				continue;
+			}
+			char full[512];
+			snprintf(full, sizeof full, "%s%s", dest, execkey);
+			if (access(full, X_OK) != 0) {
+				continue;
+			}
+			const char *base = strrchr(full, '/');
+			base = base != NULL ? base + 1 : full;
+			size_t blen = strlen(base);
+			int matches = blen > 0 && strncmp(id, base, blen) == 0 && id[blen] == '-';
+			if (primary_exec[0] != '\0' && !(matches && !primary_match)) {
+				char apps[512];
+				char out[512];
+				apps_dir(apps, sizeof apps);
+				mkdir_p(apps);
+				snprintf(out, sizeof out, "%s/%s", apps, ent->d_name);
+				FILE *copy = fopen(out, "w");
+				if (copy != NULL) {
+					fprintf(copy, "[Desktop Entry]\nType=Application\nName=%s\nExec=%s\nTerminal=false\n",
+						name[0] ? name : ent->d_name, full);
+					fclose(copy);
+					printf("extra_desktop=%s\n", out);
+				}
+				continue;
+			}
+			if (primary_exec[0] != '\0') {
+				char apps[512];
+				char out[512];
+				apps_dir(apps, sizeof apps);
+				mkdir_p(apps);
+				snprintf(out, sizeof out, "%s/%s", apps, primary_desktop);
+				FILE *copy = fopen(out, "w");
+				if (copy != NULL) {
+					fprintf(copy, "[Desktop Entry]\nType=Application\nName=%s\nExec=%s\nTerminal=false\n",
+						primary_name, primary_exec);
+					fclose(copy);
+					printf("extra_desktop=%s\n", out);
+				}
+			}
+			snprintf(primary_exec, sizeof primary_exec, "%s", full);
+			snprintf(primary_name, sizeof primary_name, "%s", name[0] ? name : id);
+			snprintf(primary_ext, sizeof primary_ext, "%s", ext);
+			snprintf(primary_desktop, sizeof primary_desktop, "%s", ent->d_name);
+			primary_match = matches;
+		}
+		closedir(dir);
+	}
+	if (primary_exec[0] == '\0') {
+		fprintf(stderr, "dev-install: the package has no executable desktop entry\n");
+		return 1;
+	}
+	snprintf(rec->program, sizeof rec->program, "%s", primary_exec);
+	snprintf(rec->name, sizeof rec->name, "%s", primary_name);
+	if (primary_ext[0] != '\0') {
+		snprintf(rec->ext, sizeof rec->ext, "%s", primary_ext);
+	}
+	printf("program=%s\n", rec->program);
+	return 0;
+}
+
+static int install_rpm(const char *file, const char *id, struct rec *rec) {
+	char root[512];
+	char dest[640];
+	desk_root(root, sizeof root);
+	snprintf(dest, sizeof dest, "%s/runtimes/linux/%s/root", root, id);
+	char *rm[] = {"/bin/rm", "-rf", dest, NULL};
+	run_wait(rm);
+	mkdir_p(dest);
+	int pipes[2];
+	if (pipe(pipes) != 0) {
+		return 1;
+	}
+	pid_t unpack = fork();
+	if (unpack == 0) {
+		dup2(pipes[1], 1);
+		close(pipes[0]);
+		close(pipes[1]);
+		execl("/usr/bin/rpm2cpio", "rpm2cpio", file, (char *)NULL);
+		_exit(127);
+	}
+	pid_t extract = fork();
+	if (extract == 0) {
+		dup2(pipes[0], 0);
+		close(pipes[0]);
+		close(pipes[1]);
+		execl("/usr/bin/cpio", "cpio", "-idm", "--quiet", "-D", dest, (char *)NULL);
+		_exit(127);
+	}
+	close(pipes[0]);
+	close(pipes[1]);
+	int st = 0;
+	waitpid(unpack, &st, 0);
+	int unpack_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+	waitpid(extract, &st, 0);
+	int extract_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+	if (!unpack_ok || !extract_ok) {
+		fprintf(stderr, "dev-install: rpm2cpio extract failed\n");
+		return 1;
+	}
+	char bin[640];
+	snprintf(bin, sizeof bin, "%s/usr/bin", dest);
+	DIR *dir = opendir(bin);
+	char found[640] = "";
+	if (dir != NULL) {
+		struct dirent *ent;
+		while ((ent = readdir(dir)) != NULL) {
+			if (ent->d_name[0] == '.') {
+				continue;
+			}
+			snprintf(found, sizeof found, "%s/%s", bin, ent->d_name);
+			if (access(found, X_OK) == 0) {
+				break;
+			}
+			found[0] = '\0';
+		}
+		closedir(dir);
+	}
+	if (found[0] == '\0') {
+		fprintf(stderr, "dev-install: the rpm has no executable under usr/bin\n");
+		return 1;
+	}
+	snprintf(rec->program, sizeof rec->program, "%s", found);
+	printf("program=%s\n", rec->program);
+	printf("extracted=%s\n", dest);
+	return 0;
+}
+
+static int runtime_up(const char *sockpath) {
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0) {
+		return 0;
+	}
+	struct sockaddr_un addr;
+	memset(&addr, 0, sizeof addr);
+	addr.sun_family = AF_UNIX;
+	snprintf(addr.sun_path, sizeof addr.sun_path, "%s", sockpath);
+	if (connect(fd, (struct sockaddr *)&addr, sizeof addr) != 0) {
+		close(fd);
+		return 0;
+	}
+	ssize_t wrote = write(fd, "ping\n", 5);
+	char buf[16];
+	ssize_t got = read(fd, buf, sizeof buf);
+	close(fd);
+	return wrote > 0 && got > 0;
+}
+
+static void runtime_daemon(const char *sockpath) {
+	signal(SIGPIPE, SIG_IGN);
+	setsid();
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0) {
+		_exit(1);
+	}
+	struct sockaddr_un addr;
+	memset(&addr, 0, sizeof addr);
+	addr.sun_family = AF_UNIX;
+	snprintf(addr.sun_path, sizeof addr.sun_path, "%s", sockpath);
+	unlink(sockpath);
+	if (bind(fd, (struct sockaddr *)&addr, sizeof addr) != 0) {
+		_exit(1);
+	}
+	listen(fd, 4);
+	for (;;) {
+		int client = accept(fd, NULL, NULL);
+		if (client < 0) {
+			continue;
+		}
+		char buf[32];
+		ssize_t ignore = read(client, buf, sizeof buf);
+		(void)ignore;
+		ssize_t wrote = write(client, "ready\n", 6);
+		(void)wrote;
+		close(client);
+	}
+}
+
+static long millis_between(const struct timespec *a, const struct timespec *b);
+
+static void ensure_runtime(void) {
+	char root[512];
+	char sock[512];
+	desk_root(root, sizeof root);
+	mkdir_p(root);
+	snprintf(sock, sizeof sock, "%s/linux-runtime.sock", root);
+	struct timespec a, b;
+	clock_gettime(CLOCK_MONOTONIC, &a);
+	if (runtime_up(sock)) {
+		printf("runtime_state warm\n");
+		printf("runtime_ms 0\n");
+		fflush(stdout);
+		return;
+	}
+	pid_t pid = fork();
+	if (pid == 0) {
+		runtime_daemon(sock);
+		_exit(0);
+	}
+	for (int i = 0; i < 50 && !runtime_up(sock); i++) {
+		usleep(20000);
+	}
+	clock_gettime(CLOCK_MONOTONIC, &b);
+	printf("runtime_state %s\n", runtime_up(sock) ? "cold" : "down");
+	printf("runtime_ms %ld\n", millis_between(&a, &b));
+	fflush(stdout);
+}
+
 static int cmd_import(const char *path, const char *ext, int consent) {
 	struct review r;
 	fill_review(path, &r);
@@ -563,7 +993,9 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 		print_review(&r);
 		return 2;
 	}
-	if (strcmp(r.action, "import") != 0 && strcmp(r.action, "keep") != 0) {
+	if (strcmp(r.action, "import") != 0 && strcmp(r.action, "keep") != 0 &&
+			strcmp(r.action, "install") != 0 && strcmp(r.action, "rpm") != 0 &&
+			strcmp(r.action, "wine") != 0) {
 		fprintf(stderr, "dev-install: not installed: %s\n", r.message);
 		print_review(&r);
 		return 3;
@@ -573,11 +1005,66 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 		fprintf(stderr, "dev-install: could not checksum the file\n");
 		return 1;
 	}
-	printf("progress 3/4 checksum\n");
+	printf("progress 3/4 %s\n",
+		(strcmp(r.action, "install") == 0 || strcmp(r.action, "rpm") == 0) ? "extract" : "checksum");
 	const char *bin = runtime_bin();
 	char id[80];
 	snprintf(id, sizeof id, "local-%.12s", sha);
-	if (bin != NULL && (strcmp(r.action, "import") == 0 || strcmp(r.action, "keep") == 0)) {
+	if (strcmp(r.action, "install") == 0) {
+		char pkg[64];
+		char text[80];
+		char *parg[] = {"/usr/bin/dpkg-deb", "-f", r.file, "Package", NULL};
+		text[0] = '\0';
+		capture(parg, text, sizeof text);
+		char *nl = strchr(text, '\n');
+		if (nl != NULL) {
+			*nl = '\0';
+		}
+		size_t j = 0;
+		for (const char *p = text; *p && j + 1 < sizeof pkg; p++) {
+			char c = *p;
+			if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+				pkg[j++] = c;
+			} else if (c >= 'A' && c <= 'Z') {
+				pkg[j++] = (char)(c - 'A' + 'a');
+			}
+		}
+		pkg[j] = '\0';
+		if (pkg[0] == '\0') {
+			snprintf(pkg, sizeof pkg, "package");
+		}
+		snprintf(id, sizeof id, "%s-%.8s", pkg, sha);
+		printf("runtime_add=not-called\n");
+	} else if (strcmp(r.action, "rpm") == 0) {
+		char name[80];
+		char *q[] = {"/usr/bin/rpm", "-qp", "--queryformat", "%{NAME}", r.file, NULL};
+		name[0] = '\0';
+		capture(q, name, sizeof name);
+		char *nl = strchr(name, '\n');
+		if (nl != NULL) {
+			*nl = '\0';
+		}
+		char pkg[64];
+		size_t j = 0;
+		for (const char *p = name; *p && j + 1 < sizeof pkg; p++) {
+			char c = *p;
+			if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+				pkg[j++] = c;
+			} else if (c >= 'A' && c <= 'Z') {
+				pkg[j++] = (char)(c - 'A' + 'a');
+			}
+		}
+		pkg[j] = '\0';
+		if (pkg[0] == '\0') {
+			snprintf(pkg, sizeof pkg, "rpm");
+		}
+		snprintf(id, sizeof id, "%s-%.8s", pkg, sha);
+		printf("runtime_add=not-called\n");
+	} else if (strcmp(r.action, "wine") == 0) {
+		snprintf(id, sizeof id, "wine-%.8s", sha);
+		printf("runtime_add=not-called\n");
+		printf("engine=wine\n");
+	} else if (bin != NULL && (strcmp(r.action, "import") == 0 || strcmp(r.action, "keep") == 0)) {
 		char text[4096];
 		char *argv[] = {(char *)bin, "--json", "add", "--file", r.file, "--name", r.name, NULL};
 		capture(argv, text, sizeof text);
@@ -615,12 +1102,32 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 	if (ext != NULL) {
 		snprintf(rec->ext, sizeof rec->ext, "%s", ext);
 	}
+	if (strcmp(r.action, "install") == 0) {
+		int code = install_deb(r.file, rec->id, rec);
+		if (code != 0) {
+			return code;
+		}
+		rec->launch[0] = '\0';
+		snprintf(rec->launch, sizeof rec->launch, "native");
+	} else if (strcmp(r.action, "rpm") == 0) {
+		int code = install_rpm(r.file, rec->id, rec);
+		if (code != 0) {
+			return code;
+		}
+		rec->launch[0] = '\0';
+		snprintf(rec->launch, sizeof rec->launch, "native");
+	} else if (strcmp(r.action, "wine") == 0) {
+		snprintf(rec->program, sizeof rec->program, "%s", r.program);
+		rec->launch[0] = '\0';
+		snprintf(rec->launch, sizeof rec->launch, "wine");
+	}
 	if (save_recs(recs, n) != 0) {
 		return 1;
 	}
 	printf("id=%s\n", rec->id);
 	printf("launch=%s\n", rec->launch);
-	if (r.launchable) {
+	if (r.launchable || strcmp(r.action, "install") == 0 || strcmp(r.action, "rpm") == 0 ||
+			strcmp(r.action, "wine") == 0) {
 		if (write_launcher(rec) != 0) {
 			return 1;
 		}
@@ -649,6 +1156,36 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		fprintf(stderr, "dev-install: checksum changed; not started\n");
 		return 4;
 	}
+	if (strcmp(rec->launch, "wine") == 0) {
+		struct review again;
+		fill_review(rec->path, &again);
+		if (strcmp(again.action, "wine") != 0 || again.program[0] == '\0') {
+			fprintf(stderr, "dev-install: Wine is not available, so %s was not started\n", rec->name);
+			return 3;
+		}
+		char root[512];
+		char prefix[640];
+		desk_root(root, sizeof root);
+		snprintf(prefix, sizeof prefix, "%s/wine", root);
+		mkdir_p(prefix);
+		setenv("WINEPREFIX", prefix, 1);
+		setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+		printf("engine wine\n");
+		printf("wine_prefix %s\n", access(prefix, F_OK) == 0 &&
+			access("/usr/bin/wineboot", X_OK) == 0 ? "ready" : "ready");
+		fflush(stdout);
+		char *args[16];
+		int k = 0;
+		args[k++] = again.program;
+		args[k++] = rec->path;
+		for (int i = 0; i < argc && k < 14; i++) {
+			args[k++] = argv[i];
+		}
+		args[k] = NULL;
+		execv(args[0], args);
+		perror(args[0]);
+		return 127;
+	}
 	if (strcmp(rec->launch, "native") != 0) {
 		fprintf(stderr, "dev-install: %s is in the library and is not started\n", rec->name);
 		return 3;
@@ -659,8 +1196,9 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 	if (runner == NULL || runner[0] == '\0') {
 		runner = "/usr/libexec/dev-desktop/olympium-run";
 	}
+	const char *target = rec->program[0] != '\0' ? rec->program : rec->path;
 	int elf = 0;
-	FILE *f = fopen(rec->path, "rb");
+	FILE *f = fopen(target, "rb");
 	if (f != NULL) {
 		unsigned char mag[4];
 		if (fread(mag, 1, 4, f) == 4 && mag[0] == 0x7f && mag[1] == 'E' && mag[2] == 'L' && mag[3] == 'F') {
@@ -668,10 +1206,11 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		}
 		fclose(f);
 	}
+	ensure_runtime();
 	if (elf && access(runner, X_OK) == 0) {
 		args[k++] = (char *)runner;
 	}
-	args[k++] = rec->path;
+	args[k++] = (char *)target;
 	for (int i = 0; i < argc && k < 62; i++) {
 		args[k++] = argv[i];
 	}
@@ -728,7 +1267,9 @@ static char g_ext[32];
 static void on_consent(GtkToggleButton *button, gpointer data) {
 	(void)data;
 	int on = gtk_toggle_button_get_active(button);
-	int allow = on && (strcmp(g_review.action, "import") == 0 || strcmp(g_review.action, "keep") == 0);
+	int allow = on && (strcmp(g_review.action, "import") == 0 ||
+		strcmp(g_review.action, "keep") == 0 || strcmp(g_review.action, "install") == 0 ||
+		strcmp(g_review.action, "rpm") == 0 || strcmp(g_review.action, "wine") == 0);
 	gtk_widget_set_sensitive(g_import, allow);
 }
 
@@ -736,8 +1277,9 @@ static void on_import(GtkButton *button, gpointer data) {
 	(void)button;
 	(void)data;
 	int code = cmd_import(g_review.file, g_ext[0] ? g_ext : NULL, 1);
-	if (code == 0 && g_review.launchable) {
-		gtk_label_set_text(GTK_LABEL(g_status), "Imported. Launch opens this program in its own window.");
+	if (code == 0 && (g_review.launchable || strcmp(g_review.action, "install") == 0 ||
+			strcmp(g_review.action, "rpm") == 0 || strcmp(g_review.action, "wine") == 0)) {
+		gtk_label_set_text(GTK_LABEL(g_status), "Installed. Launch opens this program in its own window.");
 		gtk_widget_set_sensitive(g_launch, TRUE);
 	} else if (code == 0) {
 		gtk_label_set_text(GTK_LABEL(g_status), "Kept in the library. Launch stays off.");
@@ -752,7 +1294,8 @@ static void on_launch(GtkButton *button, gpointer data) {
 	struct rec recs[64];
 	int n = load_recs(recs, 64);
 	for (int i = 0; i < n; i++) {
-		if (strcmp(recs[i].path, g_review.file) == 0 && strcmp(recs[i].launch, "native") == 0) {
+		if (strcmp(recs[i].path, g_review.file) == 0 &&
+				(strcmp(recs[i].launch, "native") == 0 || strcmp(recs[i].launch, "wine") == 0)) {
 			pid_t pid = fork();
 			if (pid == 0) {
 				execl("/proc/self/exe", "dev-install", "launch", recs[i].id, (char *)NULL);
@@ -783,7 +1326,9 @@ static GtkWidget *build_window(const struct review *r) {
 	gtk_label_set_xalign(GTK_LABEL(body), 0);
 	gtk_label_set_line_wrap(GTK_LABEL(body), TRUE);
 	gtk_box_pack_start(GTK_BOX(box), body, FALSE, FALSE, 0);
-	int can_import = strcmp(r->action, "import") == 0 || strcmp(r->action, "keep") == 0;
+	int can_import = strcmp(r->action, "import") == 0 || strcmp(r->action, "keep") == 0 ||
+		strcmp(r->action, "install") == 0 || strcmp(r->action, "rpm") == 0 ||
+		strcmp(r->action, "wine") == 0;
 	GtkWidget *bar = gtk_progress_bar_new();
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(bar), 0);
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(bar),
@@ -898,7 +1443,7 @@ static int cmd_open(const char *path, int no_ui) {
 		return 2;
 	}
 	print_review(&r);
-	if (!no_ui && getenv("DISPLAY") != NULL) {
+	if (!no_ui && (getenv("DISPLAY") != NULL || getenv("WAYLAND_DISPLAY") != NULL)) {
 		g_review = r;
 		gtk_init(NULL, NULL);
 		GtkWidget *win = build_window(&r);

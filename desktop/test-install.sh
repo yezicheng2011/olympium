@@ -177,6 +177,43 @@ test "$(wc -c < "$ROOT/install.png")" -gt 1000
 cp "$ROOT/install.png" /tmp/olympium-install-preview.png
 cp "$ROOT/timings.txt" /tmp/olympium-install-timings.txt
 
+echo "real deb extracts and launches only after consent"
+STAGE=$(mktemp -d)
+sh "$(dirname "$0")/../image/build-sample-deb.sh" "$STAGE" "$PWD"
+DEB=$STAGE/usr/share/olympium/samples/desk-note.deb
+view=$("$BIN" inspect "$DEB")
+printf '%s\n' "$view" | json_get action | grep -qx install
+printf '%s\n' "$view" | json_get ran | grep -qx false
+if "$BIN" import "$DEB" >/dev/null 2>&1; then
+	fail "deb import without consent succeeded"
+fi
+test ! -d "$OLYMPIUM_DESK_HOME/runtimes"
+"$BIN" import --consent "$DEB" >"$ROOT/deb-import.txt"
+grep -q '^extracted=' "$ROOT/deb-import.txt"
+grep -q 'download: none' "$ROOT/deb-import.txt"
+test ! -e "$OLYMPIUM_DESK_HOME/cold-app-ms"
+did=$(awk -F '\t' '$6=="linux_deb" {print $1; exit}' "$OLYMPIUM_DESK_HOME/library.tsv")
+test -n "$did"
+test -x "$OLYMPIUM_DESK_HOME/runtimes/linux/$did/root/usr/bin/desk-note"
+printf 'hello from a note\n' > "$ROOT/hello.dnote"
+set +e
+"$BIN" open --no-ui "$ROOT/hello.dnote" >/dev/null 2>&1
+set -e
+grep -qx "$ROOT/hello.dnote" "$OLYMPIUM_DESK_HOME/opened-path"
+rm -f "$OLYMPIUM_DESK_HOME/cold-app-ms" "$OLYMPIUM_DESK_HOME/warm-app-ms" "$OLYMPIUM_DESK_HOME/linux-runtime.sock"
+GDK_BACKEND=x11 xvfb-run -a "$BIN" launch "$did" --once >"$ROOT/deb-cold.txt"
+GDK_BACKEND=x11 xvfb-run -a "$BIN" launch "$did" --once >"$ROOT/deb-warm.txt"
+grep -q '^runtime_state cold' "$ROOT/deb-cold.txt"
+grep -q '^runtime_state warm' "$ROOT/deb-warm.txt"
+grep -q '^runtime_ms 0' "$ROOT/deb-warm.txt"
+test -s "$OLYMPIUM_DESK_HOME/cold-app-ms"
+test -s "$OLYMPIUM_DESK_HOME/warm-app-ms"
+paste=$(find "$OLYMPIUM_DESK_HOME/runtimes" -type f -name desk-paste | head -1)
+GDK_BACKEND=x11 xvfb-run -a bash -c "\"$BIN\" launch \"$did\" >/tmp/hold-note.txt 2>&1 & sleep 0.8; \"$paste\" --once" >"$ROOT/deb-paste.txt"
+grep -q 'clipboard: Desk Note ready' "$ROOT/deb-paste.txt"
+grep -q 'exchange: Desk Note ready' "$ROOT/deb-paste.txt"
+rm -rf "$STAGE"
+
 echo "runtime absent still imports a Linux ELF and refuses to invent iOS"
 export OLYMPIUM_BIN=/nonexistent
 export OLYMPIUM_DESK_HOME=$ROOT/desk2

@@ -1,8 +1,15 @@
 # Desktop applications
 
-This is the install and interoperability matrix for `dev-install`. It records what ran on the build machine on November 15, 2026, around 2:15 AM ET. It is not a claim that every installer or every application works.
+This is the install and interoperability matrix for `dev-install`. It is not a claim that every installer or every application works.
 
-The three checksummed live images do not contain `dev-install`. Their hashes are unchanged. The next image build copies the binary into `/usr/bin/dev-install`. The host test is `desktop/test-install.sh`, against `/var/tmp/aaa-out/olympium` from commit `517aaaa5409f227de42444cf16612d546c29251b`.
+The three images `6258fda9…`, `2ce330f0…`, and `bef87685…` do not contain `dev-install`. A later x86_64 image does.
+
+| Image | SHA-256 | What that boot showed |
+| --- | --- | --- |
+| `build/dev-live-amd64-install.iso`, the `.deb` boot | `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f` | Install for a real `.deb` with the checkbox off, then Desk Note and Desk Paste, a file under `exchange/`, and Launchpad entries. Maintainer scripts were not run. |
+| `build/dev-live-amd64-install.iso`, rebuilt after that | `9c1b41e427bd891a6887a305de0a3cbfc8024a6f8786875ab1620c9e601c07a1` | Install for `desk-win.exe` with the checkbox off, then a Wine window titled Desk Win, Launchpad entries and dock pins for `desk-win.exe` and `desk-rpm.rpm`, and `exchange/` files `Desk Win ready` and `desk-rpm-ready`. |
+
+`9c1b41e4…` is the image that contains Ubuntu Wine and Xwayland. Its boot did not repeat the `.deb` exercise. i386 and arm64 were not rebuilt for this pass. The host test is `desktop/test-install.sh`, against `/var/tmp/aaa-out/olympium` from commit `517aaaa5409f227de42444cf16612d546c29251b`.
 
 Pictures from that host, under Xvfb, not from a booted ISO: `olympium-install-linux.png` (a Linux program, consent still required, nothing run) and `olympium-install-deb.png` (a `.deb` stub, Import stays off).
 
@@ -27,7 +34,15 @@ Files used to start an executable immediately. It now runs `dev-install open` an
 | RPM magic `ed ab ee db`. | `review` | Not installed. `rpm2cpio` was not run. |
 | Bytes starting with `MZ`. | `review` | Not installed. Wine was not started. |
 
-These package files were stubs written for the test. A real `.deb`, `.rpm`, `.apk`, `.hap`, `.exe`, `.msi`, Flatpak, snap, AppImage, or `.dmg` has not been installed. Those formats are not claimed.
+The rows above are stubs, and `desktop/test-install.sh` still requires them to stay uninstalled. Separate from that test:
+
+| File | What ran |
+| --- | --- |
+| Real `.deb` `desk-note`, built in this repo. | On `c30c081c…`, consent extracted it with `dpkg-deb -x`. No maintainer script. Open of `hello.dnote` mapped Desk Note. A second window read the exchange file. |
+| Real `.rpm` `desk-rpm`. | On `9c1b41e4…`, consent extracted it with `rpm2cpio` and `cpio`. The script wrote `desk-rpm-ready`. Launchpad and the dock showed it. |
+| Real PE32+ `desk-win.exe`, built with mingw. | On `9c1b41e4…`, consent did not start it. Launch ran `/usr/bin/wine` with that path. Wine is Ubuntu `9.0~repack-4build3`. The window mapped at 43.3s of compositor time. The process timer to `WM_CREATE` was 26 ms, which is not the wait for the window. |
+| Mach-O. | Still `keep`. The pinned plan on Linux is `apple-platform-on-non-apple-hardware`. No window was opened. |
+| `.apk`, `.hap`, `.msi`, `.dmg`, Flatpak, snap, AppImage. | Not installed. Not claimed. |
 
 A native Linux program runs as the user. This does not add a sandbox, and it does not check an Apple or Microsoft signature. The checksum is the SHA-256 of the file at import, checked again at launch. The runtime's refusal to start macOS or iOS software is not weakened.
 

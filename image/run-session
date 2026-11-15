@@ -46,6 +46,8 @@ else
 fi
 export BROWSER=/usr/bin/firefox
 export MOZ_ENABLE_WAYLAND=1
+export OLYMPIUM_DESK_HOME=/var/lib/olympium/desk
+mkdir -p "$OLYMPIUM_DESK_HOME" /run/dev-desktop
 kmsg "renderer ${WLR_RENDERER}"
 : > /run/dev-desktop/compositor.log
 tail -n0 -f /run/dev-desktop/compositor.log | while IFS= read -r line; do
