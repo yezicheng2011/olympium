@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <gtk/gtk.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -506,7 +507,12 @@ static void print_review(const struct review *r) {
 
 static int fill_review(const char *path, struct review *r) {
 	memset(r, 0, sizeof *r);
-	if (realpath(path, r->file) == NULL) {
+	/* realpath needs room for PATH_MAX. r->file is shorter, and glibc aborts
+	 * the program when it is handed a buffer that small. */
+	char resolved[PATH_MAX];
+	if (realpath(path, resolved) != NULL && strlen(resolved) < sizeof r->file) {
+		snprintf(r->file, sizeof r->file, "%s", resolved);
+	} else {
 		snprintf(r->file, sizeof r->file, "%s", path);
 	}
 	base_name(r->file, r->name, sizeof r->name);
@@ -955,6 +961,202 @@ static void runtime_daemon(const char *sockpath) {
 
 static long millis_between(const struct timespec *a, const struct timespec *b);
 
+static long mono_ms(void) {
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return (long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
+static int run_quiet(char *const argv[]) {
+	pid_t pid = fork();
+	if (pid < 0) {
+		return -1;
+	}
+	if (pid == 0) {
+		int nul = open("/dev/null", O_RDWR);
+		if (nul >= 0) {
+			dup2(nul, 0);
+			dup2(nul, 1);
+			dup2(nul, 2);
+		}
+		execv(argv[0], argv);
+		_exit(127);
+	}
+	int st = 0;
+	waitpid(pid, &st, 0);
+	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
+static void wine_prefix_path(char *out, size_t n) {
+	char root[512];
+	desk_root(root, sizeof root);
+	snprintf(out, n, "%s/wine", root);
+}
+
+static int dir_is_empty(const char *path) {
+	DIR *d = opendir(path);
+	if (d == NULL) {
+		return 1;
+	}
+	struct dirent *e;
+	int empty = 1;
+	while ((e = readdir(d)) != NULL) {
+		if (strcmp(e->d_name, ".") != 0 && strcmp(e->d_name, "..") != 0) {
+			empty = 0;
+			break;
+		}
+	}
+	closedir(d);
+	return empty;
+}
+
+/* Makes the Wine prefix usable before Wine starts. A prefix that Wine has to
+ * build itself is about 690 MB of copied DLLs and was most of the first-launch
+ * wait. When the image carries a prefix that was built at image time, it is
+ * copied in whole, into a sibling directory first and then renamed, so an
+ * interrupted copy never leaves a half prefix behind. Returns "existing",
+ * "seeded", or "fresh" (Wine builds it on this launch). */
+static const char *wine_prepare(const char *prefix, long *ms) {
+	long start = mono_ms();
+	char probe[768];
+	*ms = 0;
+	snprintf(probe, sizeof probe, "%s/system.reg", prefix);
+	if (access(probe, F_OK) == 0) {
+		return "existing";
+	}
+	const char *tpl = getenv("OLYMPIUM_WINE_TEMPLATE");
+	if (tpl == NULL || tpl[0] == '\0') {
+		tpl = "/usr/lib/olympium/wine-prefix";
+	}
+	snprintf(probe, sizeof probe, "%s/system.reg", tpl);
+	if (access(probe, F_OK) != 0 || (access(prefix, F_OK) == 0 && !dir_is_empty(prefix))) {
+		/* No template, or a directory with someone's files in it and no
+		 * registry. Wine decides what to do with that; nothing is removed. */
+		mkdir_p(prefix);
+		return "fresh";
+	}
+	char tmp[768];
+	char src[768];
+	snprintf(tmp, sizeof tmp, "%s.seed-%ld", prefix, (long)getpid());
+	snprintf(src, sizeof src, "%s/.", tpl);
+	char parent[768];
+	snprintf(parent, sizeof parent, "%s", prefix);
+	char *slash = strrchr(parent, '/');
+	if (slash != NULL) {
+		*slash = '\0';
+		mkdir_p(parent);
+	}
+	mkdir(tmp, 0755);
+	char *cp[] = {"/bin/cp", "-a", "--reflink=auto", src, tmp, NULL};
+	int rc = run_quiet(cp);
+	if (rc == 0) {
+		rmdir(prefix);
+		if (rename(tmp, prefix) == 0) {
+			*ms = mono_ms() - start;
+			return "seeded";
+		}
+	}
+	char *rm[] = {"/bin/rm", "-rf", tmp, NULL};
+	run_quiet(rm);
+	mkdir_p(prefix);
+	*ms = mono_ms() - start;
+	return "fresh";
+}
+
+/* Asks wineserver to stay for a while after the last Windows program exits,
+ * so the next launch reuses it, and to exit by itself after that. 0 keeps
+ * Wine's own default (about three seconds). Nothing runs before the first
+ * launch unless prewarm is on. */
+static void wine_keep_server(int seconds) {
+	if (seconds <= 0 || access("/usr/bin/wineserver", X_OK) != 0) {
+		return;
+	}
+	char opt[32];
+	snprintf(opt, sizeof opt, "-p%d", seconds);
+	char *argv[] = {"/usr/bin/wineserver", opt, NULL};
+	run_quiet(argv);
+}
+
+static int env_seconds(const char *name, int fallback) {
+	const char *v = getenv(name);
+	if (v == NULL || v[0] == '\0') {
+		return fallback;
+	}
+	int n = atoi(v);
+	return n < 0 ? 0 : (n > 86400 ? 86400 : n);
+}
+
+static void prewarm_flag(char *out, size_t n) {
+	char root[512];
+	desk_root(root, sizeof root);
+	snprintf(out, n, "%s/prewarm", root);
+}
+
+/* Prewarm is off unless the user turned it on. "run" is what the session
+ * calls at start; it does nothing while prewarm is off. */
+static int cmd_prewarm(const char *what) {
+	char flag[640];
+	prewarm_flag(flag, sizeof flag);
+	if (strcmp(what, "on") == 0) {
+		char root[512];
+		desk_root(root, sizeof root);
+		mkdir_p(root);
+		FILE *f = fopen(flag, "w");
+		if (f == NULL) {
+			perror(flag);
+			return 1;
+		}
+		fputs("on\n", f);
+		fclose(f);
+		printf("prewarm on\n");
+		return 0;
+	}
+	if (strcmp(what, "off") == 0) {
+		unlink(flag);
+		char *kill_argv[] = {"/usr/bin/wineserver", "-k", NULL};
+		char prefix[640];
+		wine_prefix_path(prefix, sizeof prefix);
+		setenv("WINEPREFIX", prefix, 1);
+		if (access("/usr/bin/wineserver", X_OK) == 0) {
+			run_quiet(kill_argv);
+		}
+		printf("prewarm off\n");
+		return 0;
+	}
+	int on = access(flag, F_OK) == 0;
+	if (strcmp(what, "status") == 0) {
+		printf("prewarm %s\n", on ? "on" : "off");
+		return 0;
+	}
+	if (strcmp(what, "run") != 0) {
+		return 2;
+	}
+	if (!on) {
+		printf("prewarm off; nothing started\n");
+		return 0;
+	}
+	if (access("/usr/bin/wine", X_OK) != 0) {
+		printf("prewarm: Wine is not installed; nothing started\n");
+		return 0;
+	}
+	char prefix[640];
+	long ms = 0;
+	wine_prefix_path(prefix, sizeof prefix);
+	const char *state = wine_prepare(prefix, &ms);
+	setenv("WINEPREFIX", prefix, 1);
+	setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+	long a = mono_ms();
+	wine_keep_server(env_seconds("OLYMPIUM_WINE_PREWARM_IDLE", 600));
+	/* wineserver alone saves little. Most of a cold start is Wine's own
+	 * services, so start them once with a program that exits at once. */
+	char *warm[] = {"/usr/bin/wine", "cmd", "/c", "exit", NULL};
+	run_quiet(warm);
+	printf("prewarm wine_prefix %s\n", state);
+	printf("prewarm wine_prefix_ms %ld\n", ms);
+	printf("prewarm wine_server_ms %ld\n", mono_ms() - a);
+	return 0;
+}
+
 static void ensure_runtime(void) {
 	char root[512];
 	char sock[512];
@@ -1163,17 +1365,35 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 			fprintf(stderr, "dev-install: Wine is not available, so %s was not started\n", rec->name);
 			return 3;
 		}
-		char root[512];
 		char prefix[640];
-		desk_root(root, sizeof root);
-		snprintf(prefix, sizeof prefix, "%s/wine", root);
-		mkdir_p(prefix);
+		long prefix_ms = 0;
+		long t0 = mono_ms();
+		wine_prefix_path(prefix, sizeof prefix);
+		const char *state = wine_prepare(prefix, &prefix_ms);
 		setenv("WINEPREFIX", prefix, 1);
 		setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+		long t1 = mono_ms();
+		wine_keep_server(env_seconds("OLYMPIUM_WINE_IDLE", 60));
+		long t2 = mono_ms();
+		/* The phases of one launch. launch_start_ms is CLOCK_MONOTONIC, the
+		 * same clock as /proc/uptime, so a test can subtract it from the
+		 * moment the compositor reports the window. */
 		printf("engine wine\n");
-		printf("wine_prefix %s\n", access(prefix, F_OK) == 0 &&
-			access("/usr/bin/wineboot", X_OK) == 0 ? "ready" : "ready");
+		printf("wine_prefix %s\n", state);
+		printf("wine_prefix_ms %ld\n", prefix_ms);
+		printf("wine_server_ms %ld\n", t2 - t1);
+		printf("launch_start_ms %ld\n", t0);
 		fflush(stdout);
+		char mark[700];
+		char root[512];
+		desk_root(root, sizeof root);
+		snprintf(mark, sizeof mark, "%s/wine-launch-marks", root);
+		FILE *mf = fopen(mark, "w");
+		if (mf != NULL) {
+			fprintf(mf, "launch_start_ms %ld\nwine_prefix %s\nwine_prefix_ms %ld\nwine_server_ms %ld\n",
+				t0, state, prefix_ms, t2 - t1);
+			fclose(mf);
+		}
 		char *args[16];
 		int k = 0;
 		args[k++] = again.program;
@@ -1461,6 +1681,7 @@ static void usage(void) {
 		"       dev-install open [--no-ui] FILE\n"
 		"       dev-install preview FILE PNG\n"
 		"       dev-install timings\n"
+		"       dev-install prewarm on|off|status|run\n"
 		"       dev-install exchange\n");
 }
 
@@ -1518,6 +1739,12 @@ int main(int argc, char **argv) {
 	}
 	if (strcmp(argv[1], "timings") == 0) {
 		return cmd_timings();
+	}
+	if (strcmp(argv[1], "prewarm") == 0 && argc == 3) {
+		int rc = cmd_prewarm(argv[2]);
+		if (rc != 2) {
+			return rc;
+		}
 	}
 	if (strcmp(argv[1], "exchange") == 0) {
 		char root[512];

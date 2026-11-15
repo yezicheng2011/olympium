@@ -66,12 +66,47 @@ static void claim_clipboard(HWND hwnd) {
 	CloseClipboard();
 }
 
+/* --paste: read the text another program put on the clipboard and record it,
+ * so a test can see that a Wayland copy reached a Windows program. */
+static void read_clipboard(HWND hwnd) {
+	char text[256] = "empty";
+	if (OpenClipboard(hwnd)) {
+		HANDLE mem = GetClipboardData(CF_TEXT);
+		if (mem != NULL) {
+			const char *src = GlobalLock(mem);
+			if (src != NULL) {
+				snprintf(text, sizeof text, "%s", src);
+				GlobalUnlock(mem);
+			}
+		}
+		CloseClipboard();
+	}
+	char line[300];
+	snprintf(line, sizeof line, "%s\n", text);
+	write_text("exchange/desk-win-paste.txt", line);
+}
+
+static int g_paste;
+
 static LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
 	case WM_CREATE:
 		CreateDirectoryA("exchange", NULL);
 		remember_ready();
-		claim_clipboard(hwnd);
+		if (!g_paste) {
+			claim_clipboard(hwnd);
+			/* That copy happens before the window is on screen, and the
+			 * desktop does not let an X program that is not in front
+			 * replace the clipboard. Copy again shortly after, which is
+			 * when a person could first press Ctrl+C here. */
+			SetTimer(hwnd, 3, 600, NULL);
+		}
+		return 0;
+	case WM_SETFOCUS:
+		if (g_paste) {
+			/* The X selection is offered to the window that has focus. */
+			SetTimer(hwnd, 2, 300, NULL);
+		}
 		return 0;
 	case WM_PAINT: {
 		PAINTSTRUCT ps;
@@ -81,6 +116,16 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		return 0;
 	}
 	case WM_TIMER:
+		if (wparam == 2) {
+			KillTimer(hwnd, 2);
+			read_clipboard(hwnd);
+			return 0;
+		}
+		if (wparam == 3) {
+			KillTimer(hwnd, 3);
+			claim_clipboard(hwnd);
+			return 0;
+		}
 		DestroyWindow(hwnd);
 		return 0;
 	case WM_DESTROY:
@@ -96,6 +141,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev, LPSTR cmd, int show) {
 	(void)show;
 	g_start = GetTickCount();
 	int once = cmd != NULL && strstr(cmd, "--once") != NULL;
+	g_paste = cmd != NULL && strstr(cmd, "--paste") != NULL;
 	WNDCLASSA cls;
 	memset(&cls, 0, sizeof cls);
 	cls.lpfnWndProc = wndproc;

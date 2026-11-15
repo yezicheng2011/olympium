@@ -91,6 +91,12 @@ cp -L "$initrd" "$WORK/boot/initrd.img"
 if [ -f "$REPO/desktop/splash.png" ]; then
 	cp "$REPO/desktop/splash.png" "$WORK/boot/grub/splash.png"
 fi
+# A prefix built now is one the first Windows program does not wait for.
+if [ "$ARCH" = amd64 ] && [ -x "$ROOT/usr/bin/wineboot" ]; then
+	mount_chroot
+	bash "$REPO/image/wine-prefix.sh" "$ROOT"
+	umount_chroot
+fi
 for mnt in proc sys dev/pts dev run; do
 	if mountpoint -q "$ROOT/$mnt"; then
 		umount -l "$ROOT/$mnt" || true
