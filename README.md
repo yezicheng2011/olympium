@@ -80,23 +80,25 @@ The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` keeps macOS a
 
 ## What this environment actually booted
 
-Both images below were built from the same commit. Each view was captured from a real boot of the ISO, not from a mock-up.
+Both images below were built from the same commit and both carry `/usr/bin/olympium-linux` from the separate Olympium repository at `517aaaa5409f227de42444cf16612d546c29251b`. The x86_64 views were captured from a real boot of the x86_64 ISO below, not from a mock-up. The arm64 Files picture was captured from the previous arm64 image, whose SHA-256 is `8600cb65c4c04caa15ed69d39743d9a955e34106d06758466c036cd2f5975027`. That earlier image did not carry the runtime. The desktop code is the same; the image below adds the runtime programs.
 
-x86_64 ISO `build/dev-live-amd64.iso`, 1.2 GB, volume id `OLYMPIUM`, hybrid BIOS and UEFI (GRUB El Torito plus an EFI image).
-
-```
-7dee4632db470f77784767d6b87a0502d16b98382635d21bf5559849926d6ba3  dev-live-amd64.iso
-```
-
-QEMU `pc`, KVM, standard VGA, 1280×800, one e1000 NIC. `image/shots-x86_64.sh` boots the ISO once per view, waits for that view's line on the serial console, and saves the VGA frame: the clean desktop, an open File menu, Files, Settings, Launchpad, the purchase reminder, the same session after the reminder closes with Files open, the terminal, and the Olympium dock entry. Settings reports glass as on in that boot. An earlier boot of a previous image attached e1000, virtio-net, and NVMe devices and the kernel bound all three; see `docs/drivers.md`.
-
-aarch64 ISO `build/dev-live-arm64.iso`, 1.3 GB, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot.
+x86_64 ISO `build/dev-live-amd64.iso`, 1,282,512,896 bytes, volume id `OLYMPIUM`, hybrid BIOS and UEFI (GRUB El Torito plus an EFI image).
 
 ```
-8600cb65c4c04caa15ed69d39743d9a955e34106d06758466c036cd2f5975027  dev-live-arm64.iso
+25ee807c92c2e7bf7b96fbd5309d0858e996b81202824fee1d1db8d4c51e0f20  dev-live-amd64.iso
 ```
 
-QEMU `virt`, AAVMF, a `virtio-gpu-pci` display, software emulation on an x86_64 host. `image/shots-arm64.sh` waits for the Files window on the serial console and saves the virtio-gpu frame, so there is a real picture of the arm64 desktop with Files open. That boot is slow because every instruction is emulated. It is a QEMU machine. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon. The arm64 kernel does not include `i915.ko`.
+QEMU `pc`, KVM, standard VGA, 1280×800, one e1000 NIC. `image/shots-x86_64.sh` boots the ISO once per view, waits for that view's line on the serial console, and saves the VGA frame: the clean desktop, an open File menu, Files, Settings, Launchpad, the purchase reminder, the same session after the reminder closes with Files open, the terminal, and the Olympium dock entry. The dock entry runs `olympium-launch`, which executes `/usr/bin/olympium-linux`. On that boot the serial console recorded `window mapped: Olympium (app olympium-linux)`. The window is that program's Overview page. Settings reports glass as on in that boot. An earlier checksum, `7dee4632db470f77784767d6b87a0502d16b98382635d21bf5559849926d6ba3`, belongs to a previous image. An earlier boot of a previous image attached e1000, virtio-net, and NVMe devices and the kernel bound all three; see `docs/drivers.md`.
+
+`image/install-test-x86_64.sh` installed this image onto an empty 12 GB disk in a disposable QEMU VM (`olympium.install=/dev/sda`). The serial console reported `install-to-disk result: ok on /dev/sda`. A second VM, started from that disk alone with no ISO attached, reached the desktop. The disk still has a bootable MBR partition of type 0x83. The second boot was not given its own serial log.
+
+aarch64 ISO `build/dev-live-arm64.iso`, 1,356,849,152 bytes, same volume id. It contains `/efi/boot/bootaa64.efi`. The desktop binaries inside it are aarch64 ELF, compiled in an arm64 chroot. `/usr/bin/olympium-linux` in this image is an aarch64 ELF from the same Olympium commit.
+
+```
+7f9d43b0144a2b57ee4ccc7866a41eb7ec5fe92ea5604538d0922b246ae087e6  dev-live-arm64.iso
+```
+
+QEMU `virt`, AAVMF, a `virtio-gpu-pci` display, software emulation on an x86_64 host. `image/shots-arm64.sh` waits for the Files window on the serial console and saves the virtio-gpu frame, so there is a real picture of the arm64 desktop with Files open. That picture is from the previous image named above. That boot is slow because every instruction is emulated. It is a QEMU machine. It is not evidence for a Raspberry Pi, a generic ARM server, or Apple Silicon. The arm64 kernel does not include `i915.ko`.
 
 ## Purchase reminder
 
