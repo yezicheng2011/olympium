@@ -44,7 +44,10 @@ Host checks that do not need an ISO:
 
 ```sh
 make -C desktop test
+make -C desktop test-wine
 ```
+
+The second one needs Wine, Xwayland, and mingw on the host, and exits 77 without them.
 
 `desktop/protocol/xdg-shell-protocol.h` is generated from wayland-protocols (MIT). Regenerate it with `wayland-scanner server-header` if you need to.
 
@@ -146,7 +149,13 @@ QEMU `pc`, KVM, `-vga std`, on an x86_64 host, append `olympium.showwine=1 olymp
 - `rpm2cpio` extracted `desk-rpm` and the program wrote `desk-rpm-ready`. It is a shell script, not a window.
 - Launchpad at 55.6s listed `desk-win.exe` and `desk-rpm.rpm`, and the dock had a pin for each. Picture: `wine-launchpad.png`.
 
-The pictures were taken at about 5:21 AM ET, Sunday, November 15, 2026. i386 and arm64 were not rebuilt with Wine. An x86_64 `.exe` does not run on the arm64 image without another translator, and that translator is not in this draft. The earlier `.deb` boot remains `c30c081c…`.
+Of that 43.3 s, about 22 s was the boot test sleeping so its pictures could be taken, about 19 s was Wine building its prefix for the first time, about 1 s was the desktop, and the program was 26 ms. `docs/startup-latency.md` has the table. The image build now builds that prefix (`image/wine-prefix.sh`), launch reuses `wineserver` for 60 s and then lets it exit, and prewarm exists and is off. On the build machine, with no ISO boot, the launch request to the mapped window was 4.8 s when Wine built the prefix, 0.67 s with the prefix in place, and 0.16 s when Wine was still running from the last launch. `9c1b41e4…` was not rebuilt, so it does not contain any of this.
+
+`make -C desktop test-wine` on the build machine also copied text from the Wine window to a Wayland program and from a Wayland program to the Wine window. That is the compositor with the headless backend, not a booted ISO. There is no Android runtime in the image, so nothing connects an Android clipboard.
+
+`dev-install` now reads which CPU a `.exe` was built for and offers Launch only when this system can run it. A 32-bit Windows program on the x86_64 image needs `wine32`, which `9c1b41e4…` does not have: there it opened no window and Wine exited 0. `image/install-wine.sh` installs the right packages per image, and `docs/wine-architectures.md` has the table and what was run.
+
+The pictures were taken at about 5:21 AM ET, Sunday, November 15, 2026. i386 and arm64 were not rebuilt with Wine. An x86 or x86_64 `.exe` does not run on the arm64 image without an x86 translator. That translator is not in this tree, and `dev-install` refuses the file instead of starting it. Nothing here runs on macOS. The earlier `.deb` boot remains `c30c081c…`.
 
 ## Purchase reminder
 

@@ -38,7 +38,8 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
-#include <wlr/xwayland/xwayland.h>
+#include "xwayland-compat.h"
+#include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_data_device.h>
@@ -1867,6 +1868,11 @@ static void focus_view(struct view *view, struct wlr_surface *surface) {
 	if (keyboard != NULL && surface != NULL) {
 		wlr_seat_keyboard_notify_enter(seat, surface,
 			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+	} else if (surface != NULL) {
+		/* No keyboard is attached. The seat still has to know which window
+		 * is in front: the clipboard is offered to the focused client, and
+		 * without this a touch-only machine could never paste. */
+		wlr_seat_keyboard_notify_enter(seat, surface, NULL, 0, NULL);
 	}
 }
 
@@ -3416,7 +3422,7 @@ static void usage(const char *argv0) {
 }
 
 int main(int argc, char *argv[]) {
-	wlr_log_init(WLR_INFO, NULL);
+	wlr_log_init(getenv("DEV_DESK_DEBUG") != NULL ? WLR_DEBUG : WLR_INFO, NULL);
 	char *startup_cmd = NULL;
 	int opt;
 	while ((opt = getopt(argc, argv, "s:h")) != -1) {
@@ -3577,6 +3583,16 @@ int main(int argc, char *argv[]) {
 		if (headless != NULL) {
 			wlr_headless_add_output(headless, 1280, 800);
 		}
+	}
+	if (getenv("DEV_DESK_HEADLESS") != NULL && wl_list_empty(&server.keyboards)) {
+		/* A screenless test run has no input devices. Clients are only
+		 * allowed to set the clipboard with a serial from an input event,
+		 * so the test session gets a keyboard that never presses a key. */
+		static struct wlr_keyboard test_keyboard;
+		wlr_keyboard_init(&test_keyboard, NULL, "headless-keyboard");
+		server_new_keyboard(&server, &test_keyboard.base);
+		wlr_seat_set_capabilities(server.seat,
+			WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
 	}
 
 	setenv("WAYLAND_DISPLAY", socket, 1);

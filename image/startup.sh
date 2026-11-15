@@ -39,6 +39,14 @@ if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
 		tail -n 20 /tmp/firefox.log 2>/dev/null || true
 	) &
 fi
+# Prewarm is off unless the user turned it on with "dev-install prewarm on".
+# While it is off this starts nothing and exits at once.
+if [ -x /usr/bin/dev-install ]; then
+	if grep -q 'olympium.prewarm=1' /proc/cmdline 2>/dev/null; then
+		/usr/bin/dev-install prewarm on >/dev/null 2>&1
+	fi
+	(/usr/bin/dev-install prewarm run 2>&1 | sed 's/^/session: /') &
+fi
 install_disk=$(sed -n 's/.*olympium.install=\([^ ]*\).*/\1/p' /proc/cmdline 2>/dev/null || true)
 if [ -n "$install_disk" ]; then
 	# An unattended install for a boot test. The result line reaches the session log.

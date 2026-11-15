@@ -40,7 +40,7 @@ The rows above are stubs, and `desktop/test-install.sh` still requires them to s
 | --- | --- |
 | Real `.deb` `desk-note`, built in this repo. | On `c30c081c…`, consent extracted it with `dpkg-deb -x`. No maintainer script. Open of `hello.dnote` mapped Desk Note. A second window read the exchange file. |
 | Real `.rpm` `desk-rpm`. | On `9c1b41e4…`, consent extracted it with `rpm2cpio` and `cpio`. The script wrote `desk-rpm-ready`. Launchpad and the dock showed it. |
-| Real PE32+ `desk-win.exe`, built with mingw. | On `9c1b41e4…`, consent did not start it. Launch ran `/usr/bin/wine` with that path. Wine is Ubuntu `9.0~repack-4build3`. The window mapped at 43.3s of compositor time. The process timer to `WM_CREATE` was 26 ms, which is not the wait for the window. |
+| Real PE32+ `desk-win.exe`, built with mingw. | On `9c1b41e4…`, consent did not start it. Launch ran `/usr/bin/wine` with that path. Wine is Ubuntu `9.0~repack-4build3`. The window mapped at 43.3s of compositor time. The process timer to `WM_CREATE` was 26 ms, which is not the wait for the window. `docs/startup-latency.md` splits the 43.3 s. |
 | Mach-O. | Still `keep`. The pinned plan on Linux is `apple-platform-on-non-apple-hardware`. No window was opened. |
 | `.apk`, `.hap`, `.msi`, `.dmg`, Flatpak, snap, AppImage. | Not installed. Not claimed. |
 
@@ -55,7 +55,13 @@ A native Linux program runs as the user. This does not add a sandbox, and it doe
 | Dock | `$OLYMPIUM_DESK_HOME/pinned`, or `~/.local/share/olympium-desk/pinned`, lines of `name`, a tab, and an executable path. At most four. | The pin file was written. The dock was not drawn. |
 | Open with | `--mime EXT` stores the extension. `dev-install open` of a file that is not itself a package, and whose extension matches, execs that wrapper. | A `.note` file was passed to the script. |
 | Files between programs | `$OLYMPIUM_DESK_HOME/exchange`, or `~/.local/share/olympium-desk/exchange`. | A write and a read of `hello.txt` on the host. No guest runtime mounts this directory. |
-| Clipboard | The compositor creates a Wayland data device. | A copy between two clients was not run. Guest runtimes were not given a clipboard bridge. |
+| Clipboard | The compositor creates a Wayland data device, and Xwayland's window manager carries the selection between X programs, which is what a Wine window is, and Wayland programs. | `make -C desktop test-wine` on the build machine, four runs: Desk Win copied `Desk Win ready` and the GTK Wayland program Desk Paste read it; Desk Note copied `Desk Note ready` and `desk-win.exe --paste` read it as `CF_TEXT`. Text only. Not run on a booted ISO. |
+
+Two limits of that clipboard path. A Windows program that copies before its window is in front is ignored: wlroots does not let an X program that is not focused replace the clipboard. A copy made in the front window is carried. And a Wayland program can only set the clipboard with a serial from an input event, so a program that copies before it has ever had focus is refused.
+
+Before this pass the seat only recorded which window was in front when a keyboard was attached. With no keyboard, no client was ever offered the clipboard. Focus is now recorded either way.
+
+There is no Android runtime in this image, so there is no Android clipboard to connect. Images, files, and rich text on the clipboard were not tested.
 
 ## Time
 

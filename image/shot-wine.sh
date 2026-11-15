@@ -121,6 +121,6 @@ fi
 kill "$pid" 2>/dev/null || true
 wait "$pid" 2>/dev/null || true
 echo '--- marks ---'
-grep -a -E 'xwayland on|wine install|wine import|wine_cold_ms|wine_exchange|rpm_exchange|launchpad entry|dock pin|window mapped|compositor on' "$LOG" | tail -80
+grep -a -E 'xwayland on|wine install|wine import|wine_cold_ms|wine_request_to_window_ms|wine_prefix|wine_server_ms|prewarm|wine_exchange|rpm_exchange|launchpad entry|dock pin|window mapped|compositor on' "$LOG" | tail -80
 echo SHOT_INSTALL_DONE
 ls -l "$OUT"/*.png 2>/dev/null || true

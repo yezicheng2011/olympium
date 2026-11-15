@@ -97,7 +97,31 @@ if grep -q 'olympium.importwine=1' /proc/cmdline 2>/dev/null && [ -f "$EXE" ]; t
 		kmsg "wine import produced no id"
 	else
 		kmsg "imported $wid"
+		# The dwell before this point is for the review screenshot. It is
+		# not part of the launch. The launch itself is timed from the
+		# request to the mapped window, on the kernel's uptime clock.
+		was=$(grep -c 'window mapped: Desk Win' /run/dev-desktop/compositor.log 2>/dev/null)
 		/usr/bin/dev-install launch "$wid" >/tmp/wine-launch.log 2>&1 &
+		i=0
+		while [ "$i" -lt 6000 ]; do
+			now=$(grep -c 'window mapped: Desk Win' /run/dev-desktop/compositor.log 2>/dev/null)
+			if [ "${now:-0}" -gt "${was:-0}" ]; then
+				break
+			fi
+			sleep 0.01
+			i=$((i + 1))
+		done
+		at=$(awk '{ printf "%d", $1 * 1000 }' /proc/uptime)
+		marks="${OLYMPIUM_DESK_HOME}/wine-launch-marks"
+		from=$(awk '$1=="launch_start_ms" {print $2}' "$marks" 2>/dev/null)
+		if [ -n "$from" ] && [ "${now:-0}" -gt "${was:-0}" ]; then
+			kmsg "wine_request_to_window_ms $((at - from))"
+		else
+			kmsg "wine_request_to_window_ms missing"
+		fi
+		kmsg "wine_prefix $(awk '$1=="wine_prefix" {print $2}' "$marks" 2>/dev/null)"
+		kmsg "wine_prefix_ms $(awk '$1=="wine_prefix_ms" {print $2}' "$marks" 2>/dev/null)"
+		kmsg "wine_server_ms $(awk '$1=="wine_server_ms" {print $2}' "$marks" 2>/dev/null)"
 		for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
 			if [ -s "${OLYMPIUM_DESK_HOME}/wine-cold-ms" ]; then
 				break

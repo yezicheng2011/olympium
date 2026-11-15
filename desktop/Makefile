@@ -6,7 +6,7 @@ XKB_FLAGS := $(shell pkg-config --cflags --libs xkbcommon)
 DRM_FLAGS := $(shell pkg-config --cflags --libs libdrm pixman-1)
 GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 
-.PHONY: all test clean
+.PHONY: all test test-wine clean
 
 all: dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
 
@@ -14,7 +14,7 @@ splash.png: splash.c
 	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS)
 	./splash-gen splash.png
 
-dev-compositor: compositor.c blur.c blur.h
+dev-compositor: compositor.c blur.c blur.h xwayland-compat.h
 	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
 
 dev-files: files.c
@@ -53,6 +53,10 @@ test-macho: test_macho.c macho.c macho.h
 test: test-blur test-macho
 	./test-blur
 	./test-macho
+
+# Needs wine, Xwayland, and mingw. It exits 77 when one is missing.
+test-wine:
+	./test-wine.sh
 
 clean:
 	rm -f dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash-gen splash.png
