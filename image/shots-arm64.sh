@@ -10,6 +10,7 @@ OUT=${2:-/opt/cursor/artifacts}
 STAGE=${3:-/var/tmp/dev-live/iso-arm64}
 EXTRA=${4:-olympium.openfiles=1}
 NAME=${5:-arm64-files}
+PATTERN=${6:-window mapped: Files}
 MON=/tmp/qemu-arm64.sock
 LOG=$OUT/style-${NAME}-serial.log
 mkdir -p "$OUT"
@@ -28,8 +29,8 @@ qemu-system-aarch64 -machine virt -cpu max -accel tcg,thread=multi -m 3072 -smp 
 qemu=$!
 
 up=0
-for i in $(seq 1 240); do
-	if grep -a -q 'compositor on WAYLAND_DISPLAY' "$LOG" 2>/dev/null; then
+for i in $(seq 1 360); do
+	if grep -a -q "$PATTERN" "$LOG" 2>/dev/null; then
 		up=1
 		break
 	fi
@@ -41,7 +42,7 @@ for i in $(seq 1 240); do
 done
 if [ "$up" -eq 1 ]; then
 	# The emulated machine needs time to start the session programs and draw.
-	sleep "${SETTLE:-150}"
+	sleep "${SETTLE:-45}"
 	python3 - "$MON" "$OUT/style-${NAME}.ppm" <<'PY'
 import socket, sys, time
 mon, dest = sys.argv[1], sys.argv[2]
@@ -58,7 +59,7 @@ time.sleep(4)
 s.close()
 PY
 else
-	echo "the compositor line never reached the serial log" >&2
+	echo "never saw '${PATTERN}' in the serial log" >&2
 fi
 kill "$qemu" 2>/dev/null || true
 wait "$qemu" 2>/dev/null || true

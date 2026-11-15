@@ -104,6 +104,9 @@ struct view {
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
 	int placed;
+	struct wlr_texture *shadow;
+	int shadow_w;
+	int shadow_h;
 };
 
 struct keyboard {
@@ -175,6 +178,7 @@ struct server {
 	int press_app;
 	int press_contrast;
 	int press_brand;
+	int brand_menu_was_open;
 	int hover_app;
 	int press_light;
 	struct view *press_view;
@@ -221,13 +225,14 @@ static const char *UI_FONT_SM = "Ubuntu 11";
 
 static int menu_item_count(int menu);
 static void menu_box(const struct server *server, struct wlr_box *box);
-static const char *MENU_ITEMS[][4];
+static const char *MENU_ITEMS[][6];
 static void draw_net(cairo_t *cr, double x, double y, int kind, int level);
 static void draw_pad(struct server *server, cairo_t *cr);
 static void probe_net(struct server *server);
 static void pad_load(struct server *server);
 static int pad_list(struct server *server, int *ids, int cap);
 static void pad_activate(struct server *server, int index);
+static void open_launchpad(struct server *server);
 static void nag_box(const struct server *server, struct wlr_box *box);
 static void nag_dismiss(struct server *server);
 static void nag_eval(struct server *server);
@@ -306,7 +311,7 @@ static int app_matches(const struct app_entry *app, const char *filter) {
 }
 
 static void dock_box(const struct server *server, struct wlr_box *box) {
-	int width = 20 + APP_COUNT * DOCK_SLOT;
+	int width = 16 + APP_COUNT * DOCK_SLOT;
 	if (width > server->screen_w - 48) {
 		width = server->screen_w - 48;
 	}
@@ -336,7 +341,7 @@ static int dock_app_at(const struct server *server, double x, double y) {
 	if (!point_in(&dock, x, y)) {
 		return -1;
 	}
-	int index = (int)((x - dock.x - 10) / DOCK_SLOT);
+	int index = (int)((x - dock.x - 8) / DOCK_SLOT);
 	if (index < 0 || index >= APP_COUNT) {
 		return -1;
 	}
@@ -1018,7 +1023,7 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 				rrect(cr, 5, 5 + i * 28, box->width - 10, 24, 6);
 				cairo_fill(cr);
 			}
-			paint_text(cr, "Ubuntu 13", MENU_ITEMS[server->open_menu][i], 16, 8 + i * 28,
+			paint_text(cr, "Ubuntu 13", MENU_ITEMS[server->open_menu][i], 16, 7 + i * 28,
 				lit ? 1 : 0.10, lit ? 1 : 0.10, lit ? 1 : 0.12);
 			if (i == n - 2 && n > 2) {
 				cairo_set_source_rgba(cr, 0.45, 0.45, 0.48, 0.35);
@@ -1030,7 +1035,7 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 	}
 	if (which == 4) {
 		const char *label = server->frame_title[0] != '\0' ? server->frame_title : "";
-		paint_text(cr, UI_FONT_SM, label, 8, 3, 0.12, 0.12, 0.14);
+		paint_text(cr, "Ubuntu Medium 12", label, 11, 4, 0.12, 0.12, 0.14);
 		return;
 	}
 	if (which == 3) {
@@ -1330,9 +1335,14 @@ static void output_frame(struct wl_listener *listener, void *data) {
 				continue;
 			}
 			int frame_h = title.height + view->xdg_toplevel->base->surface->current.height;
-			struct wlr_texture *shadow = make_shadow(server, title.width, frame_h);
-			render_texture_at(server, output->wlr_output, shadow, title.x - 36, title.y - 36);
-			wlr_texture_destroy(shadow);
+			/* The shadow only changes when the window is resized. */
+			if (view->shadow == NULL || view->shadow_w != title.width || view->shadow_h != frame_h) {
+				wlr_texture_destroy(view->shadow);
+				view->shadow = make_shadow(server, title.width, frame_h);
+				view->shadow_w = title.width;
+				view->shadow_h = frame_h;
+			}
+			render_texture_at(server, output->wlr_output, view->shadow, title.x - 36, title.y - 36);
 			char saved[128];
 			snprintf(saved, sizeof saved, "%s", server->frame_title);
 			if (view->xdg_toplevel->title != NULL && view->xdg_toplevel->title[0] != '\0') {
@@ -1359,6 +1369,7 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			server->pad_folder = -1;
 			server->pad_cursor = -1;
 			server->demo_pad_done = 1;
+			wlr_log(WLR_INFO, "demo: launchpad open with %d entries", server->pad_count);
 		}
 		if (server->launchpad) {
 			if (server->pad_count == 0) {
@@ -1400,17 +1411,21 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			snprintf(saved, sizeof saved, "%s", server->frame_title);
 			snprintf(server->frame_title, sizeof server->frame_title, "%s",
 				APPS[server->hover_app].label);
-			struct wlr_texture *tip = make_chrome(server,
-				dockb.x + 10 + server->hover_app * DOCK_SLOT, dockb.y - 28,
-				DOCK_SLOT, 22, 8, 4);
+			cairo_surface_t *probe = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 4, 4);
+			cairo_t *probe_cr = cairo_create(probe);
+			int tip_w = paint_text(probe_cr, "Ubuntu Medium 12", server->frame_title, 0, 0, 0, 0, 0) + 22;
+			cairo_destroy(probe_cr);
+			cairo_surface_destroy(probe);
+			int tip_x = dockb.x + 8 + server->hover_app * DOCK_SLOT + DOCK_SLOT / 2 - tip_w / 2;
+			struct wlr_texture *tip = make_chrome(server, tip_x, dockb.y - 34, tip_w, 26, 13, 4);
 			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
-			render_texture_at(server, output->wlr_output, tip,
-				dockb.x + 10 + server->hover_app * DOCK_SLOT, dockb.y - 28);
+			render_texture_at(server, output->wlr_output, tip, tip_x, dockb.y - 34);
 			wlr_texture_destroy(tip);
 		}
 		if (server->demo_menu && !server->demo_menu_done && server->frames > 240) {
 			server->open_menu = 1;
 			server->demo_menu_done = 1;
+			wlr_log(WLR_INFO, "demo: menu open");
 		}
 		if (server->open_menu >= 0) {
 			struct wlr_box drop;
@@ -1423,7 +1438,7 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			render_texture_at(server, output->wlr_output, drop_tex, drop.x, drop.y);
 			wlr_texture_destroy(drop_tex);
 		}
-		if (server->nag_demo_dismiss && server->nag && server->frames > 1500) {
+		if (server->nag_demo_dismiss && server->nag && server->frames > 600) {
 			nag_dismiss(server);
 		}
 		if (server->nag) {
@@ -1856,8 +1871,11 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 		}
 		for (int i = 0; i < nsyms && !handled; i++) {
 			if (syms[i] == XKB_KEY_Super_L || syms[i] == XKB_KEY_Super_R) {
-				server->launcher = !server->launcher;
-				server->filter[0] = '\0';
+				if (server->launchpad) {
+					server->launchpad = 0;
+				} else {
+					open_launchpad(server);
+				}
 				handled = 1;
 			}
 		}
@@ -2018,22 +2036,27 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
 	process_cursor_motion(server, event->time_msec);
 }
 
-static const char *MENU_ITEMS[][4] = {
-	{"About Olympium", "Settings", NULL, NULL},
-	{"New Window", "Close Window", "About Olympium", NULL},
-	{"Toggle Contrast", NULL, NULL, NULL},
-	{"Show Hidden Files", NULL, NULL, NULL},
-	{"Home", "Documents", "Computer", NULL},
-	{"Minimize", "Zoom", "Cycle Windows", NULL},
-	{"Olympium", "Compatibility", NULL, NULL},
+/* Index 0 is the application-name menu, 1 to 6 are File to Help, and 7 is
+ * the menu under the dragon mark. */
+enum { MENU_DRAGON = 7, MENU_COUNT = 8, MENU_MAX_ITEMS = 6 };
+
+static const char *MENU_ITEMS[][6] = {
+	{"About Olympium", "Settings\u2026", "Hide Window", NULL, NULL, NULL},
+	{"New Files Window", "Open Terminal", "Close Window", NULL, NULL, NULL},
+	{"Find in Launchpad", NULL, NULL, NULL, NULL, NULL},
+	{"Show Hidden Files", "Reduce Transparency", NULL, NULL, NULL, NULL},
+	{"Home", "Documents", "Applications", "Computer", NULL, NULL},
+	{"Minimize", "Zoom", "Cycle Through Windows", NULL, NULL, NULL},
+	{"Olympium Help", "Compatibility", NULL, NULL, NULL, NULL},
+	{"About Olympium", "System Settings\u2026", "Launchpad", "Restart\u2026", "Shut Down\u2026", NULL},
 };
 
 static int menu_item_count(int menu) {
 	int n = 0;
-	if (menu < 0 || menu > 6) {
+	if (menu < 0 || menu >= MENU_COUNT) {
 		return 0;
 	}
-	while (n < 4 && MENU_ITEMS[menu][n] != NULL) {
+	while (n < MENU_MAX_ITEMS && MENU_ITEMS[menu][n] != NULL) {
 		n++;
 	}
 	return n;
@@ -2041,9 +2064,9 @@ static int menu_item_count(int menu) {
 
 static void menu_box(const struct server *server, struct wlr_box *box) {
 	int n = menu_item_count(server->open_menu);
-	box->x = server->menu_x[server->open_menu];
-	box->y = PANEL_H;
-	box->width = 220;
+	box->x = server->open_menu == MENU_DRAGON ? 6 : server->menu_x[server->open_menu] - 8;
+	box->y = PANEL_H + 2;
+	box->width = 230;
 	box->height = 10 + n * 28;
 }
 
@@ -2065,65 +2088,95 @@ static struct view *front_view(struct server *server) {
 	return NULL;
 }
 
+static void spawn2(const char *path, const char *arg) {
+	if (fork() == 0) {
+		setsid();
+		execl(path, path, arg, (char *)NULL);
+		_exit(127);
+	}
+}
+
+static void open_launchpad(struct server *server) {
+	pad_load(server);
+	server->pad_page = 0;
+	server->pad_folder = -1;
+	server->pad_cursor = -1;
+	server->pad_filter[0] = '\0';
+	server->launchpad = 1;
+}
+
+static const struct app_entry *app_by_id(const char *id) {
+	for (int i = 0; i < APP_COUNT; i++) {
+		if (strcmp(APPS[i].id, id) == 0) {
+			return &APPS[i];
+		}
+	}
+	return &APPS[0];
+}
+
 static void menu_activate(struct server *server, int menu, int item) {
 	const char *home = getenv("HOME");
 	if (home == NULL || home[0] == '\0') {
 		home = "/root";
 	}
+	struct view *front = front_view(server);
 	server->open_menu = -1;
-	if ((menu == 0 && item == 0) || (menu == 1 && item == 2)) {
-		if (fork() == 0) {
-			setsid();
-			execl("/usr/bin/dev-settings", "dev-settings", "--page=about", (char *)NULL);
-			_exit(127);
+	if (menu == MENU_DRAGON) {
+		if (item == 0) {
+			spawn2("/usr/bin/dev-settings", "--page=about");
+		} else if (item == 1) {
+			launch_app(server, app_by_id("settings"));
+		} else if (item == 2) {
+			open_launchpad(server);
+		} else if (item == 3) {
+			spawn2("/usr/bin/systemctl", "reboot");
+		} else if (item == 4) {
+			spawn2("/usr/bin/systemctl", "poweroff");
 		}
-	} else if (menu == 0 && item == 1) {
-		launch_app(server, &APPS[3]);
-	} else if (menu == 1 && item == 0) {
-		launch_files_at(home);
-	} else if (menu == 1 && item == 1) {
-		struct view *view = front_view(server);
-		if (view != NULL) {
-			wlr_xdg_toplevel_send_close(view->xdg_toplevel);
+	} else if (menu == 0) {
+		if (item == 0) {
+			spawn2("/usr/bin/dev-settings", "--page=about");
+		} else if (item == 1) {
+			launch_app(server, app_by_id("settings"));
+		} else if (item == 2 && front != NULL) {
+			wlr_scene_node_set_enabled(&front->scene_tree->node, false);
 		}
-	} else if (menu == 2 && item == 0) {
-		server->contrast = !server->contrast;
-	} else if (menu == 3 && item == 0) {
-		setenv("OLYMPIUM_SHOW_HIDDEN", "1", 1);
-		launch_files_at(home);
-	} else if (menu == 4 && item == 0) {
-		launch_files_at(home);
-	} else if (menu == 4 && item == 1) {
-		launch_files_at("/usr/share/doc");
-	} else if (menu == 4 && item == 2) {
-		launch_files_at("/");
-	} else if (menu == 5 && item == 0) {
-		struct view *view = front_view(server);
-		if (view != NULL) {
-			wlr_scene_node_set_enabled(&view->scene_tree->node, false);
+	} else if (menu == 1) {
+		if (item == 0) {
+			launch_files_at(home);
+		} else if (item == 1) {
+			launch_app(server, app_by_id("terminal"));
+		} else if (item == 2 && front != NULL) {
+			wlr_xdg_toplevel_send_close(front->xdg_toplevel);
 		}
-	} else if (menu == 5 && item == 1) {
-		struct view *view = front_view(server);
-		if (view != NULL) {
-			wlr_xdg_toplevel_set_size(view->xdg_toplevel,
+	} else if (menu == 2) {
+		open_launchpad(server);
+	} else if (menu == 3) {
+		if (item == 0) {
+			setenv("OLYMPIUM_SHOW_HIDDEN", "1", 1);
+			launch_files_at(home);
+		} else if (item == 1) {
+			server->contrast = !server->contrast;
+		}
+	} else if (menu == 4) {
+		const char *places[] = {home, "/usr/share/doc", "/usr/bin", "/"};
+		if (item >= 0 && item < 4) {
+			launch_files_at(places[item]);
+		}
+	} else if (menu == 5) {
+		if (item == 0 && front != NULL) {
+			wlr_scene_node_set_enabled(&front->scene_tree->node, false);
+		} else if (item == 1 && front != NULL) {
+			wlr_xdg_toplevel_set_size(front->xdg_toplevel,
 				server->screen_w - 80, server->screen_h - PANEL_H - DOCK_H - TITLE_H - 36);
-			wlr_scene_node_set_position(&view->scene_tree->node, 40, PANEL_H + 8);
+			wlr_scene_node_set_position(&front->scene_tree->node, 40, PANEL_H + TITLE_H + 8);
+		} else if (item == 2 && !wl_list_empty(&server->views)) {
+			struct view *next = wl_container_of(server->views.prev, next, link);
+			wlr_scene_node_set_enabled(&next->scene_tree->node, true);
+			focus_view(next, next->xdg_toplevel->base->surface);
 		}
-	} else if (menu == 5 && item == 2 && !wl_list_empty(&server->views)) {
-		struct view *next = wl_container_of(server->views.prev, next, link);
-		focus_view(next, next->xdg_toplevel->base->surface);
-	} else if (menu == 6 && item == 0) {
-		if (fork() == 0) {
-			setsid();
-			execl("/usr/bin/dev-settings", "dev-settings", "--page=olympium", (char *)NULL);
-			_exit(127);
-		}
-	} else if (menu == 6 && item == 1) {
-		if (fork() == 0) {
-			setsid();
-			execl("/usr/bin/dev-settings", "dev-settings", "--page=compat", (char *)NULL);
-			_exit(127);
-		}
+	} else if (menu == 6) {
+		spawn2("/usr/bin/dev-settings", item == 0 ? "--page=olympium" : "--page=compat");
 	}
 }
 
@@ -2163,7 +2216,7 @@ static void pad_load(struct server *server) {
 		}
 		pad_tool(server, APPS[i].label, APPS[i].path, cmd, APPS[i].id, "");
 	}
-	const char *term = "/usr/bin/foot";
+	int core = server->pad_count;
 	pad_tool(server, "Activity", "/usr/bin/top", "/usr/bin/foot -T Activity -e top", "activity", "");
 	pad_tool(server, "Disks", "/usr/bin/lsblk",
 		"/usr/bin/foot -T Disks -e sh -c 'lsblk -o NAME,SIZE,TYPE,MOUNTPOINT; read _'", "disks", "");
@@ -2176,10 +2229,11 @@ static void pad_load(struct server *server) {
 	pad_tool(server, "Color Field", "/usr/bin/dev-swatch", "/usr/bin/dev-swatch", "color", "");
 	pad_tool(server, "About", "/usr/bin/dev-settings", "/usr/bin/dev-settings --page=olympium", "about", "");
 	pad_tool(server, "Shell", "/usr/bin/bash", "/usr/bin/foot -T Shell -e bash -l", "shell", "");
+	pad_tool(server, "Python", "/usr/bin/python3", "/usr/bin/foot -T Python -e python3", "code", "");
+	pad_tool(server, "Log", "/usr/bin/journalctl",
+		"/usr/bin/foot -T Log -e journalctl -b", "log", "");
 	pad_tool(server, "USB", "/usr/bin/lsusb",
 		"/usr/bin/foot -T USB -e sh -c 'lsusb; read _'", "usb", "Utilities");
-	pad_tool(server, "Log", "/usr/bin/journalctl",
-		"/usr/bin/foot -T Log -e journalctl -b", "log", "Utilities");
 	pad_tool(server, "Services", "/usr/bin/systemctl",
 		"/usr/bin/foot -T Services -e sh -c 'systemctl list-units --type=service; read _'",
 		"services", "Utilities");
@@ -2189,7 +2243,6 @@ static void pad_load(struct server *server) {
 	pad_tool(server, "Documents", "/usr/bin/dev-files", "/usr/bin/dev-files /usr/share/doc", "files", "Places");
 	pad_tool(server, "Applications", "/usr/bin/dev-files", "/usr/bin/dev-files /usr/bin", "files", "Places");
 	pad_tool(server, "Computer", "/usr/bin/dev-files", "/usr/bin/dev-files /", "disks", "Places");
-	(void)term;
 	/* Installed desktop entries. Terminal programs open inside the terminal. */
 	DIR *dir = opendir("/usr/share/applications");
 	if (dir != NULL) {
@@ -2231,8 +2284,8 @@ static void pad_load(struct server *server) {
 			if (hidden || name[0] == '\0' || exec[0] == '\0' || access(exec, X_OK) != 0) {
 				continue;
 			}
-			if (strncmp(name, "Foot", 4) == 0) {
-				/* The terminal is already listed as Terminal. */
+			if (strncmp(name, "Foot", 4) == 0 || strncmp(name, "Python", 6) == 0) {
+				/* The terminal and Python are already listed above. */
 				continue;
 			}
 			char cmd[240];
@@ -2241,7 +2294,7 @@ static void pad_load(struct server *server) {
 			} else {
 				snprintf(cmd, sizeof cmd, "%s", exec);
 			}
-			pad_add(server, name, cmd, strstr(name, "Python") != NULL ? "code" : "generic", "", 0);
+			pad_add(server, name, cmd, "generic", "", 0);
 		}
 		closedir(dir);
 	}
@@ -2253,8 +2306,15 @@ static void pad_load(struct server *server) {
 				count++;
 			}
 		}
-		if (count > 0) {
+		if (count > 0 && server->pad_count < 48) {
+			/* Folders sit right after the core applications, on the first page. */
 			pad_add(server, folders[k], "", "folder", folders[k], 1);
+			int last = server->pad_count - 1;
+			struct pad_app folder = server->pad[last];
+			memmove(&server->pad[core + 1], &server->pad[core],
+				(size_t)(last - core) * sizeof(server->pad[0]));
+			server->pad[core] = folder;
+			core++;
 		}
 	}
 }
@@ -2485,6 +2545,7 @@ static int write_stamp(const char *path, time_t value) {
 static void nag_dismiss(struct server *server) {
 	server->nag = 0;
 	server->nag_closed = 1;
+	wlr_log(WLR_INFO, "reminder closed");
 	write_stamp("/var/lib/olympium/nag-dismissed", time(NULL));
 }
 
@@ -2539,6 +2600,8 @@ static int nag_close_hit(const struct server *server, double x, double y) {
 static void press_chrome(struct server *server) {
 	double x = server->cursor->x;
 	double y = server->cursor->y;
+	/* 7 is MENU_DRAGON, the menu under the dragon mark. */
+	server->brand_menu_was_open = server->open_menu == 7;
 	server->press_app = -1;
 	server->press_contrast = 0;
 	server->press_brand = 0;
@@ -2667,18 +2730,31 @@ static void release_chrome(struct server *server) {
 		snprintf(server->notice, sizeof server->notice,
 			server->contrast ? "Contrast mode" : "Glass mode");
 	} else if (server->press_brand && hit_brand(server, x, y)) {
-		server->launcher = 1;
-		server->filter[0] = '\0';
+		server->open_menu = server->brand_menu_was_open ? -1 : MENU_DRAGON;
 	} else if (server->press_app >= 0 && server->press_app == dock_app_at(server, x, y)) {
-		if (strcmp(APPS[server->press_app].id, "launchpad") == 0) {
-			if (!server->launchpad) {
-				pad_load(server);
-				server->pad_page = 0;
-				server->pad_folder = -1;
-				server->pad_cursor = -1;
-				server->pad_filter[0] = '\0';
+		struct view *open = NULL;
+		struct view *each;
+		wl_list_for_each(each, &server->views, link) {
+			const char *vt = each->xdg_toplevel->title;
+			const char *va = each->xdg_toplevel->app_id;
+			if ((vt != NULL && strcmp(vt, APPS[server->press_app].label) == 0) ||
+					(va != NULL && strstr(va, "foot") != NULL &&
+					strcmp(APPS[server->press_app].id, "terminal") == 0)) {
+				open = each;
+				break;
 			}
-			server->launchpad = !server->launchpad;
+		}
+		if (strcmp(APPS[server->press_app].id, "launchpad") == 0) {
+			if (server->launchpad) {
+				server->launchpad = 0;
+			} else {
+				open_launchpad(server);
+			}
+		} else if (open != NULL) {
+			/* The application already has a window: bring it back and forward. */
+			server->launchpad = 0;
+			wlr_scene_node_set_enabled(&open->scene_tree->node, true);
+			focus_view(open, open->xdg_toplevel->base->surface);
 		} else {
 			launch_app(server, &APPS[server->press_app]);
 		}
@@ -2750,11 +2826,23 @@ static void view_map(struct wl_listener *listener, void *data) {
 	struct view *view = wl_container_of(listener, view, map);
 	wl_list_insert(&view->server->views, &view->link);
 	if (!view->placed) {
-		int y = PANEL_H + TITLE_H + 36;
-		int x = 180;
+		/* Centre a new window a little above the middle, and step each
+		 * later window down and right so title bars stay reachable. */
+		struct server *server = view->server;
+		struct wlr_box geo;
+		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo);
+		int step = (wl_list_length(&server->views) - 1) * 26;
+		int free_h = server->screen_h - PANEL_H - DOCK_H - DOCK_MARGIN - TITLE_H - geo.height;
+		int x = (server->screen_w - geo.width) / 2 + step;
+		int y = PANEL_H + TITLE_H + (free_h > 24 ? free_h / 3 : 8) + step;
+		if (x < 8) {
+			x = 8;
+		}
 		wlr_scene_node_set_position(&view->scene_tree->node, x, y);
 		view->placed = 1;
 	}
+	wlr_log(WLR_INFO, "window mapped: %s",
+		view->xdg_toplevel->title != NULL ? view->xdg_toplevel->title : "untitled");
 	focus_view(view, view->xdg_toplevel->base->surface);
 }
 
@@ -2778,6 +2866,7 @@ static void view_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&view->request_resize.link);
 	wl_list_remove(&view->request_maximize.link);
 	wl_list_remove(&view->request_fullscreen.link);
+	wlr_texture_destroy(view->shadow);
 	free(view);
 }
 

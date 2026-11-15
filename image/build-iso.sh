@@ -228,6 +228,7 @@ stage_desktop() {
 	install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
 	install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
 	install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
+	install -D -m 644 "$REPO/image/foot.ini" "$ROOT/etc/xdg/foot/foot.ini"
 	install -d "$ROOT/usr/share/olympium"
 	install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
 	install -m 644 "$REPO/branding/branding.conf" "$ROOT/etc/dev-desktop/branding.conf"

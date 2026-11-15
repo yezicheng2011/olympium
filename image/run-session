@@ -1,7 +1,22 @@
 #!/bin/bash
 # Copyright 2026 Development Desktop contributors
 # License: daniel.ye Source License, Version 1.0. See LICENSE.
-kmsg() { printf '<6>dev-desktop: %s\n' "$*" > /dev/kmsg 2>/dev/null || true; }
+# Session lines go to the kernel log and to any serial port the kernel already
+# uses as a console, so a boot test can follow the desktop without a display.
+# A serial port that is not a console is left alone: opening one can wait
+# forever for a carrier.
+serial_consoles=""
+for name in $(cat /sys/class/tty/console/active 2>/dev/null); do
+	case "$name" in
+		ttyS*|ttyAMA*) serial_consoles="$serial_consoles /dev/$name" ;;
+	esac
+done
+kmsg() {
+	printf '<6>dev-desktop: %s\n' "$*" > /dev/kmsg 2>/dev/null || true
+	for port in $serial_consoles; do
+		(printf 'dev-desktop: %s\r\n' "$*" > "$port") 2>/dev/null || true
+	done
+}
 mkdir -p /run/dev-desktop
 chmod 755 /run/dev-desktop
 kmsg "session start"

@@ -1,16 +1,23 @@
 # Olympium
 
-The live session and ISO volume are named Olympium. The menu-bar mark is an original geometric dragon, a placeholder until official art is supplied. It is not an Apple logo.
+The live session and ISO volume are named Olympium. The menu-bar mark is an original abstract Eastern dragon. It is not an Apple logo, and no Apple artwork, wallpaper, font, or system asset is in this tree.
 
-This is a native Linux live system with an original Wayland desktop. It is not a web page, not Electron, and not a copy of macOS. The panel, dock, and launcher are drawn by a small compositor in `desktop/compositor.c`. Windows are normal Wayland clients.
+This is a native Linux live system with its own Wayland desktop. It is not a web page and not Electron. The layout follows the macOS desktop closely: a thin menu bar, left window controls, a floating dock, and a full-screen launcher. Every pixel of it is drawn here, by a small compositor in `desktop/compositor.c`. Windows are normal Wayland clients.
 
 ## What the desktop does
 
-- A top panel and a floating dock sample the framebuffer and blur it on every frame. That is live blur of whatever is behind them, including a moving color window. It is not a pre-blurred wallpaper.
-- If the renderer cannot read pixels back, the shell switches to an opaque high-contrast drawing and says so. That fallback does not claim a blur.
-- Files, Settings, a terminal (`foot`), and a launcher opened from the panel or the Super key.
+- Glass. The menu bar, menus, dock, window title bars, dialogs, and Launchpad read the framebuffer back on every frame, bend it toward the edges, blur it, and add a bright rim and a sheen. It is the live picture behind each surface, not a pre-blurred wallpaper. Glass is the default.
+- If the renderer cannot read pixels back, the shell switches to an opaque drawing and says so in Settings. That fallback does not claim glass.
+- Menu bar: the dragon mark, the front application's name, File, Edit, View, Go, Window, and Help on the left. A network glyph, search and quick-settings glyphs, and the clock on the right. The network glyph is a fan wedge that fills with the live wireless signal, shows three dots under a full wedge for a wired link, and is struck through with no link.
+- Windows: rounded corners, a soft shadow, a centered title, and red, yellow, and green controls on the left. That includes Settings, Files, the terminal, and the purchase reminder.
+- Files: a sidebar of favorites and locations, back and forward, icon and list views, search, and an item count.
+- Dock: a centered glass capsule of unlabeled icons. An icon grows under the pointer, shows its name above the dock, and has a dot while that application has a window open.
+- Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
+- Settings: appearance, the driver list, compatibility, Olympium, license, and about.
 - Alt-drag moves a window.
-- The dock entry Olympium runs `olympium-linux` when that binary is installed. Otherwise it opens an explanation of the pinned revision. See `docs/olympium-integration.md`.
+- The dock entry Olympium runs `olympium-linux` when that binary is installed. Otherwise it opens an explanation. See `docs/olympium-integration.md`.
+
+What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation, no Mission Control, no Spotlight panel behind the search glyph, and no quick-settings panel behind its glyph yet.
 
 ## Build
 

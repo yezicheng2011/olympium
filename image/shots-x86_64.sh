@@ -35,19 +35,37 @@ PY
 	chmod 666 "$1" 2>/dev/null || true
 }
 
+# boot NAME "EXTRA KERNEL FLAGS" "SERIAL LINE TO WAIT FOR" SETTLE_SECONDS
 boot() {
-	local name=$1 extra=$2 wait=$3
-	rm -f "$MON" "$OUT/style-${name}.ppm"
+	local name=$1 extra=$2 pattern=$3 settle=$4
+	local log=$OUT/style-${name}-serial.log
+	rm -f "$MON" "$log" "$OUT/style-${name}.ppm"
 	qemu-system-x86_64 -m 2048 -smp 2 "${KVM[@]}" \
 		-kernel "$STAGE/boot/vmlinuz" -initrd "$STAGE/boot/initrd.img" \
 		-append "boot=live console=ttyS0,115200 console=tty0 $extra" \
 		-cdrom "$ISO" -vga std -display none \
-		-serial file:"$OUT/style-${name}-serial.log" \
+		-netdev user,id=n0 -device e1000,netdev=n0 \
+		-serial file:"$log" \
 		-monitor unix:"$MON",server,nowait \
 		-usb -device usb-tablet -no-reboot &
 	local pid=$!
-	sleep "$wait"
-	shot "$OUT/style-${name}.ppm"
+	local seen=0
+	for i in $(seq 1 90); do
+		if grep -a -q "$pattern" "$log" 2>/dev/null; then
+			seen=1
+			break
+		fi
+		if ! kill -0 "$pid" 2>/dev/null; then
+			break
+		fi
+		sleep 2
+	done
+	if [ "$seen" -eq 1 ]; then
+		sleep "$settle"
+		shot "$OUT/style-${name}.ppm"
+	else
+		echo "never saw '${pattern}' for ${name}" >&2
+	fi
 	kill "$pid" 2>/dev/null || true
 	wait "$pid" 2>/dev/null || true
 	if [ -s "$OUT/style-${name}.ppm" ]; then
@@ -57,13 +75,14 @@ boot() {
 	fi
 }
 
-boot clean "" 16
-boot menu "olympium.openmenu=1" 16
-boot files "olympium.openfiles=1" 22
-boot settings "olympium.opensettings=1" 22
-boot terminal "olympium.openterm=1" 22
-boot olympium "olympium.openruntime=1" 30
-boot launchpad "olympium.openlaunch=1" 16
-boot nag "olympium.nag=1" 16
+boot clean "" "compositor on WAYLAND_DISPLAY" 6
+boot menu "olympium.openmenu=1" "demo: menu open" 3
+boot files "olympium.openfiles=1" "window mapped: Files" 4
+boot settings "olympium.opensettings=1" "window mapped: Settings" 4
+boot terminal "olympium.openterm=1" "window mapped" 4
+boot olympium "olympium.openruntime=1" "window mapped" 4
+boot launchpad "olympium.openlaunch=1" "demo: launchpad open" 3
+boot nag "olympium.nag=1" "compositor on WAYLAND_DISPLAY" 6
+boot after-nag "olympium.nag=1 olympium.nagdismiss=1 olympium.openfiles=1" "reminder closed" 8
 sha256sum "$ISO"
 echo SHOTS-DONE

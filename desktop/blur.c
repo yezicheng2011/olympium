@@ -7,43 +7,47 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int clamp_index(int v, int limit) {
+	if (v < 0) {
+		return 0;
+	}
+	if (v >= limit) {
+		return limit - 1;
+	}
+	return v;
+}
+
+/* One box-blur pass along a row or a column. The window sum slides one pixel
+ * at a time, so the cost does not grow with the radius. Edges repeat. */
 static void blur_axis(const uint8_t *src, uint8_t *dst, int width, int height,
 		int stride, int radius, int horizontal) {
 	const int window = radius * 2 + 1;
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			int sum_b = 0, sum_g = 0, sum_r = 0, sum_a = 0;
-			for (int k = -radius; k <= radius; k++) {
-				int sx = x;
-				int sy = y;
-				if (horizontal) {
-					sx = x + k;
-					if (sx < 0) {
-						sx = 0;
-					}
-					if (sx >= width) {
-						sx = width - 1;
-					}
-				} else {
-					sy = y + k;
-					if (sy < 0) {
-						sy = 0;
-					}
-					if (sy >= height) {
-						sy = height - 1;
-					}
-				}
-				const uint8_t *p = src + sy * stride + sx * 4;
-				sum_b += p[0];
-				sum_g += p[1];
-				sum_r += p[2];
-				sum_a += p[3];
-			}
-			uint8_t *o = dst + y * stride + x * 4;
-			o[0] = (uint8_t)(sum_b / window);
-			o[1] = (uint8_t)(sum_g / window);
-			o[2] = (uint8_t)(sum_r / window);
-			o[3] = (uint8_t)(sum_a / window);
+	const int lines = horizontal ? height : width;
+	const int length = horizontal ? width : height;
+	const int step = horizontal ? 4 : stride;
+	for (int line = 0; line < lines; line++) {
+		const uint8_t *in = horizontal ? src + line * stride : src + line * 4;
+		uint8_t *out = horizontal ? dst + line * stride : dst + line * 4;
+		int sum[4] = {0, 0, 0, 0};
+		for (int k = -radius; k <= radius; k++) {
+			const uint8_t *p = in + clamp_index(k, length) * step;
+			sum[0] += p[0];
+			sum[1] += p[1];
+			sum[2] += p[2];
+			sum[3] += p[3];
+		}
+		for (int i = 0; i < length; i++) {
+			uint8_t *o = out + i * step;
+			o[0] = (uint8_t)(sum[0] / window);
+			o[1] = (uint8_t)(sum[1] / window);
+			o[2] = (uint8_t)(sum[2] / window);
+			o[3] = (uint8_t)(sum[3] / window);
+			const uint8_t *add = in + clamp_index(i + radius + 1, length) * step;
+			const uint8_t *drop = in + clamp_index(i - radius, length) * step;
+			sum[0] += add[0] - drop[0];
+			sum[1] += add[1] - drop[1];
+			sum[2] += add[2] - drop[2];
+			sum[3] += add[3] - drop[3];
 		}
 	}
 }
@@ -65,16 +69,6 @@ void dev_blur_bgra(uint8_t *pixels, int width, int height, int stride, int radiu
 	memcpy(pixels, tmp2, bytes);
 	free(tmp);
 	free(tmp2);
-}
-
-static int glass_sample(int v, int limit) {
-	if (v < 0) {
-		return 0;
-	}
-	if (v >= limit) {
-		return limit - 1;
-	}
-	return v;
 }
 
 void dev_glass_bgra(uint8_t *pixels, int width, int height, int stride, int radius) {
@@ -107,8 +101,8 @@ void dev_glass_bgra(uint8_t *pixels, int width, int height, int stride, int radi
 				dx = (x < width / 2 ? bend / 4 : -(bend / 4));
 				dy = (y < height / 2 ? bend / 5 : -(bend / 5));
 			}
-			int sx = glass_sample(x + dx, width);
-			int sy = glass_sample(y + dy, height);
+			int sx = clamp_index(x + dx, width);
+			int sy = clamp_index(y + dy, height);
 			const uint8_t *p = src + sy * stride + sx * 4;
 			uint8_t *o = pixels + y * stride + x * 4;
 			o[0] = p[0];
