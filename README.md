@@ -15,6 +15,7 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 - Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image, each with its own icon and its whole command: Linux programs, the shortcuts Windows installers create under Wine, and installed Mac applications. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
 - Settings: a search field, an icon sidebar, and grouped rows, in the arrangement of a system-settings window. The panes are appearance, drivers, compatibility, Olympium, license, and about. The sidebar glyphs are original.
 - Search: the magnifier in the menu bar, or Control or Super with Space, opens a glass panel. Typing finds programs by name in the same list Launchpad shows, names that start with what was typed first. Up and Down choose, Return starts, Escape closes. It finds programs, not files.
+- Quick settings: the two sliders in the menu bar open a short menu. Reduce Transparency and Widgets are ticked when on, a line reports the network, and the last line opens Settings.
 - Widgets: the time and date, this month, and memory, disk, and battery, as glass on the wallpaper under the windows. View, Show or Hide Widgets turns them off.
 - A window that is not in front has grey controls and a paler title.
 - Alt-drag moves a window.
@@ -23,7 +24,7 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 - Firefox is installed from Mozilla's package archive and is the default handler for http and https. The dock entry starts it. Ubuntu's transitional snap package is not used.
 - `install-to-disk /dev/sdX` copies the running system onto a whole disk and makes it bootable, for BIOS or UEFI, whichever this boot used.
 
-What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation, no Mission Control, and no quick-settings panel behind its glyph yet. The search panel finds programs and does not look in files.
+What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation and no Mission Control. The search panel finds programs and does not look in files. Quick settings is a menu of what this desktop can switch itself; it has no sound, brightness, or Wi-Fi controls.
 
 ## Build
 

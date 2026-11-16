@@ -493,6 +493,26 @@ PYEOF
 			grep 'search' "$LOG" | tail -n 5
 		fi
 		ctl "search close"
+		# Quick settings, under the sliders glyph: each line does what it says.
+		ctl "menu open 8"
+		ctl "menu pick 1"
+		ctl "menu open 8"
+		ctl "menu pick 0"
+		sleep 0.3
+		state=$(cat "$OLYMPIUM_DESK_HOME/widgets" 2>/dev/null)
+		ctl "menu open 8"
+		ctl "menu pick 1"
+		ctl "menu open 8"
+		ctl "menu pick 0"
+		sleep 0.3
+		if grep -q 'widgets off' "$LOG" && grep -q 'widgets on' "$LOG" && [ "$state" = off ] &&
+				[ "$(cat "$OLYMPIUM_DESK_HOME/widgets")" = on ] &&
+				grep -q 'reduce transparency on' "$LOG" && grep -q 'reduce transparency off' "$LOG"; then
+			ok "quick settings turns widgets and transparency off and on, and the choice is kept"
+		else
+			bad "quick settings"
+			grep -E 'widgets o|transparency' "$LOG" | tail -n 4
+		fi
 		# From Launchpad with no runtime: a window says why.
 		unset OLYMPIUM_NO_DIALOG
 		before=$(mapped 'Desk Mac')

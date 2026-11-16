@@ -92,6 +92,10 @@ enum { APP_COUNT = sizeof APPS / sizeof APPS[0] };
 
 enum { PAD_MAX = 256 };
 
+/* 0 to 6 are the menus in the bar, 7 is the one under the dragon mark, and 8
+ * is quick settings, under the two-sliders glyph at the right. */
+enum { MENU_DRAGON = 7, MENU_QUICK = 8, MENU_COUNT = 9, MENU_MAX_ITEMS = 6 };
+
 struct pad_app {
 	char name[96];
 	char cmd[768];
@@ -214,6 +218,7 @@ struct server {
 	int contrast;
 	int launcher;      /* the search panel is open */
 	int search_x;      /* where the search glyph is in the menu bar */
+	int quick_x;       /* where the quick-settings glyph is */
 	int spot_cursor;   /* which result is selected */
 	int blur_ok;
 	int blur_fail;
@@ -1056,8 +1061,9 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		int clock_w = paint_text(cr, "Ubuntu Medium 13", clock, 0, -60, 0, 0, 0);
 		double rx = server->screen_w - 14 - clock_w;
 		paint_text(cr, "Ubuntu Medium 13", clock, rx, 4, 0.10, 0.10, 0.12);
-		/* Quick-settings glyph: two sliders. */
+		/* Quick-settings glyph: two sliders. A click opens its menu. */
 		rx -= 30;
+		server->quick_x = (int)rx;
 		cairo_set_source_rgba(cr, 0.10, 0.10, 0.12, 1);
 		cairo_set_line_width(cr, 1.5);
 		rrect(cr, rx, 6, 16, 5.5, 2.7);
@@ -1148,15 +1154,44 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		if (point_in(box, server->cursor->x, server->cursor->y)) {
 			hover = (int)((server->cursor->y - box->y - 6) / 28);
 		}
+		int quick = server->open_menu == MENU_QUICK;
 		for (int i = 0; i < n; i++) {
-			int lit = i == hover;
+			/* In quick settings the third line only reports the network. */
+			int info = quick && i == 2;
+			int lit = i == hover && !info;
 			if (lit) {
 				cairo_set_source_rgba(cr, 0.16, 0.47, 0.96, 0.94);
 				rrect(cr, 5, 5 + i * 28, box->width - 10, 24, 6);
 				cairo_fill(cr);
 			}
-			paint_text(cr, "Ubuntu 13", MENU_ITEMS[server->open_menu][i], 16, 7 + i * 28,
-				lit ? 1 : 0.10, lit ? 1 : 0.10, lit ? 1 : 0.12);
+			if (quick) {
+				const char *label = MENU_ITEMS[server->open_menu][i];
+				char network[64];
+				int on = (i == 0 && server->contrast) || (i == 1 && server->widgets_on);
+				if (info) {
+					if (server->net_kind == 2) {
+						snprintf(network, sizeof network, "Wi-Fi, signal %d of 3", server->net_level);
+					} else {
+						snprintf(network, sizeof network, "%s",
+							server->net_kind == 1 ? "Wired network connected" : "No network");
+					}
+					label = network;
+				}
+				if (on) {
+					/* A tick for a setting that is on. */
+					cairo_set_source_rgba(cr, lit ? 1 : 0.16, lit ? 1 : 0.47, lit ? 1 : 0.96, 1);
+					cairo_set_line_width(cr, 2);
+					cairo_move_to(cr, 15, 17 + i * 28);
+					cairo_line_to(cr, 19.5, 21.5 + i * 28);
+					cairo_line_to(cr, 27, 11.5 + i * 28);
+					cairo_stroke(cr);
+				}
+				double ink = info ? 0.46 : (lit ? 1 : 0.10);
+				paint_text(cr, "Ubuntu 13", label, 36, 7 + i * 28, ink, ink, info ? 0.50 : (lit ? 1 : 0.12));
+			} else {
+				paint_text(cr, "Ubuntu 13", MENU_ITEMS[server->open_menu][i], 16, 7 + i * 28,
+					lit ? 1 : 0.10, lit ? 1 : 0.10, lit ? 1 : 0.12);
+			}
 			if (i == n - 2 && n > 2) {
 				cairo_set_source_rgba(cr, 0.45, 0.45, 0.48, 0.35);
 				cairo_rectangle(cr, 14, 8 + (i + 1) * 28 - 3, box->width - 28, 1);
@@ -2922,7 +2957,6 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
 
 /* Index 0 is the application-name menu, 1 to 6 are File to Help, and 7 is
  * the menu under the dragon mark. */
-enum { MENU_DRAGON = 7, MENU_COUNT = 8, MENU_MAX_ITEMS = 6 };
 
 static const char *MENU_ITEMS[][6] = {
 	{"About Olympium", "Settings\u2026", "Hide Window", NULL, NULL, NULL},
@@ -2933,6 +2967,7 @@ static const char *MENU_ITEMS[][6] = {
 	{"Minimize", "Zoom", "Cycle Through Windows", NULL, NULL, NULL},
 	{"Olympium Help", "Compatibility", NULL, NULL, NULL, NULL},
 	{"About Olympium", "System Settings\u2026", "Launchpad", "Restart\u2026", "Shut Down\u2026", NULL},
+	{"Reduce Transparency", "Widgets", "Network", "System Settings\u2026", NULL, NULL},
 };
 
 static int menu_item_count(int menu) {
@@ -2948,9 +2983,20 @@ static int menu_item_count(int menu) {
 
 static void menu_box(const struct server *server, struct wlr_box *box) {
 	int n = menu_item_count(server->open_menu);
-	box->x = server->open_menu == MENU_DRAGON ? 6 : server->menu_x[server->open_menu] - 8;
-	box->y = PANEL_H + 2;
 	box->width = 230;
+	if (server->open_menu == MENU_DRAGON) {
+		box->x = 6;
+	} else if (server->open_menu == MENU_QUICK) {
+		/* Under its glyph, with its right edge kept on the screen. */
+		box->width = 250;
+		box->x = server->quick_x + 22 - box->width;
+		if (box->x + box->width > server->screen_w - 6) {
+			box->x = server->screen_w - 6 - box->width;
+		}
+	} else {
+		box->x = server->menu_x[server->open_menu] - 8;
+	}
+	box->y = PANEL_H + 2;
 	box->height = 10 + n * 28;
 }
 
@@ -3079,6 +3125,18 @@ static void menu_activate(struct server *server, int menu, int item) {
 		}
 	} else if (menu == 6) {
 		spawn2("/usr/bin/dev-settings", item == 0 ? "--page=olympium" : "--page=compat");
+	} else if (menu == MENU_QUICK) {
+		if (item == 0) {
+			server->contrast = !server->contrast;
+			wlr_log(WLR_INFO, "reduce transparency %s", server->contrast ? "on" : "off");
+		} else if (item == 1) {
+			server->widgets_on = !server->widgets_on;
+			widgets_store(server->widgets_on);
+			widgets_refresh(server, 1);
+			wlr_log(WLR_INFO, "widgets %s", server->widgets_on ? "on" : "off");
+		} else if (item == 3) {
+			launch_app(server, app_by_id("settings"));
+		}
 	}
 }
 
@@ -3979,6 +4037,11 @@ static void press_chrome(struct server *server) {
 			}
 			return;
 		}
+		if (server->quick_x > 0 && x >= server->quick_x - 6 && x < server->quick_x + 22) {
+			close_search(server);
+			server->open_menu = server->open_menu == MENU_QUICK ? -1 : MENU_QUICK;
+			return;
+		}
 		for (int i = 0; i < 7; i++) {
 			if (x >= server->menu_x[i] && x < server->menu_x[i] + server->menu_w[i]) {
 				server->open_menu = server->open_menu == i ? -1 : i;
@@ -4463,6 +4526,15 @@ static int on_control(int fd, uint32_t mask, void *data) {
 			server->contrast = 1;
 		} else if (strncmp(buf, "contrast 0", 10) == 0) {
 			server->contrast = 0;
+		} else if (strncmp(buf, "menu open ", 10) == 0) {
+			int menu = atoi(buf + 10);
+			server->open_menu = menu >= 0 && menu < MENU_COUNT ? menu : -1;
+		} else if (strncmp(buf, "menu pick ", 10) == 0 && server->open_menu >= 0) {
+			/* What a click on that line of the open menu does. */
+			int item = atoi(buf + 10);
+			if (item >= 0 && item < menu_item_count(server->open_menu)) {
+				menu_activate(server, server->open_menu, item);
+			}
 		} else if (strncmp(buf, "search open", 11) == 0) {
 			open_search(server);
 		} else if (strncmp(buf, "search close", 12) == 0) {
