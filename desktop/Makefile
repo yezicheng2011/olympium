@@ -17,7 +17,7 @@ CLIP_HELPER := $(shell pkg-config --exists xcb xcb-xfixes && echo dev-clip-helpe
 all: $(CLIP_HELPER) dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
 
 splash.png: splash.c
-	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS)
+	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS) -lm
 	./splash-gen splash.png
 
 # macicon.c decodes an icon in a confined child. Launchpad uses it for any
@@ -25,7 +25,7 @@ splash.png: splash.c
 ICON_SOURCES := macicon.c macbundle.c macho.c sandbox.c
 ICON_HEADERS := macicon.h macbundle.h macho.h sandbox.h
 
-dev-compositor: compositor.c blur.c blur.h xwayland-compat.h $(ICON_SOURCES) $(ICON_HEADERS)
+dev-compositor: compositor.c blur.c blur.h dragon.h xwayland-compat.h $(ICON_SOURCES) $(ICON_HEADERS)
 	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(ICON_SOURCES) $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(PIXBUF_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
 
 # Builds the helper where it can be built and does nothing elsewhere.
@@ -33,7 +33,7 @@ clip-helper: $(CLIP_HELPER)
 
 # The same compositor built as if wlroots had no Xwayland, which is how the
 # i386 image builds it. The test starts it to see that a session still comes up.
-dev-compositor-nox: compositor.c blur.c blur.h xwayland-compat.h $(ICON_SOURCES) $(ICON_HEADERS)
+dev-compositor-nox: compositor.c blur.c blur.h dragon.h xwayland-compat.h $(ICON_SOURCES) $(ICON_HEADERS)
 	$(CC) $(CFLAGS) -DDEV_DESK_NO_XWAYLAND -o $@ compositor.c blur.c $(ICON_SOURCES) $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(PIXBUF_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
 
 dev-clip-helper: clip-helper.c
@@ -42,8 +42,8 @@ dev-clip-helper: clip-helper.c
 dev-files: files.c macbundle.c macicon.c macho.c sandbox.c macbundle.h macicon.h macho.h sandbox.h
 	$(CC) $(CFLAGS) $(LARGE_FILES) -o $@ files.c macbundle.c macicon.c macho.c sandbox.c $(GTK_FLAGS)
 
-dev-settings: settings.c
-	$(CC) $(CFLAGS) -o $@ settings.c $(GTK_FLAGS)
+dev-settings: settings.c accounts.c accounts.h
+	$(CC) $(CFLAGS) -o $@ settings.c accounts.c $(GTK_FLAGS) -lcrypt
 
 dev-swatch: swatch.c
 	$(CC) $(CFLAGS) -o $@ swatch.c $(GTK_FLAGS)

@@ -40,6 +40,15 @@ if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
 		tail -n 20 /tmp/firefox.log 2>/dev/null || true
 	) &
 fi
+# First launch: an account and the administrator password are asked for until
+# they have been set. A boot test passes olympium.* flags and is not asked,
+# unless it passes olympium.setup=1.
+if [ ! -e /var/lib/olympium/setup-done ] && [ -x /usr/bin/dev-settings ]; then
+	if grep -q 'olympium.setup=1' /proc/cmdline 2>/dev/null ||
+			! grep -q 'olympium\.[a-z0-9]*=' /proc/cmdline 2>/dev/null; then
+		(sleep 3; /usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
+	fi
+fi
 # Prewarm is off unless the user turned it on with "dev-install prewarm on".
 # While it is off this starts nothing and exits at once.
 if [ -x /usr/bin/dev-install ]; then

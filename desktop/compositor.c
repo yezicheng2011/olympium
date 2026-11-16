@@ -8,6 +8,7 @@
  */
 #define _GNU_SOURCE
 
+#include "dragon.h"
 #include "blur.h"
 
 #include <cairo.h>
@@ -476,38 +477,9 @@ static void rrect(cairo_t *cr, double x, double y, double w, double h, double r)
 	cairo_close_path(cr);
 }
 
-/* Official-placeholder Olympium mark: an abstract Eastern dragon.
- * Serpentine body, antler horns, whiskers, and a pearl. Not an apple. */
+/* The Olympium mark. The drawing is in dragon.h, shared with the boot splash. */
 static void draw_dragon(cairo_t *cr, double x, double y, double size, double r, double g, double b) {
-	cairo_save(cr);
-	cairo_translate(cr, x, y);
-	cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-	cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-	cairo_set_source_rgba(cr, r, g, b, 1);
-	cairo_set_line_width(cr, size * 0.09);
-	cairo_move_to(cr, size * 0.08, size * 0.82);
-	cairo_curve_to(cr, size * 0.02, size * 0.48, size * 0.55, size * 0.72,
-		size * 0.38, size * 0.46);
-	cairo_curve_to(cr, size * 0.22, size * 0.22, size * 0.70, size * 0.30,
-		size * 0.58, size * 0.18);
-	cairo_stroke(cr);
-	cairo_set_line_width(cr, size * 0.045);
-	cairo_move_to(cr, size * 0.56, size * 0.18);
-	cairo_line_to(cr, size * 0.48, size * 0.02);
-	cairo_move_to(cr, size * 0.60, size * 0.16);
-	cairo_line_to(cr, size * 0.74, size * 0.00);
-	cairo_stroke(cr);
-	cairo_arc(cr, size * 0.70, size * 0.24, size * 0.11, 0, 6.2832);
-	cairo_fill(cr);
-	cairo_set_line_width(cr, size * 0.03);
-	cairo_move_to(cr, size * 0.78, size * 0.22);
-	cairo_line_to(cr, size * 0.96, size * 0.16);
-	cairo_move_to(cr, size * 0.76, size * 0.28);
-	cairo_line_to(cr, size * 0.94, size * 0.32);
-	cairo_stroke(cr);
-	cairo_arc(cr, size * 0.90, size * 0.08, size * 0.035, 0, 6.2832);
-	cairo_fill(cr);
-	cairo_restore(cr);
+	draw_dragon_mark(cr, x, y, size, r, g, b);
 }
 
 static void net_wedge(cairo_t *cr, double radius) {

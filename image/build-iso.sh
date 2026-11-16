@@ -200,7 +200,12 @@ install_packages() {
 		libgtk-3-0 foot fonts-dejavu-core adwaita-icon-theme ca-certificates \
 		e2fsprogs dosfstools parted grub-common util-linux bash coreutils \
 		libwlroots12t64 libseat1 \
-		7zip cpio librsvg2-common rpm rpm2cpio
+		7zip cpio librsvg2-common rpm rpm2cpio \
+		network-manager wpasupplicant iw rfkill bluez modemmanager usb-modeswitch
+	# network-manager with wpasupplicant joins Wi-Fi networks, bluez is the
+	# Bluetooth stack, and modemmanager with usb-modeswitch drives LTE and 5G
+	# modems that speak QMI, MBIM or AT. The kernel drivers and firmware for
+	# them come with linux-modules-extra and linux-firmware below.
 	# 7zip and cpio unpack Mac disk images and packages for dev-install.
 	# rpm and rpm2cpio are what it reads and unpacks an .rpm with.
 	# librsvg2-common lets Launchpad load a program's SVG icon.
