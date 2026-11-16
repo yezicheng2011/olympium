@@ -1,0 +1,4 @@
+# name repository commit purpose
+waydroid	https://github.com/waydroid/waydroid.git	5b7e2e71be3f6bfaaaab3b461251dacaf1ce4991	Android container manager 1.6.3; Android system/vendor images are separate
+darling	https://github.com/darlinghq/darling.git	3fcd2e1aa85079789d19d82415695bdecc512241	macOS compatibility layer; submodules are fetched by build-darling.sh
+openharmony-manifest	https://github.com/openharmony/manifest.git	2929176279e011ade6df28357566d95fa3829e9c	OpenHarmony 6.1 LTS manifest; not a built guest image or commercial HarmonyOS

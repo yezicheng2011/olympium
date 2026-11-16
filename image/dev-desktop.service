@@ -1,7 +1,6 @@
 [Unit]
 Description=Olympium desktop
-After=systemd-udev-settle.service systemd-user-sessions.service
-Wants=systemd-udev-settle.service
+After=systemd-udev-trigger.service systemd-user-sessions.service
 [Service]
 Type=simple
 ExecStart=/usr/libexec/dev-desktop/run-session

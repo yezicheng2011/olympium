@@ -46,7 +46,7 @@ fi
 if [ ! -e /var/lib/olympium/setup-done ] && [ -x /usr/bin/dev-settings ]; then
 	if grep -q 'olympium.setup=1' /proc/cmdline 2>/dev/null ||
 			! grep -q 'olympium\.[a-z0-9]*=' /proc/cmdline 2>/dev/null; then
-		(sleep 3; /usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
+		(/usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
 	fi
 fi
 # Prewarm is off unless the user turned it on with "dev-install prewarm on".

@@ -12,7 +12,7 @@ GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 # built where Xwayland can be: it needs xcb and xcb-xfixes.
 CLIP_HELPER := $(shell pkg-config --exists xcb xcb-xfixes && echo dev-clip-helper)
 
-.PHONY: all clip-helper test test-wine test-mac test-packages clean
+.PHONY: all clip-helper test test-render test-startup test-wine test-mac test-packages clean
 
 all: $(CLIP_HELPER) dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
 
@@ -87,6 +87,13 @@ test-xremap: test_xremap.c
 test: test-blur test-macho
 	./test-blur
 	./test-macho
+
+test-render:
+	bash ./test-render.sh
+
+test-startup: dev-compositor olympium-testapp
+	python3 ../image/test-driver-report.py
+	python3 ./test-startup.py
 
 # Needs wine, Xwayland, and mingw. It exits 77 when one is missing.
 test-wine:

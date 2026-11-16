@@ -43,6 +43,7 @@ struct wlr_xwayland_surface {
 		struct wl_signal associate;
 		struct wl_signal dissociate;
 		struct wl_signal request_configure;
+		struct wl_signal set_title;
 		struct wl_signal destroy;
 	} events;
 };

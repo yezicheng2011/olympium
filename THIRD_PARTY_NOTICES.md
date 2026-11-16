@@ -4,6 +4,8 @@ First-party files in this repository are under daniel.ye Source License, Version
 
 The live ISO also contains unmodified Ubuntu 24.04 packages. Those packages are not relicensed. Their copyright files are installed under `/usr/share/doc` in the image, and the installed versions are listed in `sbom.tsv` produced by `image/build-iso.sh`. Corresponding source packages are available from Ubuntu's archives.
 
+`image/fetch-compat-sources.py` can additionally obtain unmodified Waydroid (GPL-3.0), Darling (GPL-3.0 with separately licensed submodules), and the OpenHarmony source manifest (Apache-2.0). These optional source checkouts retain their own license files. Fetching them does not link them into the desktop or include their runtime/system images in the ISO; see `docs/five-platform-integration.md`.
+
 Components the desktop links directly:
 
 | Component | Role | License |

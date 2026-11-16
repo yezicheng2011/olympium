@@ -2,6 +2,16 @@
 
 The boot of `9c1b41e4…` mapped `Desk Win` at 43.3 s of compositor time. This page splits that number, says what was changed, and says what was measured afterwards and where.
 
+## Desktop startup changes
+
+The desktop service no longer requests the global `systemd-udev-settle` barrier. Graphics module probes remain synchronous, and wlroots 0.17's DRM discovery waits for GPU devices when needed. Network/storage helper probes and the driver inventory run in the background. The inventory indexes the module tree once, preserving compressed and built-in driver reporting.
+
+`run-session` uses `dev-compositor -n -s ...`: a Wayland session starts as soon as the Wayland socket and backend are ready, without waiting for Xwayland. The first-run settings window no longer has an extra three-second sleep. The default `-s` behavior still waits for Xwayland for scripts that need `DISPLAY`; Windows launches from the native session resolve the asynchronously published `olympium-xdisplay` note. Screenshot/test-only delays remain separate from normal startup.
+
+`make -C desktop test-startup` checks launch ordering with a deliberately delayed Xwayland and confirms that the session is started exactly once. One headless/pixman run mapped the GTK test window at 1.982 seconds in the X-compatible path and 0.243 seconds in the native path while Xwayland was deliberately delayed by 1.5 seconds. This is a controlled dependency test, not a complete cold-boot benchmark. `TEST_STARTUP_WINE=1 make -C desktop test-startup` additionally checks a real Wine launch from a native session without an inherited `DISPLAY` (requires Wine, mingw and `dev-install`).
+
+The ISO has not been rebuilt or booted for these startup changes. Firmware, initramfs, physical GPU discovery, and real cold-boot time remain unmeasured.
+
 ## Where the 43.3 s went
 
 The marks are from that boot's session log. The two waits are `sleep` lines in the boot-test scripts. Nothing in that boot timed the phases directly, so the split of the middle rows is read from the scripts, not measured.
@@ -68,4 +78,4 @@ What the boot found and what was changed:
 - The session can start before Xwayland is ready (it waits four seconds). What the session started then had no `DISPLAY`, and a Windows program was refused. The compositor now writes the display's name to `$XDG_RUNTIME_DIR/olympium-xdisplay`, and `dev-install` waits for it (20 s, `OLYMPIUM_XWAIT`).
 - The compositor did not handle Xwayland's `dissociate` event. Its listeners stayed on a freed surface, and a window that was hidden and shown again never came back. Fixed, with `test-xremap` in `make test-wine`. One test run under load aborted with glibc's "corrupted unsorted chunks" after a Wine window closed. That abort was not reproduced again, before or after the fix, so it is not proven to be this bug.
 - Under emulation only: QEMU 8.2 with SMAP makes the guest kernel kill Wine. `shot-wine.sh` turns SMAP off when there is no KVM.
-- The idle desktop redraws every frame: about 20% of one core on the build machine. Not fixed yet.
+- The earlier idle redraw issue is fixed in the current working tree; see `five-platform-integration.md` for the headless measurement and its limits.

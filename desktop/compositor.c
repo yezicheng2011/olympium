@@ -119,6 +119,7 @@ struct view {
 	struct wl_listener unmap;
 	struct wl_listener destroy;
 	struct wl_listener commit;
+	struct wl_listener set_title;
 	struct wl_listener request_move;
 	struct wl_listener request_resize;
 	struct wl_listener request_maximize;
@@ -149,6 +150,7 @@ struct output {
 	struct server *server;
 	struct wlr_output *wlr_output;
 	struct wl_listener frame;
+	int shell_dirty;
 	struct wl_listener request_state;
 	struct wl_listener destroy;
 };
@@ -271,7 +273,18 @@ struct server {
 	int control_fd;
 	struct wl_event_source *shot_timer;
 	struct wl_event_source *tick_timer;
+	time_t shell_stamp;
 };
+
+/* Shell chrome is drawn outside the scene graph. Damage it explicitly when
+ * input changes it; client content continues to use wlroots scene damage. */
+static void shell_redraw(struct server *server) {
+	struct output *output;
+	wl_list_for_each(output, &server->outputs, link) {
+		output->shell_dirty = 1;
+		wlr_output_schedule_frame(output->wlr_output);
+	}
+}
 
 /* Launchpad grid: five columns by three rows of large icons per page. */
 enum { PAD_COLS = 5, PAD_ROWS = 3, PAD_PER = 15, PAD_CELL_W = 176, PAD_CELL_H = 150, PAD_TOP = 128 };
@@ -1521,6 +1534,12 @@ static void output_frame(struct wl_listener *listener, void *data) {
 	if (scene_output == NULL) {
 		return;
 	}
+	if (!output->shell_dirty && !output->wlr_output->needs_frame &&
+			!pixman_region32_not_empty(&scene_output->damage_ring.current)) {
+		return;
+	}
+	output->shell_dirty = 0;
+	widgets_refresh(server, 0);
 	/* The glass reads this frame's pixels back. Repaint the whole scene first,
 	 * so the buffer never still holds glass from an earlier frame. */
 	wlr_damage_ring_add_whole(&scene_output->damage_ring);
@@ -1592,10 +1611,6 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
 			server->clip_view = NULL;
 		}
-		if ((server->frames % 90) == 0) {
-			probe_net(server);
-		}
-		widgets_refresh(server, 0);
 		if (access("/run/dev-desktop/open-launchpad", F_OK) == 0) {
 			unlink("/run/dev-desktop/open-launchpad");
 			open_launchpad(server);
@@ -1722,7 +1737,14 @@ static void output_frame(struct wl_listener *listener, void *data) {
 		wlr_output_state_set_damage(&state, &full);
 		pixman_region32_fini(&full);
 	}
-	wlr_output_commit_state(output->wlr_output, &state);
+	if (wlr_output_commit_state(output->wlr_output, &state)) {
+		/* build_state does not consume damage; mirror scene_output_commit's
+		 * successful-commit bookkeeping or every frame remains damaged. */
+		wlr_damage_ring_rotate(&scene_output->damage_ring);
+	} else {
+		output->shell_dirty = 1;
+		wlr_output_schedule_frame(output->wlr_output);
+	}
 	wlr_output_state_finish(&state);
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -2193,6 +2215,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	struct output *output = calloc(1, sizeof(*output));
 	output->wlr_output = wlr_output;
 	output->server = server;
+	output->shell_dirty = 1;
 	output->frame.notify = output_frame;
 	wl_signal_add(&wlr_output->events.frame, &output->frame);
 	output->request_state.notify = output_request_state;
@@ -2328,6 +2351,7 @@ static int chrome_contains(struct server *server, double x, double y) {
 static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 	struct keyboard *keyboard = wl_container_of(listener, keyboard, key);
 	struct server *server = keyboard->server;
+	shell_redraw(server);
 	struct wlr_keyboard_key_event *event = data;
 	uint32_t keycode = event->keycode + 8;
 	const xkb_keysym_t *syms;
@@ -2890,6 +2914,7 @@ static void process_cursor_move(struct server *server) {
 }
 
 static void process_cursor_motion(struct server *server, uint32_t time) {
+	shell_redraw(server);
 	server->hover_app = dock_app_at(server, server->cursor->x, server->cursor->y);
 	if (server->cursor_mode == CURSOR_MOVE) {
 		process_cursor_move(server);
@@ -4195,6 +4220,7 @@ static void release_chrome(struct server *server) {
 
 static void server_cursor_button(struct wl_listener *listener, void *data) {
 	struct server *server = wl_container_of(listener, server, cursor_button);
+	shell_redraw(server);
 	struct wlr_pointer_button_event *event = data;
 	if (chrome_contains(server, server->cursor->x, server->cursor->y) ||
 			server->press_app >= 0 || server->press_brand || server->press_contrast) {
@@ -4272,12 +4298,28 @@ static void view_map(struct wl_listener *listener, void *data) {
 	focus_view(view, view->xdg_toplevel->base->surface);
 }
 
+static void view_forget_input(struct view *view) {
+	struct server *server = view->server;
+	if (server->press_view == view) {
+		server->press_view = NULL;
+		server->press_light = 0;
+	}
+	if (server->grabbed == view) {
+		reset_cursor_mode(server);
+	}
+	shell_redraw(server);
+}
+
+static void view_set_title(struct wl_listener *listener, void *data) {
+	(void)data;
+	struct view *view = wl_container_of(listener, view, set_title);
+	shell_redraw(view->server);
+}
+
 static void view_unmap(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct view *view = wl_container_of(listener, view, unmap);
-	if (view == view->server->grabbed) {
-		reset_cursor_mode(view->server);
-	}
+	view_forget_input(view);
 	if (!view->is_xwayland || view->mapped) {
 		wl_list_remove(&view->link);
 	}
@@ -4287,6 +4329,8 @@ static void view_unmap(struct wl_listener *listener, void *data) {
 static void view_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct view *view = wl_container_of(listener, view, destroy);
+	view_forget_input(view);
+	wl_list_remove(&view->set_title.link);
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->destroy.link);
@@ -4474,15 +4518,13 @@ static void xwayland_associate(struct wl_listener *listener, void *data) {
 static void xwayland_dissociate(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct view *view = wl_container_of(listener, view, dissociate);
+	view_forget_input(view);
 	if (!view->bound) {
 		return;
 	}
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
 	view->bound = 0;
-	if (view == view->server->grabbed) {
-		reset_cursor_mode(view->server);
-	}
 	if (view->mapped) {
 		wl_list_remove(&view->link);
 		view->mapped = 0;
@@ -4498,9 +4540,7 @@ static void xwayland_dissociate(struct wl_listener *listener, void *data) {
 static void xwayland_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct view *view = wl_container_of(listener, view, destroy);
-	if (view == view->server->grabbed) {
-		reset_cursor_mode(view->server);
-	}
+	view_forget_input(view);
 	if (view->mapped) {
 		wl_list_remove(&view->link);
 		view->mapped = 0;
@@ -4509,6 +4549,7 @@ static void xwayland_destroy(struct wl_listener *listener, void *data) {
 		wl_list_remove(&view->map.link);
 		wl_list_remove(&view->unmap.link);
 	}
+	wl_list_remove(&view->set_title.link);
 	wl_list_remove(&view->associate.link);
 	wl_list_remove(&view->dissociate.link);
 	wl_list_remove(&view->request_configure.link);
@@ -4527,6 +4568,8 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
 	view->server = server;
 	view->is_xwayland = 1;
 	view->xwayland_surface = surface;
+	view->set_title.notify = view_set_title;
+	wl_signal_add(&surface->events.set_title, &view->set_title);
 	surface->data = view;
 	view->associate.notify = xwayland_associate;
 	wl_signal_add(&surface->events.associate, &view->associate);
@@ -4560,6 +4603,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	struct view *view = calloc(1, sizeof(*view));
 	view->server = server;
 	view->xdg_toplevel = xdg_surface->toplevel;
+	view->set_title.notify = view_set_title;
+	wl_signal_add(&xdg_surface->toplevel->events.set_title, &view->set_title);
 	view->scene_tree = wlr_scene_xdg_surface_create(&server->scene->tree, xdg_surface);
 	view->scene_tree->node.data = view;
 	xdg_surface->data = view->scene_tree;
@@ -4583,10 +4628,27 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 static int tick_frame(void *data) {
 	struct server *server = data;
-	struct output *output;
-	wl_list_for_each(output, &server->outputs, link) {
-		wlr_output_schedule_frame(output->wlr_output);
+	time_t now = time(NULL);
+	/* These values change on wall-clock time, never on rendered-frame count.
+	 * Poll the legacy file control at 5 Hz without repainting an idle screen. */
+	if (now / 10 != server->shell_stamp / 10) {
+		int kind = server->net_kind, level = server->net_level;
+		probe_net(server);
+		widgets_refresh(server, 0);
+		if (now / 60 != server->shell_stamp / 60 ||
+				kind != server->net_kind || level != server->net_level) {
+			shell_redraw(server);
+		}
 	}
+	server->shell_stamp = now;
+	if (access("/run/dev-desktop/open-launchpad", F_OK) == 0 ||
+			(server->shot_path[0] != '\0' && !server->shot_written) ||
+			(server->demo_menu && !server->demo_menu_done) ||
+			(server->demo_pad && !server->demo_pad_done) ||
+			(server->nag_demo_dismiss && server->nag)) {
+		shell_redraw(server);
+	}
+	write_status(server);
 	wl_event_source_timer_update(server->tick_timer, 200);
 	return 0;
 }
@@ -4668,6 +4730,7 @@ static int on_control(int fd, uint32_t mask, void *data) {
 				wlr_log(WLR_INFO, "launchpad start: no entry named %s", name);
 			}
 		}
+		shell_redraw(server);
 		write_status(server);
 	}
 	close(client);
@@ -4738,15 +4801,19 @@ static void new_decoration(struct wl_listener *listener, void *data) {
 }
 
 static void usage(const char *argv0) {
-	fprintf(stderr, "Usage: %s [-s startup-command]\n", argv0);
+	fprintf(stderr, "Usage: %s [-n] [-s startup-command]\n", argv0);
 }
 
 int main(int argc, char *argv[]) {
 	wlr_log_init(getenv("DEV_DESK_DEBUG") != NULL ? WLR_DEBUG : WLR_INFO, NULL);
 	char *startup_cmd = NULL;
+	int native_startup = 0;
 	int opt;
-	while ((opt = getopt(argc, argv, "s:h")) != -1) {
+	while ((opt = getopt(argc, argv, "s:nh")) != -1) {
 		switch (opt) {
+		case 'n':
+			native_startup = 1;
+			break;
 		case 's':
 			startup_cmd = optarg;
 			break;
@@ -4937,7 +5004,11 @@ int main(int argc, char *argv[]) {
 
 	if (startup_cmd != NULL) {
 		snprintf(server.startup_cmd, sizeof server.startup_cmd, "%s", startup_cmd);
-		if (server.xwayland == NULL) {
+		if (native_startup) {
+			/* Native Wayland clients can connect now. Windows launchers use
+			 * olympium-xdisplay when Xwayland finishes starting later. */
+			launch_startup(&server, "wayland ready");
+		} else if (server.xwayland == NULL) {
 			launch_startup(&server, "no xwayland");
 		} else {
 			struct wl_event_loop *startup_loop = wl_display_get_event_loop(server.wl_display);
