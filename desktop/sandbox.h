@@ -38,4 +38,29 @@ int dev_confine_self(const char *read_path, const char *write_dir);
 /* For the parent in DEV_CONFINE_NOBODY mode: hand write_dir to that user. */
 void dev_confine_prepare_dir(const char *write_dir);
 
+/*
+ * Runs one program confined and waits for it. It may read read_path and write
+ * under write_dir, as dev_confine_self says. Returns its exit status, 125
+ * when the confinement could not be set up, and -1 when it could not be
+ * started at all.
+ */
+int dev_confined_run(char *const argv[], const char *read_path, const char *write_dir);
+
+/*
+ * Runs "producer | consumer", each confined on its own: the producer may read
+ * read_path and write nowhere, and the consumer runs in write_dir and may
+ * write only there. Returns 0 when both exited 0, 125 when either could not
+ * be confined, and otherwise 1.
+ */
+int dev_confined_pipe(char *const producer[], const char *read_path,
+	char *const consumer[], const char *write_dir);
+
+/*
+ * After a package has been unpacked into root: clears set-user-ID and
+ * set-group-ID bits, removes devices, pipes and sockets, and gives everything
+ * to the user who is installing. Links are left as they are. Nothing outside
+ * root is touched, and no link is followed.
+ */
+void dev_tree_settle(const char *root);
+
 #endif

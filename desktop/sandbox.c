@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <fts.h>
 #include <grp.h>
 #include <linux/landlock.h>
 #include <stddef.h>
@@ -16,6 +17,7 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #ifndef LANDLOCK_ACCESS_FS_REFER
@@ -194,4 +196,118 @@ int dev_confine_self(const char *read_path, const char *write_dir) {
 	 * what that user can do, which is what any archive tool gets. Root is
 	 * never left unconfined: that case is DEV_CONFINE_NOBODY above. */
 	return DEV_CONFINE_NONE;
+}
+
+static void quiet_child(int in_fd, int out_fd) {
+	int nul = open("/dev/null", O_RDWR);
+	if (in_fd >= 0) {
+		dup2(in_fd, 0);
+	} else if (nul >= 0) {
+		dup2(nul, 0);
+	}
+	if (out_fd >= 0) {
+		dup2(out_fd, 1);
+	} else if (nul >= 0) {
+		dup2(nul, 1);
+	}
+	int closed = -1;
+#ifdef SYS_close_range
+	closed = (int)syscall(SYS_close_range, 3, ~0U, 0);
+#endif
+	if (closed != 0) {
+		for (int fd = 3; fd < 4096; fd++) {
+			close(fd);
+		}
+	}
+}
+
+static int exit_status(pid_t pid) {
+	int st = 0;
+	if (pid <= 0 || waitpid(pid, &st, 0) < 0) {
+		return -1;
+	}
+	return WIFEXITED(st) ? WEXITSTATUS(st) : 128 + (WIFSIGNALED(st) ? WTERMSIG(st) : 0);
+}
+
+int dev_confined_run(char *const argv[], const char *read_path, const char *write_dir) {
+	dev_confine_prepare_dir(write_dir);
+	pid_t pid = fork();
+	if (pid < 0) {
+		return -1;
+	}
+	if (pid == 0) {
+		quiet_child(-1, -1);
+		if (dev_confine_self(read_path, write_dir) < 0) {
+			_exit(125);
+		}
+		execv(argv[0], argv);
+		_exit(127);
+	}
+	return exit_status(pid);
+}
+
+int dev_confined_pipe(char *const producer[], const char *read_path,
+		char *const consumer[], const char *write_dir) {
+	int fds[2];
+	if (pipe2(fds, O_CLOEXEC) != 0) {
+		return -1;
+	}
+	dev_confine_prepare_dir(write_dir);
+	pid_t first = fork();
+	if (first == 0) {
+		quiet_child(-1, fds[1]);
+		if (dev_confine_self(read_path, NULL) < 0) {
+			_exit(125);
+		}
+		execv(producer[0], producer);
+		_exit(127);
+	}
+	pid_t second = fork();
+	if (second == 0) {
+		quiet_child(fds[0], -1);
+		if (write_dir != NULL && chdir(write_dir) != 0) {
+			_exit(124);
+		}
+		if (dev_confine_self(NULL, write_dir) < 0) {
+			_exit(125);
+		}
+		execv(consumer[0], consumer);
+		_exit(127);
+	}
+	close(fds[0]);
+	close(fds[1]);
+	int a = exit_status(first);
+	int b = exit_status(second);
+	if (a == 125 || b == 125) {
+		return 125;
+	}
+	return a == 0 && b == 0 ? 0 : 1;
+}
+
+void dev_tree_settle(const char *root) {
+	char *paths[] = {(char *)root, NULL};
+	FTS *walk = fts_open(paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, NULL);
+	if (walk == NULL) {
+		return;
+	}
+	uid_t uid = getuid();
+	gid_t gid = getgid();
+	FTSENT *ent;
+	while ((ent = fts_read(walk)) != NULL) {
+		if (ent->fts_info == FTS_DP) {
+			continue;
+		}
+		if (geteuid() == 0 && lchown(ent->fts_accpath, uid, gid) != 0) {
+			/* Left as it arrived. */
+		}
+		if (ent->fts_info == FTS_F) {
+			/* The permission bits only: no set-user-ID, set-group-ID, sticky. */
+			chmod(ent->fts_accpath, (ent->fts_statp->st_mode & 0777) | 0600);
+		} else if (ent->fts_info == FTS_D) {
+			chmod(ent->fts_accpath, (ent->fts_statp->st_mode & 0777) | 0700);
+		} else if (ent->fts_info == FTS_DEFAULT) {
+			unlink(ent->fts_accpath);
+		}
+	}
+	fts_close(walk);
 }

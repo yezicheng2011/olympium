@@ -48,9 +48,10 @@ Host checks that do not need an ISO:
 make -C desktop test
 make -C desktop test-wine
 make -C desktop test-mac
+make -C desktop test-packages
 ```
 
-The second one needs Wine, Xwayland, and mingw on the host. The third needs 7-Zip, cpio, and python3. Each exits 77 without them. Building `dev-install` needs the `liblzma` and `zlib` headers.
+The second one needs Wine, Xwayland, and mingw on the host. The third needs 7-Zip, cpio, and python3. The fourth needs dpkg-deb, and the rpm tools for its `.rpm` part. Each exits 77 without what it needs. Building `dev-install` needs the `liblzma` and `zlib` headers.
 
 `desktop/protocol/xdg-shell-protocol.h` is generated from wayland-protocols (MIT). Regenerate it with `wayland-scanner server-header` if you need to.
 
@@ -105,7 +106,7 @@ Double-clicking a file in Files opens Install. The file is not run. A Linux prog
 
 A Mach-O file on its own can be kept and is not started. The pinned runtime refuses macOS software on this Linux builder (`apple-platform-on-non-apple-hardware`), and that refusal is left as it is. A `.dmg`, `.pkg`, or `.app` is handled by the desktop, as the section above says. No macOS guest is downloaded. An iOS package is refused. Nothing is downloaded.
 
-A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, and `.msi` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
+A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. The extraction, like that of an `.rpm`, runs in a confined child that can write only under the folder it unpacks into, and what comes out loses its set-user-ID bits; `docs/desktop-apps.md` says what was tried against it. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, and `.msi` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
 
 ## What this environment actually booted
 

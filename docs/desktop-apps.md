@@ -45,7 +45,19 @@ The rows above are stubs, and `desktop/test-install.sh` still requires them to s
 | Mac `.dmg`, `.pkg`, and `.app`, written by `desktop/mac-fixtures.py`. | `mac`. On the build machine, consent unpacked the application in a confined child and put it in Applications with a Launchpad entry and its icon. No installer script ran. No Mac program ran: Darling is not installed there. `docs/mac-apps.md` has the list. |
 | `.apk`, `.hap`, `.msi`, Flatpak, snap, AppImage. | Not installed. Not claimed. |
 
-A native Linux program runs as the user. This does not add a sandbox, and it does not check an Apple or Microsoft signature. The checksum is the SHA-256 of the file at import, checked again at launch. The runtime's refusal to start macOS or iOS software is not weakened.
+A native Linux program runs as the user. Running it is not sandboxed, and no Apple or Microsoft signature is checked.
+
+Unpacking is another matter. A package is whatever its author made it, and `dpkg-deb`, `tar`, `rpm2cpio`, and `cpio` run as the session's user, which on the live image is root. They now run in a confined child: with Landlock they can read the package and write only under the folder they unpack into, and on a kernel without Landlock they run as the user `nobody`. Afterwards set-user-ID and set-group-ID bits are cleared, devices and pipes are removed, and the files are given to the user who installed them. `docs/mac-apps.md` describes the confinement; it is the same code.
+
+`make -C desktop test-packages` on the build machine, with a stand-in for the `olympium` command that answers `classify` for these two formats:
+
+- The sample `.deb` installed, and its program was byte for byte the one in the package. The sample `.rpm` installed and its program ran.
+- A `.deb` with a set-user-ID and set-group-ID program and a sticky world-writable folder installed with those bits cleared.
+- A `.deb` with a device node in it was not installed, and no device was left behind.
+- A `.deb` with a link pointing outside, a file to be written through it, a path of `../`, and an absolute path was not installed, and nothing was written outside.
+- With the confinement forced to `nobody`, the sample `.deb` installed the same and ended up owned by root.
+
+Before this, the same packages were unpacked by root with no limit, and a set-user-ID program in a package stayed set-user-ID. The checksum is the SHA-256 of the file at import, checked again at launch. The runtime's refusal to start macOS or iOS software is not weakened.
 
 ## Where an imported program shows up
 

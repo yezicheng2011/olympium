@@ -12,7 +12,7 @@ GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 # built where Xwayland can be: it needs xcb and xcb-xfixes.
 CLIP_HELPER := $(shell pkg-config --exists xcb xcb-xfixes && echo dev-clip-helper)
 
-.PHONY: all clip-helper test test-wine test-mac clean
+.PHONY: all clip-helper test test-wine test-mac test-packages clean
 
 all: $(CLIP_HELPER) dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
 
@@ -82,6 +82,10 @@ test-wine:
 # Needs 7-Zip, cpio, and python3. It exits 77 without the first two.
 test-mac:
 	./test-mac.sh
+
+# Needs dpkg-deb and python3, and rpm, rpm2cpio and rpmbuild for the .rpm part.
+test-packages:
+	./test-packages.sh
 
 clean:
 	rm -f dev-clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash-gen splash.png

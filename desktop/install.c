@@ -976,11 +976,22 @@ static int install_deb(const char *deb, const char *id, struct rec *rec) {
 	char *rm_argv[] = {"/bin/rm", "-rf", dest, NULL};
 	run_wait(rm_argv);
 	mkdir_p(dest);
+	/* The package is whatever its author made it. dpkg-deb, and the tar it
+	 * starts, unpack it confined: they can read the package and write only
+	 * under dest. What comes out then loses its set-ID bits, and any device
+	 * or pipe in it is removed. */
 	char *x_argv[] = {"/usr/bin/dpkg-deb", "-x", (char *)deb, dest, NULL};
-	if (run_wait(x_argv) != 0) {
-		fprintf(stderr, "dev-install: could not extract the package\n");
+	int unpacked = dev_confined_run(x_argv, deb, dest);
+	if (unpacked != 0) {
+		fprintf(stderr, unpacked == 125
+			? "dev-install: the unpacker could not be confined; the package was not extracted\n"
+			: "dev-install: could not extract the package\n");
+		char *undo[] = {"/bin/rm", "-rf", dest, NULL};
+		run_wait(undo);
 		return 1;
 	}
+	dev_tree_settle(dest);
+	printf("confinement=%s\n", dev_confine_name(dev_confine_probe()));
 	printf("extracted=%s\n", dest);
 	char apps_src[512];
 	snprintf(apps_src, sizeof apps_src, "%s/usr/share/applications", dest);
@@ -1080,37 +1091,22 @@ static int install_rpm(const char *file, const char *id, struct rec *rec) {
 	char *rm[] = {"/bin/rm", "-rf", dest, NULL};
 	run_wait(rm);
 	mkdir_p(dest);
-	int pipes[2];
-	if (pipe(pipes) != 0) {
+	/* rpm2cpio reads the package and cpio writes the files, each confined:
+	 * the first can write nowhere, the second only under dest. */
+	char *producer[] = {"/usr/bin/rpm2cpio", (char *)file, NULL};
+	char *consumer[] = {"/usr/bin/cpio", "-idm", "--quiet", "--no-absolute-filenames",
+		"--no-preserve-owner", NULL};
+	int unpacked = dev_confined_pipe(producer, file, consumer, dest);
+	if (unpacked != 0) {
+		fprintf(stderr, unpacked == 125
+			? "dev-install: the unpacker could not be confined; the package was not extracted\n"
+			: "dev-install: rpm2cpio extract failed\n");
+		char *undo[] = {"/bin/rm", "-rf", dest, NULL};
+		run_wait(undo);
 		return 1;
 	}
-	pid_t unpack = fork();
-	if (unpack == 0) {
-		dup2(pipes[1], 1);
-		close(pipes[0]);
-		close(pipes[1]);
-		execl("/usr/bin/rpm2cpio", "rpm2cpio", file, (char *)NULL);
-		_exit(127);
-	}
-	pid_t extract = fork();
-	if (extract == 0) {
-		dup2(pipes[0], 0);
-		close(pipes[0]);
-		close(pipes[1]);
-		execl("/usr/bin/cpio", "cpio", "-idm", "--quiet", "-D", dest, (char *)NULL);
-		_exit(127);
-	}
-	close(pipes[0]);
-	close(pipes[1]);
-	int st = 0;
-	waitpid(unpack, &st, 0);
-	int unpack_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
-	waitpid(extract, &st, 0);
-	int extract_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
-	if (!unpack_ok || !extract_ok) {
-		fprintf(stderr, "dev-install: rpm2cpio extract failed\n");
-		return 1;
-	}
+	dev_tree_settle(dest);
+	printf("confinement=%s\n", dev_confine_name(dev_confine_probe()));
 	char bin[640];
 	snprintf(bin, sizeof bin, "%s/usr/bin", dest);
 	DIR *dir = opendir(bin);
