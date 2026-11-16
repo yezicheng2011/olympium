@@ -27,6 +27,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/statvfs.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
@@ -145,6 +146,13 @@ struct server {
 	struct wlr_scene *scene;
 	struct wlr_scene_output_layout *scene_layout;
 	struct wlr_scene_buffer *wallpaper;
+	struct wlr_scene_buffer *widgets;
+	int chrome_inactive;
+	struct view *clip_view;
+	uint8_t *desk_data;
+	int widgets_on;
+	int widgets_contrast;
+	time_t widgets_stamp;
 	uint8_t *paper_data;
 	int paper_w;
 	int paper_h;
@@ -260,6 +268,8 @@ static void nag_eval(struct server *server);
 static int nag_close_hit(const struct server *server, double x, double y);
 
 static void focus_view(struct view *view, struct wlr_surface *surface);
+static void widgets_refresh(struct server *server, int force);
+static void widgets_store(int on);
 
 static void load_branding(struct server *server) {
 	snprintf(server->title, sizeof server->title, "Olympium");
@@ -1138,14 +1148,21 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 			{0.16, 0.78, 0.25}
 		};
 		for (int i = 0; i < 3; i++) {
-			cairo_set_source_rgba(cr, lights[i][0], lights[i][1], lights[i][2], 1);
+			if (server->chrome_inactive) {
+				/* A window that is not in front has grey controls and a
+				 * paler title, so the front window is the one that reads. */
+				cairo_set_source_rgba(cr, 0.80, 0.80, 0.83, 1);
+			} else {
+				cairo_set_source_rgba(cr, lights[i][0], lights[i][1], lights[i][2], 1);
+			}
 			cairo_arc(cr, 16 + i * 18, box->height / 2.0, 6.0, 0, 6.2832);
 			cairo_fill(cr);
 		}
 		const char *title = server->frame_title[0] != '\0' ? server->frame_title : "Window";
 		int title_w = paint_text(cr, "Ubuntu Bold 13", title, 0, -60, 0, 0, 0);
+		double ink = server->chrome_inactive ? 0.52 : 0.14;
 		paint_text(cr, "Ubuntu Bold 13", title, (box->width - title_w) / 2.0, 8,
-			0.14, 0.14, 0.16);
+			ink, ink, ink + 0.02);
 		return;
 	}
 	paint_text(cr, "Ubuntu Bold 18", server->title, 28, 24, 0.10, 0.10, 0.12);
@@ -1221,12 +1238,65 @@ static struct wlr_texture *make_chrome(struct server *server, int x, int y, int 
 	return texture;
 }
 
+static int view_title_box(struct view *view, struct wlr_box *box);
+
+/* The whole frame of a window: title bar and content. */
+static int view_frame_box(struct view *view, struct wlr_box *box) {
+	if (!view_title_box(view, box)) {
+		return 0;
+	}
+	int content_h = 0;
+	if (view->xdg_toplevel != NULL) {
+		struct wlr_box geo;
+		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo);
+		content_h = geo.height > 0 ? geo.height
+			: view->xdg_toplevel->base->surface->current.height;
+	} else if (view->is_xwayland && view->xwayland_surface != NULL) {
+		content_h = view->xwayland_surface->height;
+	}
+	box->height += content_h;
+	return 1;
+}
+
 static void render_texture_at(struct server *server, struct wlr_output *output,
 		struct wlr_texture *texture, int x, int y) {
 	if (texture == NULL) {
 		return;
 	}
-	wlr_render_texture(server->renderer, texture, output->transform_matrix, x, y, 1.0f);
+	if (server->clip_view == NULL) {
+		wlr_render_texture(server->renderer, texture, output->transform_matrix, x, y, 1.0f);
+		return;
+	}
+	/* Shadows and title bars are painted after the windows themselves. One
+	 * that belongs to a window further back must not land on a window in
+	 * front of it, so the frames of the windows above are cut out first. */
+	pixman_region32_t visible;
+	pixman_region32_init_rect(&visible, x, y, texture->width, texture->height);
+	struct view *above;
+	wl_list_for_each(above, &server->views, link) {
+		if (above == server->clip_view) {
+			break;
+		}
+		struct wlr_box frame;
+		if (view_frame_box(above, &frame)) {
+			pixman_region32_t cut;
+			pixman_region32_init_rect(&cut, frame.x, frame.y, frame.width, frame.height);
+			pixman_region32_subtract(&visible, &visible, &cut);
+			pixman_region32_fini(&cut);
+		}
+	}
+	int count = 0;
+	pixman_box32_t *rects = pixman_region32_rectangles(&visible, &count);
+	for (int i = 0; i < count; i++) {
+		struct wlr_box part = {
+			.x = rects[i].x1, .y = rects[i].y1,
+			.width = rects[i].x2 - rects[i].x1, .height = rects[i].y2 - rects[i].y1,
+		};
+		wlr_renderer_scissor(server->renderer, &part);
+		wlr_render_texture(server->renderer, texture, output->transform_matrix, x, y, 1.0f);
+	}
+	wlr_renderer_scissor(server->renderer, NULL);
+	pixman_region32_fini(&visible);
 }
 
 static void write_shot(struct server *server, int width, int height) {
@@ -1361,7 +1431,8 @@ static void mask_corner(struct server *server, struct wlr_output *output,
 	cairo_t *cr = cairo_create(surface);
 	if (server->paper_data != NULL) {
 		/* Repaint the wallpaper that the square client corner covered. */
-		cairo_surface_t *paper = cairo_image_surface_create_for_data(server->paper_data,
+		cairo_surface_t *paper = cairo_image_surface_create_for_data(
+			server->desk_data != NULL ? server->desk_data : server->paper_data,
 			CAIRO_FORMAT_RGB24, server->paper_w, server->paper_h, server->paper_stride);
 		cairo_set_source_surface(cr, paper, -x, -y);
 		cairo_paint(cr);
@@ -1480,6 +1551,7 @@ static void output_frame(struct wl_listener *listener, void *data) {
 				view->shadow_w = title.width;
 				view->shadow_h = frame_h;
 			}
+			server->clip_view = view;
 			render_texture_at(server, output->wlr_output, view->shadow, title.x - 36, title.y - 36);
 			char saved[128];
 			snprintf(saved, sizeof saved, "%s", server->frame_title);
@@ -1487,18 +1559,22 @@ static void output_frame(struct wl_listener *listener, void *data) {
 				snprintf(server->frame_title, sizeof server->frame_title, "%s",
 					view_name(view));
 			}
+			server->chrome_inactive = view != front;
 			struct wlr_texture *bar = make_chrome(server, title.x, title.y,
 				title.width, title.height, -12, 3);
+			server->chrome_inactive = 0;
 			render_texture_at(server, output->wlr_output, bar, title.x, title.y);
 			wlr_texture_destroy(bar);
 			mask_corner(server, output->wlr_output, title.x, title.y + frame_h - 14, 14, 2);
 			mask_corner(server, output->wlr_output, title.x + title.width - 14,
 				title.y + frame_h - 14, 14, 3);
 			snprintf(server->frame_title, sizeof server->frame_title, "%s", saved);
+			server->clip_view = NULL;
 		}
 		if ((server->frames % 90) == 0) {
 			probe_net(server);
 		}
+		widgets_refresh(server, 0);
 		if (access("/run/dev-desktop/open-launchpad", F_OK) == 0) {
 			unlink("/run/dev-desktop/open-launchpad");
 			open_launchpad(server);
@@ -1794,6 +1870,285 @@ static void ensure_wallpaper(struct server *server, int width, int height) {
 	server->wallpaper = wlr_scene_buffer_create(&server->scene->tree, &paper->base);
 	wlr_scene_node_lower_to_bottom(&server->wallpaper->node);
 	wlr_buffer_drop(&paper->base);
+}
+
+/* Desktop widgets: a clock, this month's calendar, and memory, disk, and
+ * battery. They sit on the wallpaper, under every window, and are glass over
+ * the wallpaper behind them. They are drawn here, not by a client, so they
+ * cost nothing while nothing changes: the layer is rebuilt every ten seconds
+ * and when the setting changes. "widgets" in the desk directory holding
+ * "off" turns them off, as does View, Hide Widgets. */
+#define WIDGET_W 232
+#define WIDGET_GAP 16
+
+static void widgets_flag_path(char *out, size_t n) {
+	const char *desk = getenv("OLYMPIUM_DESK_HOME");
+	if (desk != NULL && desk[0] != '\0') {
+		snprintf(out, n, "%s/widgets", desk);
+		return;
+	}
+	const char *home = getenv("HOME");
+	snprintf(out, n, "%s/.local/share/olympium-desk/widgets",
+		home != NULL && home[0] != '\0' ? home : "/tmp");
+}
+
+static int widgets_enabled(void) {
+	char path[512];
+	char word[16] = "";
+	widgets_flag_path(path, sizeof path);
+	FILE *f = fopen(path, "r");
+	if (f == NULL) {
+		return 1;
+	}
+	if (fgets(word, sizeof word, f) == NULL) {
+		word[0] = '\0';
+	}
+	fclose(f);
+	return strncmp(word, "off", 3) != 0;
+}
+
+static void widgets_store(int on) {
+	char path[512];
+	widgets_flag_path(path, sizeof path);
+	FILE *f = fopen(path, "w");
+	if (f != NULL) {
+		fputs(on ? "on\n" : "off\n", f);
+		fclose(f);
+	}
+}
+
+static void widget_bar(cairo_t *cr, double x, double y, double w, double part,
+		double r, double g, double b) {
+	if (part < 0) {
+		part = 0;
+	}
+	if (part > 1) {
+		part = 1;
+	}
+	rrect(cr, x, y, w, 6, 3);
+	cairo_set_source_rgba(cr, 0.10, 0.10, 0.14, 0.14);
+	cairo_fill(cr);
+	if (part > 0.01) {
+		rrect(cr, x, y, w * part < 6 ? 6 : w * part, 6, 3);
+		cairo_set_source_rgba(cr, r, g, b, 0.95);
+		cairo_fill(cr);
+	}
+}
+
+static void widget_clock(cairo_t *cr, int w, int h, const struct tm *tm) {
+	(void)h;
+	char text[64];
+	strftime(text, sizeof text, "%A", tm);
+	paint_text(cr, "Ubuntu Bold 11", text, 18, 14, 0.86, 0.22, 0.20);
+	int hour = tm->tm_hour % 12;
+	snprintf(text, sizeof text, "%d:%02d", hour == 0 ? 12 : hour, tm->tm_min);
+	int tw = paint_text(cr, "Ubuntu Light 40", text, 16, 26, 0.10, 0.10, 0.13);
+	paint_text(cr, "Ubuntu Medium 13", tm->tm_hour < 12 ? "AM" : "PM", 16 + tw + 6, 58,
+		0.30, 0.31, 0.36);
+	strftime(text, sizeof text, "%B %-d, %Y", tm);
+	paint_text(cr, "Ubuntu 12", text, 18, 86, 0.26, 0.27, 0.32);
+	(void)w;
+}
+
+static void widget_calendar(cairo_t *cr, int w, int h, const struct tm *tm) {
+	(void)h;
+	char text[32];
+	strftime(text, sizeof text, "%B", tm);
+	paint_text(cr, "Ubuntu Bold 11", text, 18, 12, 0.86, 0.22, 0.20);
+	const char *days[] = {"S", "M", "T", "W", "T", "F", "S"};
+	double cell = (w - 28) / 7.0;
+	for (int i = 0; i < 7; i++) {
+		int tw = paint_text(cr, "Ubuntu Medium 9", days[i], 0, -40, 0, 0, 0);
+		paint_text(cr, "Ubuntu Medium 9", days[i], 14 + i * cell + (cell - tw) / 2, 34,
+			0.42, 0.43, 0.48);
+	}
+	struct tm first = *tm;
+	first.tm_mday = 1;
+	mktime(&first);
+	static const int lengths[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	int year = tm->tm_year + 1900;
+	int count = lengths[tm->tm_mon];
+	if (tm->tm_mon == 1 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) {
+		count = 29;
+	}
+	for (int day = 1; day <= count; day++) {
+		int slot = first.tm_wday + day - 1;
+		double cx = 14 + (slot % 7) * cell + cell / 2;
+		double cy = 62 + (slot / 7) * 21;
+		snprintf(text, sizeof text, "%d", day);
+		int today = day == tm->tm_mday;
+		if (today) {
+			cairo_arc(cr, cx, cy, 10, 0, 6.2832);
+			cairo_set_source_rgba(cr, 0.90, 0.22, 0.20, 1);
+			cairo_fill(cr);
+		}
+		const char *font = today ? "Ubuntu Bold 10" : "Ubuntu 10";
+		int tw = paint_text(cr, font, text, 0, -40, 0, 0, 0);
+		double shade = today ? 1.0 : 0.14;
+		paint_text(cr, font, text, cx - tw / 2.0, cy - 8, shade, shade, today ? 1.0 : 0.17);
+	}
+}
+
+static void widget_system(cairo_t *cr, int w, int h) {
+	(void)h;
+	paint_text(cr, "Ubuntu Bold 11", "This Computer", 18, 12, 0.86, 0.22, 0.20);
+	long total = 0;
+	long avail = 0;
+	FILE *f = fopen("/proc/meminfo", "r");
+	if (f != NULL) {
+		char line[128];
+		while (fgets(line, sizeof line, f) != NULL) {
+			sscanf(line, "MemTotal: %ld kB", &total);
+			sscanf(line, "MemAvailable: %ld kB", &avail);
+		}
+		fclose(f);
+	}
+	char text[96];
+	double y = 36;
+	if (total > 0) {
+		double used = (double)(total - avail) / (double)total;
+		snprintf(text, sizeof text, "Memory   %.1f of %.1f GB", (total - avail) / 1048576.0,
+			total / 1048576.0);
+		paint_text(cr, "Ubuntu 11", text, 18, y, 0.14, 0.14, 0.17);
+		widget_bar(cr, 18, y + 20, w - 36, used, 0.20, 0.52, 0.96);
+		y += 38;
+	}
+	struct statvfs vfs;
+	if (statvfs("/", &vfs) == 0 && vfs.f_blocks > 0) {
+		double size = (double)vfs.f_blocks * (double)vfs.f_frsize;
+		double free_bytes = (double)vfs.f_bavail * (double)vfs.f_frsize;
+		snprintf(text, sizeof text, "Disk   %.1f GB free", free_bytes / 1073741824.0);
+		paint_text(cr, "Ubuntu 11", text, 18, y, 0.14, 0.14, 0.17);
+		widget_bar(cr, 18, y + 20, w - 36, 1.0 - free_bytes / size, 0.30, 0.72, 0.40);
+		y += 38;
+	}
+	int battery = -1;
+	for (int i = 0; i < 2 && battery < 0; i++) {
+		char path[64];
+		snprintf(path, sizeof path, "/sys/class/power_supply/BAT%d/capacity", i);
+		f = fopen(path, "r");
+		if (f != NULL) {
+			if (fscanf(f, "%d", &battery) != 1) {
+				battery = -1;
+			}
+			fclose(f);
+		}
+	}
+	if (battery >= 0) {
+		snprintf(text, sizeof text, "Battery   %d%%", battery);
+		paint_text(cr, "Ubuntu 11", text, 18, y, 0.14, 0.14, 0.17);
+		widget_bar(cr, 18, y + 20, w - 36, battery / 100.0, 0.96, 0.70, 0.18);
+	} else {
+		paint_text(cr, "Ubuntu 11", "Power   no battery", 18, y, 0.14, 0.14, 0.17);
+	}
+}
+
+static void widgets_refresh(struct server *server, int force) {
+	if (server->paper_data == NULL || server->paper_w <= 0) {
+		return;
+	}
+	time_t now = time(NULL);
+	if (!force && server->widgets != NULL && now / 10 == server->widgets_stamp / 10 &&
+			server->widgets_contrast == server->contrast) {
+		return;
+	}
+	server->widgets_stamp = now;
+	server->widgets_contrast = server->contrast;
+	int width = server->paper_w;
+	int height = server->paper_h;
+	int stride = server->paper_stride;
+	if (server->desk_data == NULL) {
+		server->desk_data = malloc((size_t)stride * (size_t)height);
+		if (server->desk_data == NULL) {
+			return;
+		}
+	}
+	memcpy(server->desk_data, server->paper_data, (size_t)stride * (size_t)height);
+	if (!server->widgets_on) {
+		if (server->widgets != NULL) {
+			wlr_scene_node_set_enabled(&server->widgets->node, false);
+		}
+		return;
+	}
+	struct paper_buffer *layer = calloc(1, sizeof(*layer));
+	if (layer == NULL) {
+		return;
+	}
+	layer->stride = (size_t)stride;
+	layer->data = calloc((size_t)height, layer->stride);
+	if (layer->data == NULL) {
+		free(layer);
+		return;
+	}
+	cairo_surface_t *target = cairo_image_surface_create_for_data(layer->data,
+		CAIRO_FORMAT_ARGB32, width, height, stride);
+	cairo_t *out = cairo_create(target);
+	struct tm tm;
+	localtime_r(&now, &tm);
+	const int heights[] = {116, 196, 142};
+	int x = width - WIDGET_W - 24;
+	int y = PANEL_H + 22;
+	for (int i = 0; i < 3; i++) {
+		int h = heights[i];
+		if (x < 8 || y + h > height - DOCK_H - 24) {
+			break;
+		}
+		uint8_t *back = malloc((size_t)WIDGET_W * 4 * (size_t)h);
+		if (back == NULL) {
+			break;
+		}
+		for (int row = 0; row < h; row++) {
+			memcpy(back + (size_t)row * WIDGET_W * 4,
+				server->paper_data + (size_t)(y + row) * stride + (size_t)x * 4,
+				(size_t)WIDGET_W * 4);
+		}
+		dev_blur_bgra(back, WIDGET_W, h, WIDGET_W * 4, 14);
+		cairo_surface_t *glass = frosted_surface(back, WIDGET_W, h, WIDGET_W * 4,
+			server->contrast, 22, 0.46);
+		cairo_t *cr = cairo_create(glass);
+		if (i == 0) {
+			widget_clock(cr, WIDGET_W, h, &tm);
+		} else if (i == 1) {
+			widget_calendar(cr, WIDGET_W, h, &tm);
+		} else {
+			widget_system(cr, WIDGET_W, h);
+		}
+		cairo_destroy(cr);
+		/* A soft shadow so the glass lifts off the wallpaper. */
+		for (int ring = 6; ring >= 1; ring--) {
+			rrect(out, x - ring, y - ring + 3, WIDGET_W + 2 * ring, h + 2 * ring, 22 + ring);
+			cairo_set_source_rgba(out, 0.08, 0.10, 0.20, 0.022);
+			cairo_fill(out);
+		}
+		cairo_set_source_surface(out, glass, x, y);
+		cairo_paint(out);
+		cairo_surface_destroy(glass);
+		free(back);
+		y += h + WIDGET_GAP;
+	}
+	cairo_destroy(out);
+	cairo_surface_flush(target);
+	/* Window corners are repainted from this copy of the desktop. */
+	cairo_surface_t *desk = cairo_image_surface_create_for_data(server->desk_data,
+		CAIRO_FORMAT_RGB24, width, height, stride);
+	cairo_t *dcr = cairo_create(desk);
+	cairo_set_source_surface(dcr, target, 0, 0);
+	cairo_paint(dcr);
+	cairo_destroy(dcr);
+	cairo_surface_destroy(desk);
+	cairo_surface_destroy(target);
+	wlr_buffer_init(&layer->base, &paper_impl, width, height);
+	if (server->widgets == NULL) {
+		server->widgets = wlr_scene_buffer_create(&server->scene->tree, &layer->base);
+		wlr_scene_node_lower_to_bottom(&server->widgets->node);
+		if (server->wallpaper != NULL) {
+			wlr_scene_node_lower_to_bottom(&server->wallpaper->node);
+		}
+	} else {
+		wlr_scene_buffer_set_buffer(server->widgets, &layer->base);
+	}
+	wlr_scene_node_set_enabled(&server->widgets->node, true);
+	wlr_buffer_drop(&layer->base);
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
@@ -2217,7 +2572,7 @@ static const char *MENU_ITEMS[][6] = {
 	{"About Olympium", "Settings\u2026", "Hide Window", NULL, NULL, NULL},
 	{"New Files Window", "Open Terminal", "Close Window", NULL, NULL, NULL},
 	{"Find in Launchpad", NULL, NULL, NULL, NULL, NULL},
-	{"Show Hidden Files", "Reduce Transparency", NULL, NULL, NULL, NULL},
+	{"Show Hidden Files", "Reduce Transparency", "Show or Hide Widgets", NULL, NULL, NULL},
 	{"Home", "Documents", "Applications", "Computer", NULL, NULL},
 	{"Minimize", "Zoom", "Cycle Through Windows", NULL, NULL, NULL},
 	{"Olympium Help", "Compatibility", NULL, NULL, NULL, NULL},
@@ -2334,6 +2689,11 @@ static void menu_activate(struct server *server, int menu, int item) {
 			launch_files_at(home);
 		} else if (item == 1) {
 			server->contrast = !server->contrast;
+		} else if (item == 2) {
+			server->widgets_on = !server->widgets_on;
+			widgets_store(server->widgets_on);
+			widgets_refresh(server, 1);
+			wlr_log(WLR_INFO, "widgets %s", server->widgets_on ? "on" : "off");
 		}
 	} else if (menu == 4) {
 		const char *places[] = {home, "/usr/share/doc", "/usr/bin", "/"};
@@ -3472,6 +3832,7 @@ int main(int argc, char *argv[]) {
 	}
 	nag_eval(&server);
 	load_branding(&server);
+	server.widgets_on = widgets_enabled() && strstr(flags, "olympium.widgets=0") == NULL;
 	struct utsname uts;
 	if (uname(&uts) == 0) {
 		snprintf(server.arch, sizeof server.arch, "%s", uts.machine);

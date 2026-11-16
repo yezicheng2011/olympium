@@ -28,7 +28,7 @@ for tool in /usr/bin/wine /usr/bin/wineserver Xwayland x86_64-w64-mingw32-gcc; d
 done
 make dev-compositor dev-install desk-note desk-paste >/dev/null || exit 1
 ROOT=$(mktemp -d /tmp/test-wine.XXXXXX)
-trap 'kill $(cat "$ROOT/comp.pid" 2>/dev/null) 2>/dev/null; WINEPREFIX=$ROOT/desk/wine wineserver -k 2>/dev/null; rm -rf "$ROOT"' EXIT
+trap '[ -n "${TEST_WINE_KEEP:-}" ] && mkdir -p "$TEST_WINE_KEEP" && cp "$ROOT"/*.log "$TEST_WINE_KEEP"/ 2>/dev/null; kill $(cat "$ROOT/comp.pid" 2>/dev/null) 2>/dev/null; WINEPREFIX=$ROOT/desk/wine wineserver -k 2>/dev/null; rm -rf "$ROOT"' EXIT
 x86_64-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/desk-win.exe" desk-win.c || exit 1
 cat > "$ROOT/olympium" <<'EOF'
 #!/bin/sh
@@ -205,6 +205,31 @@ else
 	fail=1
 fi
 kill "$note_pid" "$winpaste_pid" 2>/dev/null
+wineserver_wait
+
+# 7b. Files across systems. The shared folder is drive S: for a Windows
+# program, and a Linux document path reaches a Windows program as Z:\...
+ex=$OLYMPIUM_DESK_HOME/exchange
+printf 'from linux\n' > "$ex/from-linux.txt"
+printf 'doc\n' > "$ROOT/report one.txt"
+rm -f "$ex/desk-win-open.txt"
+./dev-install launch "$id" "$ROOT/report one.txt" --once >"$ROOT/open.log" 2>&1
+got=$(tr -d '\r\n' < "$ex/desk-win-open.txt" 2>/dev/null)
+want="opened Z:$(printf '%s' "$ROOT/report one.txt" | tr '/' '\\')"
+if [ "$got" = "$want" ]; then
+	echo "linux document opened by the windows program: ok"
+else
+	echo "FAIL linux document: got '${got:-nothing}', want '$want'"
+	fail=1
+fi
+seen=$(WINEPREFIX=$OLYMPIUM_DESK_HOME/wine WINEDLLOVERRIDES="mscoree,mshtml=" \
+	wine cmd /c 'type S:\from-linux.txt & echo from windows> S:\from-windows.txt' 2>/dev/null | tr -d '\r\n')
+if [ "$seen" = "from linux" ] && [ "$(tr -d '\r\n ' < "$ex/from-windows.txt" 2>/dev/null)" = "fromwindows" ]; then
+	echo "shared folder as drive S: ok, both directions"
+else
+	echo "FAIL shared folder: read '${seen:-nothing}', wrote '$(cat "$ex/from-windows.txt" 2>/dev/null)'"
+	fail=1
+fi
 wineserver_wait
 
 # 8. A 32-bit Windows program. It needs the 32-bit half of Wine.

@@ -1494,11 +1494,40 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 				t0, state, prefix_ms, t2 - t1);
 			fclose(mf);
 		}
+		/* The folder Linux programs share is drive S: for Windows programs. */
+		char shared[640];
+		char drive[700];
+		snprintf(shared, sizeof shared, "%s/exchange", root);
+		mkdir_p(shared);
+		snprintf(drive, sizeof drive, "%s/dosdevices/s:", prefix);
+		/* Only in a prefix Wine has finished building. A directory made
+		 * here first would stop Wine from building the rest. A prefix that
+		 * is built on this launch gets the drive on the next one. */
+		if (strcmp(state, "fresh") != 0 && access(drive, F_OK) != 0) {
+			if (symlink(shared, drive) != 0 && errno != EEXIST) {
+				perror(drive);
+			}
+		}
 		char *args[16];
+		static char winpaths[14][600];
 		int k = 0;
 		args[k++] = again.program;
 		args[k++] = rec->path;
 		for (int i = 0; i < argc && k < 14; i++) {
+			/* A document handed over by Files is a Linux path. A Windows
+			 * program is given the same file under drive Z:. */
+			if (argv[i][0] == '/' && access(argv[i], F_OK) == 0 &&
+					strlen(argv[i]) + 3 < sizeof winpaths[0]) {
+				char *w = winpaths[k];
+				snprintf(w, sizeof winpaths[0], "Z:%s", argv[i]);
+				for (char *c = w; *c != '\0'; c++) {
+					if (*c == '/') {
+						*c = '\\';
+					}
+				}
+				args[k++] = w;
+				continue;
+			}
 			args[k++] = argv[i];
 		}
 		args[k] = NULL;

@@ -14,6 +14,8 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 - Dock: a centered glass capsule of unlabeled icons. An icon grows under the pointer, shows its name above the dock, and has a dot while that application has a window open.
 - Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
 - Settings: a search field, an icon sidebar, and grouped rows, in the arrangement of a system-settings window. The panes are appearance, drivers, compatibility, Olympium, license, and about. The sidebar glyphs are original.
+- Widgets: the time and date, this month, and memory, disk, and battery, as glass on the wallpaper under the windows. View, Show or Hide Widgets turns them off.
+- A window that is not in front has grey controls and a paler title.
 - Alt-drag moves a window.
 - The dock entry Olympium starts the Olympium runtime, a separate program that the image build copies in when a prebuilt copy is on the build machine. Without it the entry opens an explanation. See `docs/olympium-integration.md`.
 - The interface font is the Ubuntu family. Ubuntu Mono is the monospace face. Glyphs those faces do not include come from Noto Sans, then Noto Sans CJK, then DejaVu. Settings → Appearance names that chain.
@@ -150,6 +152,8 @@ QEMU `pc`, KVM, `-vga std`, on an x86_64 host, append `olympium.showwine=1 olymp
 - Launchpad at 55.6s listed `desk-win.exe` and `desk-rpm.rpm`, and the dock had a pin for each. Picture: `wine-launchpad.png`.
 
 Of that 43.3 s, about 22 s was the boot test sleeping so its pictures could be taken, about 19 s was Wine building its prefix for the first time, about 1 s was the desktop, and the program was 26 ms. `docs/startup-latency.md` has the table. The image build now builds that prefix (`image/wine-prefix.sh`), launch reuses `wineserver` for 60 s and then lets it exit, and prewarm exists and is off. On the build machine, with no ISO boot, the launch request to the mapped window was 4.8 s when Wine built the prefix, 0.67 s with the prefix in place, and 0.16 s when Wine was still running from the last launch. `9c1b41e4…` was not rebuilt, so it does not contain any of this.
+
+A Windows program and a Linux program share a clipboard for text, a folder that is drive `S:` on the Windows side, and documents: a Linux path handed to a Windows program arrives as `Z:\...`. `docs/interoperation.md` lists what was run and what is missing.
 
 `make -C desktop test-wine` on the build machine also copied text from the Wine window to a Wayland program and from a Wayland program to the Wine window. That is the compositor with the headless backend, not a booted ISO. There is no Android runtime in the image, so nothing connects an Android clipboard.
 
