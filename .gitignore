@@ -17,4 +17,5 @@ build/
 *.png
 *.squashfs
 desktop/dev-clip-helper
+desktop/dev-compositor-nox
 __pycache__/

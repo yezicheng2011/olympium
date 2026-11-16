@@ -12,12 +12,13 @@
 # Ubuntu's or Debian's archives. This script only calls it. dev-install has
 # already checked the program's checksum and that it has code for this CPU.
 #
-# This script has not been run against a real Darling: the build machine for
-# this tree could not download or build one. What it does is what Darling's
-# own documentation says: "darling shell COMMAND" runs a command inside the
-# Darling prefix, and the Linux file system is visible there under
-# /Volumes/SystemRoot. If your Darling wants something else, this file is the
-# one place to change.
+# Darling's command line, as its source at 3fcd2e1a has it:
+#
+#   darling <program-path> [arguments...]
+#
+# The path is a path on this system. Darling resolves it and runs the file as
+# it appears inside its prefix, under /Volumes/SystemRoot. Arguments are
+# passed as they are, so a path with a space in it needs no quoting here.
 #
 # It does not check a code signature, and it does not get around one. Apple's
 # own applications are licensed for Apple hardware and are not what this is
@@ -41,4 +42,4 @@ case "$program" in
 	/*) ;;
 	*) echo "olympium-mac-run: the program path must be absolute" >&2; exit 2 ;;
 esac
-exec darling shell "/Volumes/SystemRoot$program" "$@"
+exec darling "$program" "$@"

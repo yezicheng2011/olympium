@@ -45,6 +45,8 @@ A disk image or a package is whatever its author made it. 7-Zip and cpio run as 
 
 The icon gets the same treatment. An `.icns` is the application's own file, and decoding a picture is done by image libraries that have had memory-safety bugs. The programs that show icons here are the installer, Files, and, for Launchpad, the compositor. None of them decodes it. A child process that can open no file and no connection decodes it and hands back 256 by 256 pixels, a block of bytes of a known length that is treated as colours and nothing else. The picture file the desktop keeps is then written from those pixels. An icon that will not decode leaves the application installed with the stand-in tile.
 
+Launchpad applies the same rule to every program, not only Mac ones. A picture installed by a system package under `/usr`, and a picture this desktop drew itself, are read as they are. Any other, such as the icons Wine writes under the user's folder for Windows shortcuts, goes through the confined child first.
+
 ## Opening an installed application
 
 `dev-install launch ID`, which is what the Launchpad entry runs:

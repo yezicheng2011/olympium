@@ -43,6 +43,7 @@
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
 #include "xwayland-compat.h"
+#include "macicon.h"
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_damage_ring.h>
@@ -3314,6 +3315,23 @@ static int find_icon_file(const char *icon, char *out, size_t n) {
 	return strchr(icon, '.') != NULL && access(out, R_OK) == 0;
 }
 
+/* Pictures the system's packages installed, and pictures this desktop drew
+ * itself from pixels, are read as they are. Anything else is not. */
+static int icon_file_is_ours(const char *path) {
+	if (strncmp(path, "/usr/", 5) == 0) {
+		return 1;
+	}
+	const char *desk = getenv("OLYMPIUM_DESK_HOME");
+	char icons[600];
+	if (desk != NULL && desk[0] != '\0') {
+		snprintf(icons, sizeof icons, "%s/icons/", desk);
+		if (strncmp(path, icons, strlen(icons)) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 /* Loads a program's own icon at 72 pixels: PNG, SVG, XPM, or a Mac .icns.
  * Tried once per entry. NULL leaves the drawn stand-in tile. */
 static cairo_surface_t *pad_icon_image(struct pad_app *app) {
@@ -3321,7 +3339,33 @@ static cairo_surface_t *pad_icon_image(struct pad_app *app) {
 		return app->image;
 	}
 	app->image_tried = 1;
-	GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(app->icon_file, 72, 72, TRUE, NULL);
+	const char *file = app->icon_file;
+	char drawn[700];
+	if (!icon_file_is_ours(file)) {
+		/* A picture from somewhere a program can write, such as the icons
+		 * Wine makes for Windows shortcuts. The compositor does not decode
+		 * it. A confined child does, and what is loaded here is the picture
+		 * written from the pixels that child handed back. */
+		const char *run = getenv("XDG_RUNTIME_DIR");
+		unsigned long key = 5381;
+		for (const unsigned char *p = (const unsigned char *)file; *p != '\0'; p++) {
+			key = key * 33 + *p;
+		}
+		struct stat st;
+		if (stat(file, &st) != 0) {
+			return NULL;
+		}
+		key ^= (unsigned long)st.st_mtime ^ ((unsigned long)st.st_size << 7);
+		char dir[600];
+		snprintf(dir, sizeof dir, "%s/olympium-icons", run != NULL && run[0] != '\0' ? run : "/run/dev-desktop");
+		mkdir(dir, 0700);
+		snprintf(drawn, sizeof drawn, "%s/%08lx.png", dir, key & 0xFFFFFFFFul);
+		if (access(drawn, R_OK) != 0 && mac_icon_render(file, drawn) != 0) {
+			return NULL;
+		}
+		file = drawn;
+	}
+	GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(file, 72, 72, TRUE, NULL);
 	if (pixbuf == NULL) {
 		return NULL;
 	}

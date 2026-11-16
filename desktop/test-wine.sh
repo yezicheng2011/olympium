@@ -301,6 +301,45 @@ else
 		fail=1
 	fi
 fi
+# An icon from a place programs can write to, which is where Wine puts the
+# pictures of Windows shortcuts, is not decoded by the compositor. A confined
+# child decodes it and the compositor loads the 256 by 256 picture drawn from
+# the pixels that child returned.
+mkdir -p "$HOME/.local/share/icons/hicolor/64x64/apps" "$HOME/.local/share/applications"
+python3 - "$HOME/.local/share/icons/hicolor/64x64/apps/desk-user-icon.png" <<'PYEOF'
+import struct, sys, zlib
+size = 64
+rows = b"".join(b"\0" + bytes((40, 120, 240, 255)) * size for _ in range(size))
+def chunk(tag, data):
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+open(sys.argv[1], "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)) +
+                              chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+PYEOF
+cat > "$HOME/.local/share/applications/user-icon.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=User Icon Program
+Exec=/bin/true
+Icon=desk-user-icon
+EOF2
+rm -rf "$XDG_RUNTIME_DIR/olympium-icons"
+ctl "search open"
+ctl "search type User Icon"
+sleep 1.5
+ctl "search close"
+drawn=$(ls "$XDG_RUNTIME_DIR"/olympium-icons/*.png 2>/dev/null | head -1)
+if [ -n "$drawn" ] && python3 - "$drawn" <<'PYEOF'
+import struct, sys
+data = open(sys.argv[1], "rb").read()
+sys.exit(0 if struct.unpack(">II", data[16:24]) == (256, 256) else 1)
+PYEOF
+then
+	echo "an icon from the user's folder is decoded by a confined child, not by the compositor: ok"
+else
+	echo "FAIL the user's icon was not drawn through the confined child"
+	fail=1
+fi
+
 # An entry whose command has arguments keeps them, and one whose program is
 # missing is left out.
 mkdir -p "$HOME/.local/share/applications/sub/deeper"
@@ -400,9 +439,7 @@ else
 fi
 
 # 11. The compositor built without Xwayland still starts a session.
-cc -O2 -DDEV_DESK_NO_XWAYLAND -o "$ROOT/comp-nox" compositor.c blur.c \
-	$(pkg-config --cflags --libs wlroots wayland-server cairo pango pangocairo gdk-pixbuf-2.0 xkbcommon libdrm pixman-1) \
-	-DWLR_USE_UNSTABLE -Iprotocol -lm 2>/dev/null || { echo "FAIL build without Xwayland"; fail=1; }
+make dev-compositor-nox >/dev/null 2>&1 && cp dev-compositor-nox "$ROOT/comp-nox" || { echo "FAIL build without Xwayland"; fail=1; }
 if [ -x "$ROOT/comp-nox" ]; then
 	mkdir -p "$ROOT/run2"
 	chmod 700 "$ROOT/run2"

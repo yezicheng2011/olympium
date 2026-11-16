@@ -572,6 +572,32 @@ else
 	echo "the compositor is not built here; the windows were not tested"
 fi
 
+# 10. With a real Mac runtime on this machine: one of its own command-line
+# programs, wrapped in a disk image, through the whole path. Without one, no
+# Mac program is run, and this says so.
+if command -v darling >/dev/null 2>&1; then
+	echo_program=$(dirname "$(dirname "$(command -v darling)")")/libexec/darling/bin/echo
+	if [ -f "$echo_program" ]; then
+		reset_desk
+		python3 mac-fixtures.py --wrap "$echo_program" "Desk Echo" "$FX/DeskEcho.dmg" >/dev/null
+		./dev-install import --consent "$FX/DeskEcho.dmg" >"$ROOT/echo-import.log" 2>&1
+		id=$(mac_id "Desk Echo")
+		archs=$(sed -n 's/^archs=//p' "$ROOT/echo-import.log")
+		said=$(OLYMPIUM_MAC_RUNTIME=$PWD/../image/olympium-mac-run timeout 300 \
+			./dev-install launch "$id" "said by a Mac program" "from a disk image" 2>"$ROOT/echo-launch.err" | tail -n 1)
+		if [ "$said" = "said by a Mac program from a disk image" ]; then
+			ok "a Mach-O program ($archs) from a disk image ran through Darling and printed its arguments"
+		else
+			bad "the Mac program did not run: got '$said'"
+			tail -n 5 "$ROOT/echo-launch.err"
+		fi
+	else
+		echo "Darling is installed but its echo was not found at $echo_program; no Mac program was run"
+	fi
+else
+	echo "no Mac runtime is installed; no Mac program was run"
+fi
+
 if [ "$fail" -ne 0 ]; then
 	echo TEST_MAC_FAILED
 	exit 1
