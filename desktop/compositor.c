@@ -29,6 +29,7 @@
 #include <sys/un.h>
 #include <sys/statvfs.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -178,6 +179,20 @@ struct server {
 	struct wl_listener new_input;
 	struct wl_listener request_cursor;
 	struct wl_listener request_set_selection;
+	struct wl_listener selection_changed;
+	char *clip_data;
+	size_t clip_len;
+	char *clip_pending;
+	size_t clip_pending_len;
+	int clip_fd;
+	struct wl_event_source *clip_reader;
+	struct wl_event_source *clip_timer;
+	int clip_want_read;
+	struct wl_event_source *clip_helper_source;
+	pid_t clip_helper_pid;
+	int clip_helper_fd;
+	char x_clip_state;
+	int xwayland_up;
 	struct wl_list keyboards;
 	enum cursor_mode cursor_mode;
 	struct view *grabbed;
@@ -2512,6 +2527,330 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	wlr_seat_set_selection(server->seat, event->source, event->serial);
 }
 
+/* Clipboard keeper. On Wayland and on X the clipboard is not stored
+ * anywhere: the program that copied hands the bytes over when someone
+ * pastes, so closing that program empties the clipboard. That is not what a
+ * person expects, and it is worse across systems, where closing a Windows
+ * program would lose what was copied from it. The desktop therefore reads
+ * text shortly after it is copied and, when the owner goes away, offers the
+ * same text itself. Text only, up to CLIP_MAX bytes. Nothing is written to
+ * disk. */
+#define CLIP_MAX (4 * 1024 * 1024)
+#define CLIP_SETTLE_MS 250
+
+static const char *const CLIP_MIMES[] = {
+	"text/plain;charset=utf-8", "UTF8_STRING", "text/plain", "STRING", "TEXT",
+};
+
+struct clip_keeper {
+	struct wlr_data_source base;
+	char *data;
+	size_t len;
+};
+
+static void keeper_write(int fd, const char *data, size_t len) {
+	size_t done = 0;
+	while (done < len) {
+		ssize_t n = write(fd, data + done, len - done);
+		if (n < 0 && errno == EINTR) {
+			continue;
+		}
+		if (n <= 0) {
+			break;
+		}
+		done += (size_t)n;
+	}
+}
+
+static void keeper_send(struct wlr_data_source *source, const char *mime, int32_t fd) {
+	(void)mime;
+	struct clip_keeper *keeper = wl_container_of(source, keeper, base);
+	/* The reader may be this same process (Xwayland's bridge reads from the
+	 * event loop), so never block here. A pipe takes 64 KiB without a
+	 * reader; anything longer is written by a child. */
+	int flags = fcntl(fd, F_GETFL);
+	if (keeper->len <= 60000) {
+		if (flags >= 0) {
+			fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+		}
+		keeper_write(fd, keeper->data, keeper->len);
+	} else if (fork() == 0) {
+		if (flags >= 0) {
+			fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+		}
+		keeper_write(fd, keeper->data, keeper->len);
+		_exit(0);
+	}
+	close(fd);
+}
+
+static void keeper_destroy(struct wlr_data_source *source) {
+	struct clip_keeper *keeper = wl_container_of(source, keeper, base);
+	free(keeper->data);
+	free(keeper);
+}
+
+static const struct wlr_data_source_impl keeper_impl = {
+	.send = keeper_send,
+	.destroy = keeper_destroy,
+};
+
+static void clip_stop_reading(struct server *server) {
+	if (server->clip_reader != NULL) {
+		wl_event_source_remove(server->clip_reader);
+		server->clip_reader = NULL;
+	}
+	if (server->clip_fd >= 0) {
+		close(server->clip_fd);
+		server->clip_fd = -1;
+	}
+	free(server->clip_pending);
+	server->clip_pending = NULL;
+	server->clip_pending_len = 0;
+}
+
+static int clip_readable(int fd, uint32_t mask, void *data) {
+	struct server *server = data;
+	(void)mask;
+	char buf[8192];
+	ssize_t n = read(fd, buf, sizeof buf);
+	if (n > 0) {
+		if (server->clip_pending_len + (size_t)n > CLIP_MAX) {
+			/* Too long to keep. The owner still serves it while it lives. */
+			clip_stop_reading(server);
+			return 0;
+		}
+		char *grown = realloc(server->clip_pending, server->clip_pending_len + (size_t)n);
+		if (grown == NULL) {
+			clip_stop_reading(server);
+			return 0;
+		}
+		memcpy(grown + server->clip_pending_len, buf, (size_t)n);
+		server->clip_pending = grown;
+		server->clip_pending_len += (size_t)n;
+		return 0;
+	}
+	if (n < 0 && (errno == EAGAIN || errno == EINTR)) {
+		return 0;
+	}
+	if (server->clip_pending_len > 0) {
+		free(server->clip_data);
+		server->clip_data = server->clip_pending;
+		server->clip_len = server->clip_pending_len;
+		server->clip_pending = NULL;
+		server->clip_pending_len = 0;
+		wlr_log(WLR_INFO, "clipboard kept: %zu bytes", server->clip_len);
+	}
+	clip_stop_reading(server);
+	return 0;
+}
+
+static void clip_offer(struct server *server) {
+	if (server->seat->selection_source != NULL ||
+			server->clip_data == NULL || server->clip_len == 0) {
+		return;
+	}
+	struct clip_keeper *keeper = calloc(1, sizeof(*keeper));
+	if (keeper == NULL) {
+		return;
+	}
+	keeper->data = malloc(server->clip_len);
+	if (keeper->data == NULL) {
+		free(keeper);
+		return;
+	}
+	memcpy(keeper->data, server->clip_data, server->clip_len);
+	keeper->len = server->clip_len;
+	wlr_data_source_init(&keeper->base, &keeper_impl);
+	for (size_t i = 0; i < sizeof CLIP_MIMES / sizeof CLIP_MIMES[0]; i++) {
+		char **slot = wl_array_add(&keeper->base.mime_types, sizeof(char *));
+		if (slot != NULL) {
+			*slot = strdup(CLIP_MIMES[i]);
+		}
+	}
+	wlr_seat_set_selection(server->seat, &keeper->base,
+		wl_display_next_serial(server->wl_display));
+	wlr_log(WLR_INFO, "clipboard offered by the desktop: %zu bytes", keeper->len);
+}
+
+/* dev-clip-helper watches the X clipboard and writes one character per
+ * change: 0 nobody owns it, x an X program does, b the bridge does, s the
+ * bridge may hold a stale answer. See clip-helper.c for why this is a
+ * separate process. */
+static void clip_helper_gone(struct server *server) {
+	if (server->clip_helper_source != NULL) {
+		wl_event_source_remove(server->clip_helper_source);
+		server->clip_helper_source = NULL;
+	}
+	if (server->clip_helper_fd >= 0) {
+		close(server->clip_helper_fd);
+		server->clip_helper_fd = -1;
+	}
+	if (server->clip_helper_pid > 0) {
+		kill(server->clip_helper_pid, SIGTERM);
+		waitpid(server->clip_helper_pid, NULL, 0);
+		server->clip_helper_pid = 0;
+	}
+	server->x_clip_state = '?';
+}
+
+static int clip_helper_readable(int fd, uint32_t mask, void *data) {
+	struct server *server = data;
+	char buf[64];
+	ssize_t n = read(fd, buf, sizeof buf);
+	if (n <= 0) {
+		if (n < 0 && (errno == EAGAIN || errno == EINTR)) {
+			return 0;
+		}
+		wlr_log(WLR_INFO, "clipboard helper stopped");
+		clip_helper_gone(server);
+		return 0;
+	}
+	(void)mask;
+	for (ssize_t i = 0; i < n; i++) {
+		char c = buf[i];
+		if (c == 's') {
+			/* The bridge may now answer a paste by asking itself. Empty
+			 * the clipboard, which makes the bridge let go, and forget
+			 * the kept text so that nothing older comes back. */
+			wlr_log(WLR_INFO, "clipboard reset: the X bridge was left with a stale owner");
+			clip_stop_reading(server);
+			free(server->clip_data);
+			server->clip_data = NULL;
+			server->clip_len = 0;
+			wlr_seat_set_selection(server->seat, NULL,
+				wl_display_next_serial(server->wl_display));
+		} else if (c == '0' || c == 'x' || c == 'b') {
+			server->x_clip_state = c;
+			if (c == '0' && server->clip_timer != NULL &&
+					server->seat->selection_source == NULL && server->clip_data != NULL) {
+				/* The X side has let go. The kept text can be offered. */
+				wl_event_source_timer_update(server->clip_timer, CLIP_SETTLE_MS);
+			}
+		}
+	}
+	return 0;
+}
+
+static void clip_helper_start(struct server *server) {
+	clip_helper_gone(server);
+	char beside[512] = "";
+	ssize_t len = readlink("/proc/self/exe", beside, sizeof beside - 32);
+	if (len > 0) {
+		beside[len] = '\0';
+		char *slash = strrchr(beside, '/');
+		if (slash != NULL) {
+			snprintf(slash + 1, sizeof beside - (size_t)(slash + 1 - beside), "dev-clip-helper");
+		}
+	}
+	const char *candidates[] = {
+		getenv("OLYMPIUM_CLIP_HELPER"),
+		"/usr/libexec/dev-desktop/dev-clip-helper",
+		beside,
+	};
+	const char *path = NULL;
+	for (size_t i = 0; i < sizeof candidates / sizeof candidates[0]; i++) {
+		if (candidates[i] != NULL && candidates[i][0] != '\0' && access(candidates[i], X_OK) == 0) {
+			path = candidates[i];
+			break;
+		}
+	}
+	if (path == NULL) {
+		wlr_log(WLR_INFO, "clipboard helper not installed; kept text is not offered while X runs");
+		return;
+	}
+	int fds[2];
+	if (pipe2(fds, O_CLOEXEC) != 0) {
+		return;
+	}
+	pid_t pid = fork();
+	if (pid < 0) {
+		close(fds[0]);
+		close(fds[1]);
+		return;
+	}
+	if (pid == 0) {
+		dup2(fds[1], 1);
+		execl(path, path, (char *)NULL);
+		_exit(127);
+	}
+	close(fds[1]);
+	fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
+	server->clip_helper_pid = pid;
+	server->clip_helper_fd = fds[0];
+	server->clip_helper_source = wl_event_loop_add_fd(
+		wl_display_get_event_loop(server->wl_display), fds[0],
+		WL_EVENT_READABLE | WL_EVENT_HANGUP, clip_helper_readable, server);
+	wlr_log(WLR_INFO, "clipboard helper started: %s", path);
+}
+
+/* Runs CLIP_SETTLE_MS after the clipboard last changed. Programs, Wine
+ * above all, set and clear the clipboard several times in a row; nothing is
+ * done until they have stopped. */
+static int clip_settled(void *data) {
+	struct server *server = data;
+	struct wlr_data_source *source = server->seat->selection_source;
+	if (source == NULL) {
+		/* The owner went away and nobody copied since. Offer its text,
+		 * once the X side agrees that nobody owns the clipboard. */
+		if (server->clip_data == NULL || server->clip_len == 0) {
+			return 0;
+		}
+		/* With an X server running, only while nobody owns the X
+		 * clipboard. The helper's next report arms this timer again. */
+		if (!server->xwayland_up || server->x_clip_state == '0') {
+			clip_offer(server);
+		}
+		return 0;
+	}
+	if (source->impl == &keeper_impl || !server->clip_want_read) {
+		return 0;
+	}
+	server->clip_want_read = 0;
+	const char *want = NULL;
+	for (size_t i = 0; want == NULL && i < sizeof CLIP_MIMES / sizeof CLIP_MIMES[0]; i++) {
+		char **mime;
+		wl_array_for_each(mime, &source->mime_types) {
+			if (strcmp(*mime, CLIP_MIMES[i]) == 0) {
+				want = CLIP_MIMES[i];
+				break;
+			}
+		}
+	}
+	clip_stop_reading(server);
+	if (want == NULL) {
+		/* Not text. Do not bring old text back after it. */
+		free(server->clip_data);
+		server->clip_data = NULL;
+		server->clip_len = 0;
+		return 0;
+	}
+	int fds[2];
+	if (pipe2(fds, O_CLOEXEC | O_NONBLOCK) != 0) {
+		return 0;
+	}
+	wlr_data_source_send(source, want, fds[1]);
+	server->clip_fd = fds[0];
+	server->clip_reader = wl_event_loop_add_fd(wl_display_get_event_loop(server->wl_display),
+		fds[0], WL_EVENT_READABLE | WL_EVENT_HANGUP, clip_readable, server);
+	return 0;
+}
+
+static void seat_selection_changed(struct wl_listener *listener, void *data) {
+	(void)data;
+	struct server *server = wl_container_of(listener, server, selection_changed);
+	struct wlr_data_source *source = server->seat->selection_source;
+	if (source != NULL && source->impl == &keeper_impl) {
+		return;
+	}
+	if (source != NULL) {
+		server->clip_want_read = 1;
+	}
+	/* Nothing is done from inside this notification: the seat and Xwayland
+	 * are still in the middle of changing owners. */
+	wl_event_source_timer_update(server->clip_timer, CLIP_SETTLE_MS);
+}
+
 static void reset_cursor_mode(struct server *server) {
 	server->cursor_mode = CURSOR_PASSTHROUGH;
 	server->grabbed = NULL;
@@ -3532,6 +3871,8 @@ static void xwayland_ready(struct wl_listener *listener, void *data) {
 	if (server->xwayland != NULL && server->xwayland->display_name != NULL) {
 		setenv("DISPLAY", server->xwayland->display_name, 1);
 		wlr_log(WLR_INFO, "xwayland on DISPLAY=%s", server->xwayland->display_name);
+		server->xwayland_up = 1;
+		clip_helper_start(server);
 	}
 	launch_startup(server, "xwayland ready");
 }
@@ -3915,6 +4256,15 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.seat->events.request_set_cursor, &server.request_cursor);
 	server.request_set_selection.notify = seat_request_set_selection;
 	wl_signal_add(&server.seat->events.request_set_selection, &server.request_set_selection);
+	server.clip_fd = -1;
+	server.clip_helper_fd = -1;
+	server.x_clip_state = '?';
+	if (getenv("OLYMPIUM_CLIP_KEEP") == NULL || strcmp(getenv("OLYMPIUM_CLIP_KEEP"), "0") != 0) {
+		server.clip_timer = wl_event_loop_add_timer(
+			wl_display_get_event_loop(server.wl_display), clip_settled, &server);
+		server.selection_changed.notify = seat_selection_changed;
+		wl_signal_add(&server.seat->events.set_selection, &server.selection_changed);
+	}
 	server.xwayland = wlr_xwayland_create(server.wl_display, server.compositor, false);
 	if (server.xwayland != NULL) {
 		wlr_xwayland_set_seat(server.xwayland, server.seat);

@@ -180,6 +180,27 @@ fi
 kill "$paste_pid" "$copy_pid" 2>/dev/null
 wineserver_wait
 
+# 6b. The Windows program and Wine are gone. What it copied must still paste.
+read_paste() {
+	: > "$ROOT/paste.log"
+	timeout 20 ./desk-paste >"$ROOT/paste.log" 2>&1 &
+	local pid=$!
+	for _ in $(seq 1 150); do
+		grep -q '^clipboard:' "$ROOT/paste.log" 2>/dev/null && break
+		sleep 0.1
+	done
+	kill "$pid" 2>/dev/null
+	sed -n 's/^clipboard: //p' "$ROOT/paste.log" | head -1
+}
+sleep 1
+got=$(read_paste)
+if [ "$got" = "Desk Win ready" ]; then
+	echo "clipboard after the Windows program closed: ok ($got)"
+else
+	echo "FAIL clipboard after the Windows program closed: got '${got:-nothing}'"
+	fail=1
+fi
+
 # 7. Wayland -> Windows. Desk Note owns "Desk Note ready". Desk Win --paste
 # reads CF_TEXT and writes what it got.
 printf 'note\n' > "$ROOT/hello.dnote"
@@ -206,6 +227,14 @@ else
 fi
 kill "$note_pid" "$winpaste_pid" 2>/dev/null
 wineserver_wait
+sleep 1
+got=$(read_paste)
+if [ "$got" = "Desk Note ready" ]; then
+	echo "clipboard after the Wayland program closed: ok ($got)"
+else
+	echo "FAIL clipboard after the Wayland program closed: got '${got:-nothing}'"
+	fail=1
+fi
 
 # 7b. Files across systems. The shared folder is drive S: for a Windows
 # program, and a Linux document path reaches a Windows program as Z:\...

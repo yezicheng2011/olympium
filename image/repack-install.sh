@@ -39,10 +39,13 @@ mkdir -p "$ROOT/tmp/desktop"
 cp -a "$REPO/desktop/." "$ROOT/tmp/desktop/"
 
 if [ "$ARCH" = amd64 ]; then
-	make -C "$REPO/desktop" dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
+	make -C "$REPO/desktop" clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
 	install -m 755 "$REPO/desktop/dev-compositor" "$REPO/desktop/dev-files" \
 		"$REPO/desktop/dev-settings" "$REPO/desktop/dev-swatch" \
 		"$REPO/desktop/dev-compat" "$REPO/desktop/dev-install" "$ROOT/usr/bin/"
+	if [ -x "$REPO/desktop/dev-clip-helper" ]; then
+		install -m 755 "$REPO/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+	fi
 	install -m 755 "$REPO/desktop/olympium-run" "$REPO/desktop/olympium-testapp" "$ROOT/usr/bin/"
 	install -m 755 "$REPO/desktop/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
 	sh "$REPO/image/build-sample-deb.sh" "$ROOT" "$REPO/desktop"
@@ -66,10 +69,13 @@ if [ "$ARCH" = amd64 ]; then
 	fi
 else
 	mount_chroot
-	chroot "$ROOT" make -C /tmp/desktop clean dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
+	chroot "$ROOT" make -C /tmp/desktop clean clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
 	install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 		"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
 		"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
+	if [ -x "$ROOT/tmp/desktop/dev-clip-helper" ]; then
+		install -m 755 "$ROOT/tmp/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+	fi
 	install -m 755 "$ROOT/tmp/desktop/olympium-run" "$ROOT/tmp/desktop/olympium-testapp" "$ROOT/usr/bin/"
 	install -m 755 "$ROOT/tmp/desktop/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
 	cp "$REPO/image/build-sample-deb.sh" "$ROOT/tmp/build-sample-deb.sh"

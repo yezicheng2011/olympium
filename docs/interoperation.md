@@ -12,9 +12,20 @@ This is what a Linux program and a Windows program can do with each other on thi
 | A window like any other | A Wine window gets the same title bar, shadow, corners, dock dot, and focus rules as a Wayland window. | The window mapped in every test run. No picture of a Wine window was taken in this pass. |
 | Launchpad and dock | Import writes a `.desktop` file and a dock pin for every kind of program. | On the boot of `9c1b41e4…`, before this pass. |
 
+## The clipboard
+
+Text copied in one program pastes in another, between a Windows program and a Linux program in both directions. Three things were added to make that hold.
+
+- The desktop keeps a copy. On Wayland and on X the clipboard is not stored: the program that copied hands the bytes over when someone pastes, so closing that program empties it. The compositor now reads text a quarter of a second after it is copied and, when the owner goes away, offers the same text itself. Up to 4 MB, text only, in memory only. `OLYMPIUM_CLIP_KEEP=0` turns it off.
+- `dev-clip-helper` watches the X clipboard. The first version of the keeper offered old text in the moment after a Windows program had taken the clipboard and before the Xwayland bridge had told the seat. That took the clipboard back from the program, and the bridge then asked itself for the data: 579 requests in one test run. The helper tells the compositor who owns the X clipboard, and text is only offered while nobody does. The same test run now makes 14 requests.
+- The helper nudges a silent owner. The bridge asks a new owner what it holds in the instant the owner changes. Wine is often still inside the call that took ownership and leaves that question unanswered until something else arrives. About one copy in ten from a Windows program never reached the desktop: 18 of 20 pastes arrived. The helper asks again 120 ms and 500 ms later, which wakes it. 30 of 30 pastes arrived, with the keeper on and with it off.
+
+In `make -C desktop test-wine`: a Windows program copied, was closed, and Wine was stopped, and a Wayland program then pasted its text. A Wayland program copied, was closed, and the next program pasted its text.
+
+The helper reads no clipboard contents. It asks only for the list of formats and throws the answer away.
+
 ## What is not there
 
-- The clipboard is not stored. When the program that copied closes, the clipboard is empty, as on any Wayland desktop. Wine keeps its own copy while `wineserver` is still running, which is 60 s after the last Windows program. A keeper that stores the text in the compositor was written and removed in this pass: with a Wine program running it set off thousands of selection requests, and the cause was not found.
 - Images, files, and rich text on the clipboard were not tested. Drag and drop between a Wine window and a Wayland window was not tried.
 - A copy made by a Windows program before its window is in front is ignored.
 - Windows programs do not appear in Launchpad by themselves. Wine's own start-menu entries are not read. Only a file imported through Install is listed.

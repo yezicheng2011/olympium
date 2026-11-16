@@ -16,3 +16,4 @@ build/
 *.ppm
 *.png
 *.squashfs
+desktop/dev-clip-helper

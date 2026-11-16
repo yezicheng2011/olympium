@@ -6,9 +6,13 @@ XKB_FLAGS := $(shell pkg-config --cflags --libs xkbcommon)
 DRM_FLAGS := $(shell pkg-config --cflags --libs libdrm pixman-1)
 GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 
-.PHONY: all test test-wine clean
+# dev-clip-helper watches the X clipboard for the compositor. It is only
+# built where Xwayland can be: it needs xcb and xcb-xfixes.
+CLIP_HELPER := $(shell pkg-config --exists xcb xcb-xfixes && echo dev-clip-helper)
 
-all: dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
+.PHONY: all clip-helper test test-wine clean
+
+all: $(CLIP_HELPER) dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
 
 splash.png: splash.c
 	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS)
@@ -16,6 +20,12 @@ splash.png: splash.c
 
 dev-compositor: compositor.c blur.c blur.h xwayland-compat.h
 	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
+
+# Builds the helper where it can be built and does nothing elsewhere.
+clip-helper: $(CLIP_HELPER)
+
+dev-clip-helper: clip-helper.c
+	$(CC) $(CFLAGS) -o $@ clip-helper.c $(shell pkg-config --cflags --libs xcb xcb-xfixes)
 
 dev-files: files.c
 	$(CC) $(CFLAGS) -o $@ files.c $(GTK_FLAGS)
@@ -59,4 +69,4 @@ test-wine:
 	./test-wine.sh
 
 clean:
-	rm -f dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash-gen splash.png
+	rm -f dev-clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash-gen splash.png
