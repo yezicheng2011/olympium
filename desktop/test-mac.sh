@@ -479,6 +479,20 @@ PYEOF
 			bad "Launchpad listing"
 			grep 'launchpad has: Desk' "$LOG" | tail -n 3
 		fi
+		# Search finds them by name, the Chinese one too, and names that
+		# start with what was typed come before names that only contain it.
+		ctl "search open"
+		ctl "search type 计算"
+		ctl "search type mac"
+		sleep 0.5
+		if grep -q 'search result 1: 计算器' "$LOG" && grep -q 'search for "计算": 1 result$' "$LOG" &&
+				grep -q 'search result 1: Desk Mac' "$LOG"; then
+			ok "search finds Mac applications by name, in Chinese too"
+		else
+			bad "search results"
+			grep 'search' "$LOG" | tail -n 5
+		fi
+		ctl "search close"
 		# From Launchpad with no runtime: a window says why.
 		unset OLYMPIUM_NO_DIALOG
 		before=$(mapped 'Desk Mac')
@@ -491,6 +505,21 @@ PYEOF
 			ok "started from Launchpad with no Mac runtime, a window explains the refusal"
 		else
 			bad "no window explained the refusal"
+		fi
+		pkill -f "dev-install launch" 2>/dev/null
+		# The same from the search panel: Return starts the selected result.
+		before=$(mapped 'Desk Mac')
+		ctl "search open"
+		ctl "search type desk m"
+		ctl "search enter"
+		for _ in $(seq 1 60); do
+			[ "$(mapped 'Desk Mac')" -gt "$before" ] && break
+			sleep 0.1
+		done
+		if [ "$(mapped 'Desk Mac')" -gt "$before" ] && grep -q 'search start: Desk Mac' "$LOG"; then
+			ok "Return in the search panel starts the selected application"
+		else
+			bad "search did not start the application"
 		fi
 		pkill -f "dev-install launch" 2>/dev/null
 		export OLYMPIUM_NO_DIALOG=1

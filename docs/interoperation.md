@@ -41,10 +41,11 @@ There is one fixed set. They cannot be moved, added, or removed one by one, and 
 
 ## The look
 
+- The magnifier in the menu bar opens a search panel, as do Control and Super with Space. It searches the list Launchpad shows, so a Linux program, a Windows shortcut, and a Mac application are found the same way. In `make -C desktop test-mac` it found a Mac application by a Chinese name, put a name that starts with the typed letters first, and started the selected one on Return.
 - A window that is not in front has grey controls and a paler title.
 - A back window's shadow and title bar were painted over the window in front of it. They are now cut to the part that is visible.
 
-What still differs from a Mac is in the README: no open or minimize animation, no Mission Control, no search panel, no quick-settings panel, GTK controls inside windows, and the Ubuntu typeface.
+What still differs from a Mac is in the README: no open or minimize animation, no Mission Control, no quick-settings panel, GTK controls inside windows, and the Ubuntu typeface. The search panel does not look in files.
 
 ## Where this was run
 

@@ -212,7 +212,9 @@ struct server {
 	int screen_w;
 	int screen_h;
 	int contrast;
-	int launcher;
+	int launcher;      /* the search panel is open */
+	int search_x;      /* where the search glyph is in the menu bar */
+	int spot_cursor;   /* which result is selected */
 	int blur_ok;
 	int blur_fail;
 	unsigned frames;
@@ -291,6 +293,12 @@ static int nag_close_hit(const struct server *server, double x, double y);
 
 static void focus_view(struct view *view, struct wlr_surface *surface);
 static void widgets_refresh(struct server *server, int force);
+static void draw_search(struct server *server, cairo_t *cr, const struct wlr_box *box);
+static int spot_matches(struct server *server, int *ids, int max);
+static void open_search(struct server *server);
+static void close_search(struct server *server);
+static void spot_activate(struct server *server);
+static cairo_surface_t *pad_icon_image(struct pad_app *app);
 static void widgets_store(int on);
 
 static void load_branding(struct server *server) {
@@ -356,13 +364,6 @@ static void launch_app(struct server *server, const struct app_entry *app) {
 	server->filter[0] = '\0';
 }
 
-static int app_matches(const struct app_entry *app, const char *filter) {
-	if (filter[0] == '\0') {
-		return 1;
-	}
-	return strcasestr(app->label, filter) != NULL || strcasestr(app->id, filter) != NULL;
-}
-
 static int dock_n(const struct server *server) {
 	return APP_COUNT + server->pinned_count;
 }
@@ -415,14 +416,19 @@ static void dock_box(const struct server *server, struct wlr_box *box) {
 	box->y = server->screen_h - DOCK_H - DOCK_MARGIN;
 }
 
+enum { SPOT_ROWS = 7, SPOT_FIELD_H = 58, SPOT_ROW_H = 46 };
+
+/* The search panel: a field, and under it one row per result. */
 static void launcher_box(const struct server *server, struct wlr_box *box) {
-	box->width = 520;
-	box->height = 360;
+	int ids[SPOT_ROWS];
+	int rows = spot_matches((struct server *)server, ids, SPOT_ROWS);
+	box->width = 620;
+	box->height = SPOT_FIELD_H + (rows > 0 ? rows * SPOT_ROW_H + 12 : 0);
 	if (box->width > server->screen_w - 40) {
 		box->width = server->screen_w - 40;
 	}
 	box->x = (server->screen_w - box->width) / 2;
-	box->y = 80;
+	box->y = server->screen_h / 5;
 }
 
 static int point_in(const struct wlr_box *box, double x, double y) {
@@ -1062,8 +1068,9 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 		cairo_fill(cr);
 		cairo_arc(cr, rx + 12, 16.75, 2.2, 0, 6.2832);
 		cairo_fill(cr);
-		/* Search glyph. */
+		/* Search glyph. A click on it opens the search panel. */
 		rx -= 28;
+		server->search_x = (int)rx;
 		cairo_set_line_width(cr, 1.7);
 		cairo_arc(cr, rx + 6.5, 11.5, 5, 0, 6.2832);
 		cairo_stroke(cr);
@@ -1187,24 +1194,7 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 			ink, ink, ink + 0.02);
 		return;
 	}
-	paint_text(cr, "Ubuntu Bold 18", server->title, 28, 24, 0.10, 0.10, 0.12);
-	char prompt[96];
-	snprintf(prompt, sizeof prompt, "Search  %s", server->filter);
-	paint_text(cr, UI_FONT, prompt, 28, 64, 0.25, 0.27, 0.30);
-	int row = 0;
-	for (int i = 0; i < APP_COUNT; i++) {
-		if (!app_matches(&APPS[i], server->filter)) {
-			continue;
-		}
-		double y = 110 + row * 42;
-		draw_icon(cr, APPS[i].id, 28, y);
-		paint_text(cr, UI_FONT, APPS[i].label, 78, y + 8, 0.10, 0.10, 0.12);
-		row++;
-	}
-	if (server->notice[0] != '\0') {
-		paint_text(cr, UI_FONT_SM, server->notice, 28, box->height - 36,
-			0.35, 0.22, 0.12);
-	}
+	draw_search(server, cr, box);
 }
 
 static struct wlr_texture *make_chrome(struct server *server, int x, int y, int w, int h,
@@ -2326,15 +2316,6 @@ static int chrome_contains(struct server *server, double x, double y) {
 	return 0;
 }
 
-static void launcher_activate_first(struct server *server) {
-	for (int i = 0; i < APP_COUNT; i++) {
-		if (app_matches(&APPS[i], server->filter)) {
-			launch_app(server, &APPS[i]);
-			return;
-		}
-	}
-}
-
 static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 	struct keyboard *keyboard = wl_container_of(listener, keyboard, key);
 	struct server *server = keyboard->server;
@@ -2429,26 +2410,55 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 				handled = 1;
 			}
 		}
+		/* Control or Super with Space opens and closes the search panel. */
+		uint32_t held = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
+		for (int i = 0; i < nsyms && !handled; i++) {
+			if (syms[i] == XKB_KEY_space && (held & (WLR_MODIFIER_CTRL | WLR_MODIFIER_LOGO)) != 0) {
+				if (server->launcher) {
+					close_search(server);
+				} else {
+					open_search(server);
+				}
+				handled = 1;
+			}
+		}
 		if (!handled && server->launcher) {
 			for (int i = 0; i < nsyms; i++) {
 				if (syms[i] == XKB_KEY_Escape) {
-					server->launcher = 0;
-					server->filter[0] = '\0';
+					close_search(server);
 					handled = 1;
 				} else if (syms[i] == XKB_KEY_Return) {
-					launcher_activate_first(server);
+					spot_activate(server);
+					handled = 1;
+				} else if (syms[i] == XKB_KEY_Down) {
+					if (server->spot_cursor < SPOT_ROWS - 1) {
+						server->spot_cursor++;
+					}
+					handled = 1;
+				} else if (syms[i] == XKB_KEY_Up) {
+					if (server->spot_cursor > 0) {
+						server->spot_cursor--;
+					}
 					handled = 1;
 				} else if (syms[i] == XKB_KEY_BackSpace) {
+					/* One whole character, which may be several bytes. */
 					size_t n = strlen(server->filter);
-					if (n > 0) {
-						server->filter[n - 1] = '\0';
+					while (n > 0 && ((unsigned char)server->filter[n - 1] & 0xC0) == 0x80) {
+						n--;
 					}
+					if (n > 0) {
+						n--;
+					}
+					server->filter[n] = '\0';
+					server->spot_cursor = 0;
 					handled = 1;
 				} else {
 					char utf[8];
 					int len = xkb_keysym_to_utf8(syms[i], utf, sizeof utf);
-					if (len > 1 && strlen(server->filter) + (size_t)len < sizeof server->filter) {
+					if (len > 1 && (unsigned char)utf[0] >= 0x20 &&
+							strlen(server->filter) + (size_t)len < sizeof server->filter) {
 						strcat(server->filter, utf);
+						server->spot_cursor = 0;
 						handled = 1;
 					}
 				}
@@ -3695,6 +3705,117 @@ static void pad_activate(struct server *server, int index) {
 	server->pad_filter[0] = '\0';
 }
 
+/* Search: the glyph in the menu bar, or Control or Super with Space. It looks
+ * through the same list Launchpad shows, so a Linux program, a Windows
+ * shortcut and a Mac application are all found by name. Names that start with
+ * what was typed come first. It finds programs. It does not look in files. */
+static int spot_matches(struct server *server, int *ids, int max) {
+	int n = 0;
+	if (server->filter[0] == '\0') {
+		return 0;
+	}
+	size_t len = strlen(server->filter);
+	for (int pass = 0; pass < 2 && n < max; pass++) {
+		for (int i = 0; i < server->pad_count && n < max; i++) {
+			const struct pad_app *app = &server->pad[i];
+			if (app->is_folder || app->cmd[0] == '\0') {
+				continue;
+			}
+			int starts = strncasecmp(app->name, server->filter, len) == 0;
+			if ((pass == 0 && starts) || (pass == 1 && !starts && strcasestr(app->name, server->filter) != NULL)) {
+				ids[n++] = i;
+			}
+		}
+	}
+	return n;
+}
+
+static void open_search(struct server *server) {
+	pad_load(server);
+	server->launchpad = 0;
+	server->open_menu = -1;
+	server->filter[0] = '\0';
+	server->spot_cursor = 0;
+	server->launcher = 1;
+}
+
+static void close_search(struct server *server) {
+	server->launcher = 0;
+	server->filter[0] = '\0';
+	server->spot_cursor = 0;
+}
+
+/* Starts the selected result, as Return does. */
+static void spot_activate(struct server *server) {
+	int ids[SPOT_ROWS];
+	int n = spot_matches(server, ids, SPOT_ROWS);
+	if (n == 0) {
+		return;
+	}
+	int at = server->spot_cursor < n ? server->spot_cursor : 0;
+	int index = ids[at];
+	wlr_log(WLR_INFO, "search start: %s", server->pad[index].name);
+	close_search(server);
+	pad_activate(server, index);
+}
+
+static void draw_search(struct server *server, cairo_t *cr, const struct wlr_box *box) {
+	/* The magnifier, then what was typed, large, the way a search field
+	 * that is the whole panel reads. */
+	cairo_set_source_rgba(cr, 0.30, 0.31, 0.36, 1);
+	cairo_set_line_width(cr, 2.4);
+	cairo_arc(cr, 30, 27, 9, 0, 6.2832);
+	cairo_stroke(cr);
+	cairo_move_to(cr, 37, 34);
+	cairo_line_to(cr, 44, 41);
+	cairo_stroke(cr);
+	if (server->filter[0] != '\0') {
+		int w = paint_text(cr, "Ubuntu 20", server->filter, 58, 13, 0.10, 0.10, 0.13);
+		cairo_set_source_rgba(cr, 0.20, 0.48, 0.96, 1);
+		cairo_rectangle(cr, 58 + w + 2, 15, 2, 28);
+		cairo_fill(cr);
+	} else {
+		paint_text(cr, "Ubuntu 20", "Search", 58, 13, 0.52, 0.53, 0.58);
+	}
+	int ids[SPOT_ROWS];
+	int n = spot_matches(server, ids, SPOT_ROWS);
+	if (n == 0) {
+		return;
+	}
+	if (server->spot_cursor >= n) {
+		server->spot_cursor = n - 1;
+	}
+	cairo_set_source_rgba(cr, 0.10, 0.10, 0.14, 0.14);
+	cairo_rectangle(cr, 0, SPOT_FIELD_H - 1, box->width, 1);
+	cairo_fill(cr);
+	for (int i = 0; i < n; i++) {
+		struct pad_app *app = &server->pad[ids[i]];
+		double y = SPOT_FIELD_H + 6 + i * SPOT_ROW_H;
+		int chosen = i == server->spot_cursor;
+		if (chosen) {
+			rrect(cr, 8, y, box->width - 16, SPOT_ROW_H - 4, 9);
+			cairo_set_source_rgba(cr, 0.16, 0.47, 0.96, 0.95);
+			cairo_fill(cr);
+		}
+		cairo_save(cr);
+		cairo_translate(cr, 20, y + 5);
+		if (pad_icon_image(app) != NULL) {
+			cairo_scale(cr, 32.0 / 72.0, 32.0 / 72.0);
+			cairo_set_source_surface(cr, app->image, 0, 0);
+			cairo_paint(cr);
+		} else {
+			cairo_scale(cr, 32.0 / 48.0, 32.0 / 48.0);
+			draw_icon(cr, app->icon, 0, 0);
+		}
+		cairo_restore(cr);
+		double ink = chosen ? 1.0 : 0.10;
+		paint_text(cr, "Ubuntu Medium 14", app->name, 66, y + 10, ink, ink, chosen ? 1.0 : 0.13);
+		int tag_w = paint_text(cr, "Ubuntu 11", "Application", 0, -80, 0, 0, 0);
+		double tag = chosen ? 0.92 : 0.50;
+		paint_text(cr, "Ubuntu 11", "Application", box->width - 22 - tag_w, y + 13, tag, tag, tag + 0.04);
+	}
+}
+
 static void nag_box(const struct server *server, struct wlr_box *box) {
 	box->width = 460;
 	box->height = 230;
@@ -3850,6 +3971,14 @@ static void press_chrome(struct server *server) {
 		}
 	}
 	if (y >= 0 && y < PANEL_H) {
+		if (server->search_x > 0 && x >= server->search_x - 6 && x < server->search_x + 22) {
+			if (server->launcher) {
+				close_search(server);
+			} else {
+				open_search(server);
+			}
+			return;
+		}
 		for (int i = 0; i < 7; i++) {
 			if (x >= server->menu_x[i] && x < server->menu_x[i] + server->menu_w[i]) {
 				server->open_menu = server->open_menu == i ? -1 : i;
@@ -3862,23 +3991,19 @@ static void press_chrome(struct server *server) {
 		struct wlr_box box;
 		launcher_box(server, &box);
 		if (point_in(&box, x, y)) {
-			int row = (int)((y - box.y - 110) / 42);
-			if (row >= 0) {
-				int seen = 0;
-				for (int i = 0; i < APP_COUNT; i++) {
-					if (!app_matches(&APPS[i], server->filter)) {
-						continue;
-					}
-					if (seen == row) {
-						server->press_app = i;
-						return;
-					}
-					seen++;
+			int ids[SPOT_ROWS];
+			int n = spot_matches(server, ids, SPOT_ROWS);
+			double top = box.y + SPOT_FIELD_H + 6;
+			if (y >= top) {
+				int row = (int)((y - top) / SPOT_ROW_H);
+				if (row >= 0 && row < n) {
+					server->spot_cursor = row;
+					spot_activate(server);
 				}
 			}
 			return;
 		}
-		server->launcher = 0;
+		close_search(server);
 		return;
 	}
 	struct view *view;
@@ -3980,8 +4105,6 @@ static void release_chrome(struct server *server) {
 		} else {
 			launch_app(server, &APPS[server->press_app]);
 		}
-	} else if (server->press_app >= 0 && server->launcher) {
-		launch_app(server, &APPS[server->press_app]);
 	}
 	server->press_app = -1;
 	server->press_contrast = 0;
@@ -4340,6 +4463,28 @@ static int on_control(int fd, uint32_t mask, void *data) {
 			server->contrast = 1;
 		} else if (strncmp(buf, "contrast 0", 10) == 0) {
 			server->contrast = 0;
+		} else if (strncmp(buf, "search open", 11) == 0) {
+			open_search(server);
+		} else if (strncmp(buf, "search close", 12) == 0) {
+			close_search(server);
+		} else if (strncmp(buf, "search type ", 12) == 0 && server->launcher) {
+			/* What typing these letters into the panel would find. */
+			char *text = buf + 12;
+			text[strcspn(text, "\r\n")] = '\0';
+			snprintf(server->filter, sizeof server->filter, "%s", text);
+			server->spot_cursor = 0;
+			int ids[SPOT_ROWS];
+			int found = spot_matches(server, ids, SPOT_ROWS);
+			for (int i = 0; i < found; i++) {
+				wlr_log(WLR_INFO, "search result %d: %s", i + 1, server->pad[ids[i]].name);
+			}
+			wlr_log(WLR_INFO, "search for \"%s\": %d result%s", server->filter, found, found == 1 ? "" : "s");
+		} else if (strncmp(buf, "search down", 11) == 0 && server->launcher) {
+			if (server->spot_cursor < SPOT_ROWS - 1) {
+				server->spot_cursor++;
+			}
+		} else if (strncmp(buf, "search enter", 12) == 0 && server->launcher) {
+			spot_activate(server);
 		} else if (strncmp(buf, "launchpad list", 14) == 0) {
 			/* What Launchpad would show now, without opening it. */
 			pad_load(server);
