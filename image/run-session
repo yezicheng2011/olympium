@@ -22,18 +22,22 @@ chmod 755 /run/dev-desktop
 kmsg "session start arch $(uname -m) $(uname -r)"
 modprobe bochs 2>/dev/null || true
 modprobe virtio_gpu 2>/dev/null || true
-modprobe e1000 2>/dev/null || true
-modprobe virtio_net 2>/dev/null || true
-modprobe virtio_blk 2>/dev/null || true
-modprobe nvme 2>/dev/null || true
-if command -v ip >/dev/null 2>&1; then
-	for iface in /sys/class/net/*; do
-		name=$(basename "$iface")
-		[ "$name" = lo ] && continue
-		ip link set "$name" up 2>/dev/null || true
-	done
-fi
-/usr/bin/driver-report >/tmp/driver-report.txt 2>&1 || true
+# Network/storage helpers and the inventory are not prerequisites for the
+# first desktop frame. Keep graphics probing above synchronous.
+(
+	modprobe e1000 2>/dev/null || true
+	modprobe virtio_net 2>/dev/null || true
+	modprobe virtio_blk 2>/dev/null || true
+	modprobe nvme 2>/dev/null || true
+	if command -v ip >/dev/null 2>&1; then
+		for iface in /sys/class/net/*; do
+			name=$(basename "$iface")
+			[ "$name" = lo ] && continue
+			ip link set "$name" up 2>/dev/null || true
+		done
+	fi
+	/usr/bin/driver-report >/tmp/driver-report.txt 2>&1 || true
+) &
 if grep -q 'olympium.contrast=1' /proc/cmdline 2>/dev/null; then
 	export DEV_DESK_CONTRAST=1
 fi
@@ -55,7 +59,7 @@ tail -n0 -f /run/dev-desktop/compositor.log | while IFS= read -r line; do
 done &
 echo $! > /run/dev-desktop/logpipe.pid
 set +e
-/usr/bin/dev-compositor -s /usr/libexec/dev-desktop/startup.sh >> /run/dev-desktop/compositor.log 2>&1
+/usr/bin/dev-compositor -n -s /usr/libexec/dev-desktop/startup.sh >> /run/dev-desktop/compositor.log 2>&1
 code=$?
 set -e
 kmsg "compositor exit ${code}"
@@ -63,6 +67,6 @@ if [ "$code" -ne 0 ] && [ "${WLR_RENDERER}" != pixman ]; then
 	export WLR_RENDERER=pixman
 	export DEV_DESK_CONTRAST=1
 	kmsg "retry pixman contrast"
-	exec /usr/bin/dev-compositor -s /usr/libexec/dev-desktop/startup.sh
+	exec /usr/bin/dev-compositor -n -s /usr/libexec/dev-desktop/startup.sh
 fi
 exit "$code"

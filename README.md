@@ -26,6 +26,10 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 
 What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation and no Mission Control. The search panel finds programs and does not look in files. Quick settings is a menu of what this desktop can switch itself; it has no sound, brightness, or Wi-Fi controls.
 
+## Compatibility development
+
+Pinned upstream source roots can be downloaded with `python3 image/fetch-compat-sources.py`. This does not install or enable Android, macOS GUI, or OpenHarmony support. See `docs/five-platform-integration.md` for the verified state and remaining runtime work.
+
 ## Build
 
 The build needs root, `debootstrap`, `mksquashfs`, `grub-mkrescue`, and a network path to the Ubuntu 24.04 archive. On x86_64:
@@ -48,12 +52,14 @@ Host checks that do not need an ISO:
 
 ```sh
 make -C desktop test
+make -C desktop test-render
+make -C desktop test-startup
 make -C desktop test-wine
 make -C desktop test-mac
 make -C desktop test-packages
 ```
 
-The second one needs Wine, Xwayland, and mingw on the host. The third needs 7-Zip, cpio, and python3. The fourth needs dpkg-deb, and the rpm tools for its `.rpm` part. Each exits 77 without what it needs. Building `dev-install` needs the `liblzma` and `zlib` headers.
+`test-startup` checks native session startup and driver indexing. `test-render` and `test-startup` need Xwayland, Python 3, and the desktop build dependencies. It checks idle frame counts, shell invalidation, and repeated X window unmap/remap/destroy cycles. Run compositor integration suites sequentially: they share `/run/dev-desktop/control` and status. `test-wine` needs Wine, Xwayland, and mingw on the host. `test-mac` needs 7-Zip, cpio, and python3. `test-packages` needs dpkg-deb, and the rpm tools for its `.rpm` part. Each exits 77 without what it needs. Building `dev-install` needs the `liblzma` and `zlib` headers.
 
 `desktop/protocol/xdg-shell-protocol.h` is generated from wayland-protocols (MIT). Regenerate it with `wayland-scanner server-header` if you need to.
 

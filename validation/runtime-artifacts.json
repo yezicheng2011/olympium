@@ -1,0 +1,88 @@
+{
+  "purpose": "Download identity and integrity evidence only; this does not certify application execution.",
+  "artifacts": [
+    {
+      "path": "emulator",
+      "url": "https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip",
+      "size": 349658551,
+      "checksum": "f41f9e31eb5ca64926603c03265c50bbc0ff4172",
+      "algorithm": "sha1"
+    },
+    {
+      "path": "platform-tools",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip",
+      "size": 9054187,
+      "checksum": "477254aa5f903c15cf51001717bdf347fb6b53e0",
+      "algorithm": "sha1"
+    },
+    {
+      "path": "system-images;android-30;default;x86_64",
+      "url": "https://dl.google.com/android/repository/sys-img/android/x86_64-30_r11.zip",
+      "size": 676379777,
+      "checksum": "5e4de3946d46f88856c35efcc4d797b381456347",
+      "algorithm": "sha1"
+    },
+    {
+      "path": "system-images;android-28;default;x86",
+      "url": "https://dl.google.com/android/repository/sys-img/android/x86-28_r04.zip",
+      "size": 437320152,
+      "algorithm": "sha1",
+      "checksum": "ce03c42d80c0fc6dc47f6455dbee7aa275d02780"
+    },
+    {
+      "path": "Fossify Calculator 1.4.0 (package org.fossify.math)",
+      "url": "https://github.com/FossifyOrg/Calculator/releases/download/1.4.0/calculator-10-foss-release.apk",
+      "size": 7047681,
+      "algorithm": "sha256",
+      "checksum": "7c5443c22d6d62c67dfe80df33ea9161ff0fa440f92590bcb45d7008b57613ed"
+    },
+    {
+      "path": "Darling official GUI packages v0.1.20260608",
+      "url": "https://github.com/darlinghq/darling/releases/download/v0.1.20260608/debs_20260608.zip",
+      "size": 118018438,
+      "algorithm": "sha256",
+      "checksum": "27469ef3932da2e91dd7fb34b70e3628a3e54b7af9fb5480051f44af35eca1fd"
+    },
+    {
+      "path": "scrcpy v5.0.1 Linux x86_64",
+      "url": "https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-linux-x86_64-v5.0.1.tar.gz",
+      "size": 17883742,
+      "algorithm": "sha256",
+      "checksum": "9f969d30cc574816077edecda65719c1c70b0aee1df1ba5fa00779ac07b8fd6e"
+    },
+    {
+      "path": "Oniro/OpenHarmony 6.1 emulator",
+      "url": "https://github.com/eclipse-oniro4openharmony/device_board_oniro/releases/download/v6.1/oniro_emulator.zip",
+      "size": 1449068188,
+      "algorithm": "sha256",
+      "checksum": "a30e01f1b161e0fdcd91263f30f29cc92bfa49c1776d5ee2c46caefef055b2da"
+    },
+    {
+      "path": "Ubuntu 24.04 Linux guest used for Darling validation",
+      "url": "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img",
+      "algorithm": "sha256",
+      "checksum": "04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94",
+      "note": "The current/ URL changes. A future different checksum requires reviewing new publisher metadata; do not bypass this checksum."
+    },
+    {
+      "path": "OpenHarmony SDK 6.1 fragment ohos-sdk-windows_linux-public.tar.gz.aa",
+      "url": "https://github.com/openharmony-rs/ohos-sdk/releases/download/v6.1/ohos-sdk-windows_linux-public.tar.gz.aa",
+      "size": 2000000000,
+      "algorithm": "sha256",
+      "checksum": "5b05ef097757a752142667ba5bc851b041b6865c857e15ae278c1e27b787a3ba"
+    },
+    {
+      "path": "OpenHarmony SDK 6.1 fragment ohos-sdk-windows_linux-public.tar.gz.ab",
+      "url": "https://github.com/openharmony-rs/ohos-sdk/releases/download/v6.1/ohos-sdk-windows_linux-public.tar.gz.ab",
+      "size": 499936800,
+      "algorithm": "sha256",
+      "checksum": "a79343445394e02be5a1dc8a78a2ddb31d2a8be9678156bdb3cd929eab06ee8a"
+    },
+    {
+      "path": "OpenHarmony SDK 6.1 assembled archive",
+      "algorithm": "sha256",
+      "checksum": "b833b75a64ee46bbd7880921abbb49b733ec5c8171b6684c9b524d57f624cee0",
+      "note": "Concatenate verified .aa and .ab fragments in this order. Verify the assembled archive before extraction. SDK mirror: openharmony-rs/ohos-sdk; this is distinct from the Eclipse image publisher."
+    }
+  ]
+}
