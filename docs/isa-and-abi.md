@@ -12,7 +12,7 @@ Running a macOS graphical application needs several layers. Each layer is necess
 | Objective-C runtime | Sends messages and builds classes | Provide widgets |
 | AppKit | Draws a macOS graphical application | Run a Linux program or supply Apple's frameworks |
 
-Darling is an open-source project that provides those layers on Linux: a Mach-O loader, `dyld`, `libSystem`, an Objective-C runtime, and a partial AppKit. It is built from open-source code, some of it published by Apple, and does not include Apple's closed frameworks. It does not translate instructions: an x86_64 Mac program needs an x86_64 computer under it. This desktop unpacks a Mac application and hands it to Darling when Darling is installed, and checks first that the program has code for this computer's CPU. Darling is not in the image. See `docs/mac-apps.md`.
+Darling is an open-source project that provides those layers on Linux: a Mach-O loader, `dyld`, `libSystem`, an Objective-C runtime, and a partial AppKit. It is built from open-source code, some of it published by Apple, and does not include Apple's closed frameworks. It does not translate instructions: an x86_64 Mac program needs an x86_64 computer under it. This desktop unpacks a Mac application and hands it to Darling when Darling is installed, and checks first that the program has code for this computer's CPU. Darling is in the image only when it is built with `OLYMPIUM_DARLING=1`. See `docs/mac-apps.md`.
 
 A pure software translator, including one that does not use KVM or HVF, only covers the first row. The Olympium repository is where that translator is being written. This image does not contain that translator and does not claim it is finished.
 

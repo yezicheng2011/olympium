@@ -300,7 +300,7 @@ static GtkWidget *page_compat(void) {
 		"A Mac disk image, installer package, or application folder opens in Install. "
 		"The application is copied into Applications and appears in Launchpad with its own icon. "
 		"Nothing from the file is run, and a package's installer scripts are not used. "
-		"A Mac application starts only through the Darling runtime, which this image does not include; "
+		"A Mac application starts only through the Darling runtime, when it is installed; "
 		"without it, opening one says so. A bare Mach-O file is identified and not executed. "
 		"No Apple operating system, framework, font, or artwork is included. "
 		"Code signatures and DRM are not bypassed.\n\n"

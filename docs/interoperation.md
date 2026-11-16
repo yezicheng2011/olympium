@@ -1,6 +1,6 @@
 # Programs from different systems on one desktop
 
-This is what a Linux program and a Windows program can do with each other on this desktop, what the desktop draws around them, and what was run. There is no Android runtime in the image, so Android takes no part. A Mac application can be installed and listed, and is started only through Darling, which is not in the image; `docs/mac-apps.md` covers that, and no Mac program took part in anything here.
+This is what a Linux program and a Windows program can do with each other on this desktop, what the desktop draws around them, and what was run. There is no Android runtime in the image, so Android takes no part. A Mac application can be installed and listed, and is started only through Darling; `docs/mac-apps.md` covers that. The one Mac program that was run is a command-line program, so it took no part in the clipboard or anything else on this page.
 
 ## Between a Windows program and a Linux program
 

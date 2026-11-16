@@ -573,24 +573,36 @@ else
 fi
 
 # 10. With a real Mac runtime on this machine: one of its own command-line
-# programs, wrapped in a disk image, through the whole path. Without one, no
-# Mac program is run, and this says so.
+# programs, a real Mach-O executable, wrapped in a disk image and in a package
+# and taken through the whole path: read, unpacked confined, installed,
+# checksummed, checked for this CPU, and started by the helper the image
+# ships. Without a runtime, no Mac program is run, and this says so.
 if command -v darling >/dev/null 2>&1; then
 	echo_program=$(dirname "$(dirname "$(command -v darling)")")/libexec/darling/bin/echo
 	if [ -f "$echo_program" ]; then
-		reset_desk
-		python3 mac-fixtures.py --wrap "$echo_program" "Desk Echo" "$FX/DeskEcho.dmg" >/dev/null
-		./dev-install import --consent "$FX/DeskEcho.dmg" >"$ROOT/echo-import.log" 2>&1
-		id=$(mac_id "Desk Echo")
-		archs=$(sed -n 's/^archs=//p' "$ROOT/echo-import.log")
-		said=$(OLYMPIUM_MAC_RUNTIME=$PWD/../image/olympium-mac-run timeout 300 \
-			./dev-install launch "$id" "said by a Mac program" "from a disk image" 2>"$ROOT/echo-launch.err" | tail -n 1)
-		if [ "$said" = "said by a Mac program from a disk image" ]; then
-			ok "a Mach-O program ($archs) from a disk image ran through Darling and printed its arguments"
-		else
-			bad "the Mac program did not run: got '$said'"
-			tail -n 5 "$ROOT/echo-launch.err"
-		fi
+		for form in dmg pkg; do
+			reset_desk
+			python3 mac-fixtures.py --wrap "$echo_program" "Desk Echo" "$FX/DeskEcho.$form" >/dev/null
+			./dev-install import --consent "$FX/DeskEcho.$form" >"$ROOT/echo-import.log" 2>&1
+			id=$(mac_id "Desk Echo")
+			archs=$(sed -n 's/^archs=//p' "$ROOT/echo-import.log")
+			said=$(OLYMPIUM_MAC_RUNTIME=$PWD/../image/olympium-mac-run timeout 300 \
+				./dev-install launch "$id" "said by a Mac program" "from a .$form" 2>"$ROOT/echo-launch.err" | tail -n 1)
+			if [ "$said" = "said by a Mac program from a .$form" ] &&
+					cmp -s "$echo_program" "$APPS/Desk Echo.app/Contents/MacOS/Desk Echo"; then
+				ok "a Mach-O program ($archs) from a .$form ran through Darling and printed its arguments"
+			else
+				bad "the Mac program from a .$form did not run: got '$said'"
+				tail -n 5 "$ROOT/echo-launch.err"
+			fi
+		done
+		# The same program, changed by one byte after install, is not handed over.
+		printf 'x' >> "$APPS/Desk Echo.app/Contents/MacOS/Desk Echo"
+		said=$(OLYMPIUM_MAC_RUNTIME=$PWD/../image/olympium-mac-run timeout 60 \
+			./dev-install launch "$id" "must not be said" 2>/dev/null | tail -n 1)
+		[ "$said" != "must not be said" ] && ok "with the runtime present, a changed program is still not started" ||
+			bad "a changed program was started"
+		darling shutdown >/dev/null 2>&1
 	else
 		echo "Darling is installed but its echo was not found at $echo_program; no Mac program was run"
 	fi

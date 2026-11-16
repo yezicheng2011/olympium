@@ -118,6 +118,12 @@ if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
 	bash "$REPO/image/install-wine.sh" "$ROOT" "$ARCH"
 	umount_chroot
 fi
+# OLYMPIUM_DARLING=1 copies in a Mac runtime staged by image/build-darling.sh.
+if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
+	mount_chroot
+	bash "$REPO/image/install-darling.sh" "$ROOT"
+	umount_chroot
+fi
 # A prefix built now is one the first Windows program does not wait for.
 # amd64 and i386 roots run natively on an x86_64 builder. An arm64 root
 # would run wineboot under qemu-user, which was not tried.

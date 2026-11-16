@@ -10,7 +10,7 @@ after it. The bundle cannot run anywhere. It is there so the desktop's
 unpacking, naming, icon, and architecture checks have something real to read.
 
   mac-fixtures.py OUTDIR
-  mac-fixtures.py --wrap PROGRAM NAME OUT.dmg
+  mac-fixtures.py --wrap PROGRAM NAME OUT.dmg   (or OUT.pkg)
 
   DeskMac.dmg        zlib UDIF, HFS+ volume, one x86_64+arm64 application
   DeskMacApm.dmg     the same volume behind an Apple partition map
@@ -551,11 +551,15 @@ def wrap(program_path, name, out_path):
     with open(program_path, "rb") as handle:
         program = handle.read()
     files = bundle_files(name, [CPU_X86_64], program=program)
-    blocks = max(1024, (sum(len(d) for d, _ in files.values()) // BLOCK) * 3 // 2 + 256)
-    volume = Hfs(name, total_blocks=blocks)
-    for path, (data, mode) in files.items():
-        volume.add_file(path, data, mode)
-    write(out_path, udif([("whole disk (Apple_HFS : 0)", volume.build())]))
+    if out_path.endswith(".pkg"):
+        identifier = "example.olympium." + name.replace(" ", "").lower()
+        write(out_path, package(name, identifier, files, "pbzx", os.devnull))
+    else:
+        blocks = max(1024, (sum(len(d) for d, _ in files.values()) // BLOCK) * 3 // 2 + 256)
+        volume = Hfs(name, total_blocks=blocks)
+        for path, (data, mode) in files.items():
+            volume.add_file(path, data, mode)
+        write(out_path, udif([("whole disk (Apple_HFS : 0)", volume.build())]))
     print("wrapped", program_path, "as", out_path)
 
 

@@ -94,7 +94,9 @@ Use `-vga virtio`. Debian 6.1's bochs display does not advertise PRIME import, a
 
 A Mac disk image (`.dmg`), installer package (`.pkg`), or application folder (`.app`) opens in Install. The application is copied into this desktop's Applications folder and appears in Launchpad with its own icon. Nothing from the file is run, and a package's installer scripts are not used. The unpacking is done by a confined child process that can write nowhere but its staging folder. `docs/mac-apps.md` says what was run.
 
-An installed Mac application is started through Darling, the open-source project that runs macOS programs on Linux. Darling is not in this image, and no Mac program was run for anything in this tree: the build machine could not get Darling. Without it, opening a Mac application shows a window that says so, and the application stays installed. This desktop has no Mach-O loader of its own and no other way to start one.
+An installed Mac application is started through Darling, the open-source project that runs macOS programs on Linux. `image/build-darling.sh` builds it from source and the image build copies it in when it is asked to with `OLYMPIUM_DARLING=1`. Without Darling, opening a Mac application shows a window that says so, and the application stays installed. This desktop has no Mach-O loader of its own and no other way to start one.
+
+On the build machine, with Darling built from source there, a real Mach-O command-line program was carried in a `.dmg` and in a `.pkg`, installed by the desktop, started through Darling, and printed its arguments. No graphical Mac application was run. The Darling that was built has no AppKit, and Darling describes its support for graphical applications as in development.
 
 This image does not include Apple trademarks, fonts, artwork, an Apple SDK, or a macOS system image, and it does not bypass code signing or DRM. Apple's own applications are licensed for Apple hardware and are not what this is for. The test files are written byte by byte by `desktop/mac-fixtures.py`; none comes from Apple or from any vendor.
 

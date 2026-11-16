@@ -42,7 +42,7 @@ The rows above are stubs, and `desktop/test-install.sh` still requires them to s
 | Real `.rpm` `desk-rpm`. | On `9c1b41e4…`, consent extracted it with `rpm2cpio` and `cpio`. The script wrote `desk-rpm-ready`. Launchpad and the dock showed it. |
 | Real PE32+ `desk-win.exe`, built with mingw. | On `9c1b41e4…`, consent did not start it. Launch ran `/usr/bin/wine` with that path. Wine is Ubuntu `9.0~repack-4build3`. The window mapped at 43.3s of compositor time. The process timer to `WM_CREATE` was 26 ms, which is not the wait for the window. `docs/startup-latency.md` splits the 43.3 s. |
 | A Mach-O file on its own. | Still `keep`. The pinned plan on Linux is `apple-platform-on-non-apple-hardware`. No window was opened. |
-| Mac `.dmg`, `.pkg`, and `.app`, written by `desktop/mac-fixtures.py`. | `mac`. On the build machine, consent unpacked the application in a confined child and put it in Applications with a Launchpad entry and its icon. No installer script ran. No Mac program ran: Darling is not installed there. `docs/mac-apps.md` has the list. |
+| Mac `.dmg`, `.pkg`, and `.app`, written by `desktop/mac-fixtures.py`. | `mac`. On the build machine, consent unpacked the application in a confined child and put it in Applications with a Launchpad entry and its icon. No installer script ran. With Darling built on that machine, a command-line Mach-O program installed this way was started and ran. `docs/mac-apps.md` has the list. |
 | `.apk`, `.hap`, `.msi`, Flatpak, snap, AppImage. | Not installed. Not claimed. |
 
 A native Linux program runs as the user. Running it is not sandboxed, and no Apple or Microsoft signature is checked.

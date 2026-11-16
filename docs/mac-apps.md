@@ -2,9 +2,9 @@
 
 A Mac application arrives as a disk image (`.dmg`), an installer package (`.pkg`), or a bare `.app` folder. This desktop opens all three. Opening means reading what is inside and copying the application into this desktop's own Applications folder, where Launchpad shows it with its own icon.
 
-Opening does not mean running. Nothing in the file is run to install it. An installed application is started through Darling, the open-source project that runs macOS programs on Linux the way Wine runs Windows programs. Darling is not in this image. Without it, opening an application says so in a window, and the application stays installed.
+Opening does not mean running. Nothing in the file is run to install it. An installed application is started through Darling, the open-source project that runs macOS programs on Linux the way Wine runs Windows programs. The image carries Darling only when it is built with `OLYMPIUM_DARLING=1`. Without it, opening an application says so in a window, and the application stays installed.
 
-No Mac program was run for anything on this page. The build machine could not get Darling: it is in neither Ubuntu's nor Debian's archive, and the network there does not reach where Darling is published.
+A Mac program was run this way on the build machine: a real Mach-O executable, carried in a `.dmg` and in a `.pkg`, installed by this desktop, and started through a Darling built there from source. It was a command-line program. No graphical Mac application was run, and the Darling that was built cannot open one. The section "What was run with Darling" below has the details.
 
 ## What each file is and what Install does with it
 
@@ -58,7 +58,7 @@ Launchpad applies the same rule to every program, not only Mac ones. A picture i
 
 Each refusal is shown in a window with the application's icon, because a launch from Launchpad has no terminal to print to.
 
-`olympium-mac-run` is a script so that the one place that knows how Darling is called can be changed without rebuilding anything. It calls `darling shell` with the program's path under `/Volumes/SystemRoot`, which is where Darling's documentation says the Linux file system appears. That call was not run against a real Darling.
+`olympium-mac-run` is a script so that the one place that knows how Darling is called can be changed without rebuilding anything. It first brings Darling's container up with a command that does nothing, trying again up to five times, and then runs `darling PROGRAM ARGUMENTS`. Darling takes a path on this system and runs the file as it appears inside its prefix, under `/Volumes/SystemRoot`. The retry is there because, at the revision that was run, Darling's server crashed during the very first start of a new prefix in two of four tries and then worked.
 
 This desktop does not load Mach-O programs itself and has no other way to start one. It does not check a code signature and does not get around one. It does not get around DRM. The pinned Olympium runtime's refusal to start macOS software is unchanged: Mac files are read by the desktop and are not sent to that runtime. Apple's own applications are licensed for Apple hardware and are not what this is for.
 
@@ -95,13 +95,23 @@ The files it opens are written by `desktop/mac-fixtures.py`, byte by byte: an HF
 - With the confinement forced to `nobody`, a disk image and a package installed the same files, owned by root afterwards. A file that user could not read was refused.
 - On the compositor with the headless backend: the Install window mapped. Stop, pressed while a 24 MB disk image was being read, ended the install and left no staging folder. Install, pressed, installed it. Launchpad listed three Mac applications, each with its icon file. Started from Launchpad with no runtime, a window titled with the application's name mapped. Started from Launchpad with the stand-in in the helper's place, the stand-in received the program.
 
+## What was run with Darling
+
+Darling at commit `3fcd2e1aa85079789d19d82415695bdecc512241`, built from source on the build machine by the steps in `image/build-darling.sh`, component set `cli`: the loader, the server, the system libraries, and the command-line programs. The clone with its 157 submodules was 5 GB, the build was 15,457 steps and about 20 minutes on four processors, and what it installs is 293 MB. It was installed on the build machine itself, not in an image.
+
+- Inside it, `uname -a` printed `Darwin localhost 25.4.0 Darwin Kernel Version 25.4.0 x86_64`, and `sw_vers` printed `ProductName: macOS`.
+- `make -C desktop test-mac` then took one of Darling's own programs, `echo`, which `file` reports as a `Mach-O 64-bit x86_64 executable`, and wrapped it as the program of an application in a `.dmg` and in a `.pkg` with a pbzx payload. Each was installed by `dev-install`, and the installed program was byte for byte the original. `dev-install launch`, through the `olympium-mac-run` the image ships, started it, and it printed the two arguments it was given, one of them with spaces in it.
+- With one byte added to the installed program, the same launch did not start it.
+
+That is a Mac program going the whole way: disk image or package, confined unpacking, Applications, library entry, checksum, CPU check, runtime. It is a command-line program. It has no window.
+
 ## What was not run
 
-- No Mac program. Not with Darling, not any other way.
-- No disk image or package from a real vendor. Only the fixtures.
+- No graphical Mac application. The `cli` build has no AppKit. Darling's `gui` components were not built, and Darling describes its own support for graphical applications as in development. Nothing here shows that a Mac application with a window opens.
+- No application from a real vendor, and no disk image or package from one. Only the fixtures, and Darling's `echo` wrapped in them.
+- Nothing on a booted ISO. `image/install-darling.sh` copies a staged Darling into an image root and was not run against one.
 - No APFS volume. 7-Zip 23.01 says it reads APFS, and this desktop passes whatever 7-Zip lists; no APFS image was made or opened here. Newer disk images are often APFS.
 - No disk image with LZFSE or LZMA blocks, no encrypted disk image, and none with a license agreement in front of it.
 - No package with a bzip2 payload; the decoder does not read one and says so.
-- Nothing on a booted ISO. The image scripts now install `7zip`, `cpio`, and `librsvg2-common`, build against `liblzma` and `zlib`, and install `olympium-mac-run`, and none of those scripts was run.
 - The fallback confinement on a kernel that really lacks Landlock. It was forced on a kernel that has it.
-- The i386 and arm64 builds of any of this.
+- Darling on arm64, where it would run arm64 Mac programs. The i386 image cannot have it: Darling needs a 64-bit system.

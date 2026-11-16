@@ -42,4 +42,19 @@ case "$program" in
 	/*) ;;
 	*) echo "olympium-mac-run: the program path must be absolute" >&2; exit 2 ;;
 esac
+# Darling keeps one container per prefix and starts it on first use. At the
+# revision this was run against, the container's server sometimes crashes the
+# very first time a new prefix is set up, and the command then says "Try
+# again". So the container is brought up first, with a command that does
+# nothing, and tried again if it went down. Once a prefix exists this takes a
+# fraction of a second and succeeds at once.
+tries=0
+until darling shell true >/dev/null 2>&1; do
+	tries=$((tries + 1))
+	if [ "$tries" -ge 5 ]; then
+		echo "olympium-mac-run: Darling's container did not start" >&2
+		exit 4
+	fi
+	sleep 1
+done
 exec darling "$program" "$@"
