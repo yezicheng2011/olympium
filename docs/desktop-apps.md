@@ -41,20 +41,33 @@ The rows above are stubs, and `desktop/test-install.sh` still requires them to s
 | Real `.deb` `desk-note`, built in this repo. | On `c30c081c…`, consent extracted it with `dpkg-deb -x`. No maintainer script. Open of `hello.dnote` mapped Desk Note. A second window read the exchange file. |
 | Real `.rpm` `desk-rpm`. | On `9c1b41e4…`, consent extracted it with `rpm2cpio` and `cpio`. The script wrote `desk-rpm-ready`. Launchpad and the dock showed it. |
 | Real PE32+ `desk-win.exe`, built with mingw. | On `9c1b41e4…`, consent did not start it. Launch ran `/usr/bin/wine` with that path. Wine is Ubuntu `9.0~repack-4build3`. The window mapped at 43.3s of compositor time. The process timer to `WM_CREATE` was 26 ms, which is not the wait for the window. `docs/startup-latency.md` splits the 43.3 s. |
-| Mach-O. | Still `keep`. The pinned plan on Linux is `apple-platform-on-non-apple-hardware`. No window was opened. |
-| `.apk`, `.hap`, `.msi`, `.dmg`, Flatpak, snap, AppImage. | Not installed. Not claimed. |
+| A Mach-O file on its own. | Still `keep`. The pinned plan on Linux is `apple-platform-on-non-apple-hardware`. No window was opened. |
+| Mac `.dmg`, `.pkg`, and `.app`, written by `desktop/mac-fixtures.py`. | `mac`. On the build machine, consent unpacked the application in a confined child and put it in Applications with a Launchpad entry and its icon. No installer script ran. With Darling built on that machine, a command-line Mach-O program installed this way was started and ran. `docs/mac-apps.md` has the list. |
+| `.apk`, `.hap`, `.msi`, Flatpak, snap, AppImage. | Not installed. Not claimed. |
 
-A native Linux program runs as the user. This does not add a sandbox, and it does not check an Apple or Microsoft signature. The checksum is the SHA-256 of the file at import, checked again at launch. The runtime's refusal to start macOS or iOS software is not weakened.
+A native Linux program runs as the user. Running it is not sandboxed, and no Apple or Microsoft signature is checked.
+
+Unpacking is another matter. A package is whatever its author made it, and `dpkg-deb`, `tar`, `rpm2cpio`, and `cpio` run as the session's user, which on the live image is root. They now run in a confined child: with Landlock they can read the package and write only under the folder they unpack into, and on a kernel without Landlock they run as the user `nobody`. Afterwards set-user-ID and set-group-ID bits are cleared, devices and pipes are removed, and the files are given to the user who installed them. `docs/mac-apps.md` describes the confinement; it is the same code.
+
+`make -C desktop test-packages` on the build machine, with a stand-in for the `olympium` command that answers `classify` for these two formats:
+
+- The sample `.deb` installed, and its program was byte for byte the one in the package. The sample `.rpm` installed and its program ran.
+- A `.deb` with a set-user-ID and set-group-ID program and a sticky world-writable folder installed with those bits cleared.
+- A `.deb` with a device node in it was not installed, and no device was left behind.
+- A `.deb` with a link pointing outside, a file to be written through it, a path of `../`, and an absolute path was not installed, and nothing was written outside.
+- With the confinement forced to `nobody`, the sample `.deb` installed the same and ended up owned by root.
+
+Before this, the same packages were unpacked by root with no limit, and a set-user-ID program in a package stayed set-user-ID. The checksum is the SHA-256 of the file at import, checked again at launch. The runtime's refusal to start macOS or iOS software is not weakened.
 
 ## Where an imported program shows up
 
 | Surface | Mechanism | Tested |
 | --- | --- | --- |
 | Its own process | Launch execs the program. An ELF goes through `/usr/libexec/dev-desktop/olympium-run` when that file is executable, or through `OLYMPIUM_RUN` in the test. A script is exec'd directly, because `olympium-run` rejects a non-ELF. | The `true` copy exited 0 and the log said `native x86_64`. No imported program was drawn as a window in the compositor. The Lawful test app window in the earlier ISO boots was not opened by this installer. |
-| Launchpad | A `.desktop` file whose `Exec` is the wrapper path and nothing else. The scanner stops at the first space, so the wrapper takes the arguments. The directory is `$OLYMPIUM_DESK_HOME/applications` when that variable is set, otherwise `~/.local/share/applications`. | The file was written. Launchpad was not opened in a running compositor. The compositor does compile with the user-application scan. |
-| Dock | `$OLYMPIUM_DESK_HOME/pinned`, or `~/.local/share/olympium-desk/pinned`, lines of `name`, a tab, and an executable path. At most four. | The pin file was written. The dock was not drawn. |
+| Launchpad | A `.desktop` file whose `Exec` is the wrapper path, with an `Icon` line when the program has a picture. Launchpad runs the whole `Exec` line, so an entry written by something else keeps its arguments. The directory is `$OLYMPIUM_DESK_HOME/applications` when that variable is set, otherwise `~/.local/share/applications`, and the folders under it are read too. | On the build machine, with the headless backend: Launchpad listed and started a Windows shortcut, and listed three Mac applications with their icon files. On the boot of `9c1b41e4…` it listed `desk-win.exe` and `desk-rpm.rpm`. |
+| Dock | `$OLYMPIUM_DESK_HOME/pinned`, or `~/.local/share/olympium-desk/pinned`, lines of `name`, a tab, and an executable path. At most four. A program is pinned once, however often it is imported. A Mac application is not pinned. | The pin file was written. On the boot of `9c1b41e4…` the dock had a pin for each imported program. |
 | Open with | `--mime EXT` stores the extension. `dev-install open` of a file that is not itself a package, and whose extension matches, execs that wrapper. | A `.note` file was passed to the script. |
-| Files between programs | `$OLYMPIUM_DESK_HOME/exchange`, or `~/.local/share/olympium-desk/exchange`. | A write and a read of `hello.txt` on the host. No guest runtime mounts this directory. |
+| Files between programs | `$OLYMPIUM_DESK_HOME/exchange`, or `~/.local/share/olympium-desk/exchange`. It is drive `S:` for a Windows program. | A write and a read of `hello.txt` on the host. Under Wine on the build machine, a file went each way through `S:`. See `docs/interoperation.md`. |
 | Clipboard | The compositor creates a Wayland data device, and Xwayland's window manager carries the selection between X programs, which is what a Wine window is, and Wayland programs. | `make -C desktop test-wine` on the build machine, four runs: Desk Win copied `Desk Win ready` and the GTK Wayland program Desk Paste read it; Desk Note copied `Desk Note ready` and `desk-win.exe --paste` read it as `CF_TEXT`. Text only. Not run on a booted ISO. |
 
 Two limits of that clipboard path. A Windows program that copies before its window is in front is ignored: wlroots does not let an X program that is not focused replace the clipboard. A copy made in the front window is carried. And a Wayland program can only set the clipboard with a serial from an input event, so a program that copies before it has ever had focus is refused.

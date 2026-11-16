@@ -27,7 +27,8 @@ if grep -q 'olympium.opentest=1' /proc/cmdline 2>/dev/null; then
 	(sleep 12; /usr/bin/olympium-testapp >/tmp/testapp.log 2>&1) &
 fi
 if grep -q -e 'olympium.showinstall=1' -e 'olympium.importsample=1' \
-		-e 'olympium.showwine=1' -e 'olympium.importwine=1' /proc/cmdline 2>/dev/null; then
+		-e 'olympium.showwine=1' -e 'olympium.importwine=1' -e 'olympium.importmac=1' \
+		/proc/cmdline 2>/dev/null; then
 	(sleep 8; /usr/libexec/dev-desktop/install-sample.sh >/tmp/install-sample.log 2>&1) &
 fi
 if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
@@ -38,6 +39,15 @@ if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
 		echo "firefox: exit $? (log follows)"
 		tail -n 20 /tmp/firefox.log 2>/dev/null || true
 	) &
+fi
+# First launch: an account and the administrator password are asked for until
+# they have been set. A boot test passes olympium.* flags and is not asked,
+# unless it passes olympium.setup=1.
+if [ ! -e /var/lib/olympium/setup-done ] && [ -x /usr/bin/dev-settings ]; then
+	if grep -q 'olympium.setup=1' /proc/cmdline 2>/dev/null ||
+			! grep -q 'olympium\.[a-z0-9]*=' /proc/cmdline 2>/dev/null; then
+		(sleep 3; /usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
+	fi
 fi
 # Prewarm is off unless the user turned it on with "dev-install prewarm on".
 # While it is off this starts nothing and exits at once.

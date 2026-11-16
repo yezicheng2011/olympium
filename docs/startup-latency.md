@@ -43,8 +43,29 @@ The build machine has a page cache and a fast disk, so its 4.8 s is the same wor
 
 ## What was not measured
 
-The ISO was not rebuilt and not booted for this change. The build machine for this pass has no KVM, no `debootstrap` root, and no QEMU. The numbers above are host numbers. The live image should take the "prefix exists" row on its first launch, because the prefix is already in the squashfs, but no boot has shown that yet. `image/shot-wine.sh` prints the new marks when it is run.
+An amd64 image was then built from a fresh clone and booted; see "On a booted image" below.
 
 `install-to-disk` does not copy `/var/lib/olympium`, so an installed system starts without a prefix and seeds one on the first launch. That costs about 690 MB on the disk on top of the 690 MB prebuilt copy. `install-to-disk` was not changed and not run.
 
 The arm64 and i386 images have no Wine yet. `repack-install.sh` builds the prefix for amd64 and i386 roots. With `wine32` installed next to `wine64` the prefix is 1.3 GB before deduplication, not 690 MB; see `docs/wine-architectures.md`.
+
+## On a booted image
+
+`image/build-iso.sh amd64`, then `OLYMPIUM_WINE=1 OLYMPIUM_DARLING=1 image/repack-install.sh amd64`, then `image/shot-wine.sh` with `olympium.winefresh=1 olympium.importmac=1`. The build machine has no KVM, so QEMU 8.2 emulated the CPU (three cores, 6 GB). These times are an emulated machine's and are only comparable with each other.
+
+| Launch, same boot | Request to window |
+| --- | --- |
+| First launch, prefix carried in the image | 22.9 s |
+| Second launch, Wine still up | 3.7 s |
+| A prefix Wine has to build (what every first launch used to cost) | 126.5 s |
+
+The same boot unpacked the sample `.rpm` under Landlock and ran it, and installed and ran the Mac samples (`docs/mac-apps.md`).
+
+What the boot found and what was changed:
+
+- `build-iso.sh` wrote into `build/` before creating it, so a build from a fresh clone failed after the packages were installed.
+- An image without the separate Olympium runtime could not recognize an `.exe` or an `.rpm` at all. `dev-install` now reads both itself. `rpm` and `rpm2cpio` were not in the image and are now.
+- The session can start before Xwayland is ready (it waits four seconds). What the session started then had no `DISPLAY`, and a Windows program was refused. The compositor now writes the display's name to `$XDG_RUNTIME_DIR/olympium-xdisplay`, and `dev-install` waits for it (20 s, `OLYMPIUM_XWAIT`).
+- The compositor did not handle Xwayland's `dissociate` event. Its listeners stayed on a freed surface, and a window that was hidden and shown again never came back. Fixed, with `test-xremap` in `make test-wine`. One test run under load aborted with glibc's "corrupted unsorted chunks" after a Wine window closed. That abort was not reproduced again, before or after the fix, so it is not proven to be this bug.
+- Under emulation only: QEMU 8.2 with SMAP makes the guest kernel kill Wine. `shot-wine.sh` turns SMAP off when there is no KVM.
+- The idle desktop redraws every frame: about 20% of one core on the build machine. Not fixed yet.

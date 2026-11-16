@@ -77,6 +77,14 @@ if [ ! -x "$ROOT/usr/bin/firefox-esr" ] || [ ! -d "$ROOT/lib/modules" ]; then
 		bash coreutils util-linux pciutils usbutils \
 		mesa-vulkan-drivers wireless-regdb adwaita-icon-theme file cpio sudo
 fi
+# dev-install reads Mac disk images and packages with 7-Zip and cpio, and its
+# payload decoder is built against liblzma and zlib. librsvg2-common lets
+# Launchpad load SVG icons. A root made before these were needed gets them here.
+if ! chroot "$ROOT" dpkg -s 7zip liblzma-dev zlib1g-dev librsvg2-common rpm rpm2cpio >/dev/null 2>&1; then
+	chroot "$ROOT" apt-get update
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		7zip cpio librsvg2-common liblzma-dev zlib1g-dev rpm rpm2cpio
+fi
 
 install -d "$ROOT/usr/share/olympium"
 {
@@ -169,8 +177,12 @@ install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" \
 install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 	"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
 	"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
+if [ -x "$ROOT/tmp/desktop/dev-clip-helper" ]; then
+	install -m 755 "$ROOT/tmp/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+fi
 install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 	"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
+	"$REPO/image/olympium-mac-run" \
 	"$REPO/image/guest-fetch.sh" "$REPO/image/driver-report" "$REPO/image/driver-install" \
 	"$REPO/image/firefox-launch" "$REPO/image/install-sample.sh" \
 	"$ROOT/usr/libexec/dev-desktop/"

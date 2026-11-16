@@ -31,7 +31,34 @@ umount_chroot() {
 
 install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" "$ROOT/usr/share/olympium/samples"
 install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
-	"$REPO/image/install-sample.sh" "$ROOT/usr/libexec/dev-desktop/"
+	"$REPO/image/install-sample.sh" "$REPO/image/olympium-mac-run" \
+	"$ROOT/usr/libexec/dev-desktop/"
+# dev-install unpacks Mac disk images and packages with 7-Zip and cpio, and
+# an .rpm with rpm and rpm2cpio. A root made before those were needed gets
+# them added. Nothing else is downloaded.
+if { [ ! -x "$ROOT/usr/bin/7z" ] && [ ! -x "$ROOT/usr/bin/7zz" ]; } || [ ! -x "$ROOT/usr/bin/rpm2cpio" ]; then
+	mount_chroot
+	chroot "$ROOT" apt-get update
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		7zip cpio librsvg2-common rpm rpm2cpio
+	umount_chroot
+fi
+# Mac samples for the boot test: a disk image and an installer package that
+# desktop/mac-fixtures.py writes byte by byte. Nothing in them is Apple's.
+macfx=$(mktemp -d)
+python3 "$REPO/desktop/mac-fixtures.py" "$macfx" >/dev/null
+install -m 644 "$macfx/DeskMac.dmg" "$macfx/DeskMac.pkg" "$ROOT/usr/share/olympium/samples/"
+# With a staged Darling, one more: a disk image around a real Mach-O program,
+# Darling's own build of echo, so the boot test can start a Mac program.
+DARLING_STAGE=${DARLING_OUT:-/var/tmp/darling-out}
+rm -f "$ROOT/usr/share/olympium/samples/DeskEcho.dmg"
+if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ] \
+		&& [ -f "$DARLING_STAGE/usr/local/libexec/darling/bin/echo" ]; then
+	python3 "$REPO/desktop/mac-fixtures.py" --wrap \
+		"$DARLING_STAGE/usr/local/libexec/darling/bin/echo" "Desk Echo" "$macfx/DeskEcho.dmg"
+	install -m 644 "$macfx/DeskEcho.dmg" "$ROOT/usr/share/olympium/samples/"
+fi
+rm -rf "$macfx"
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.note"
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.dnote"
 rm -rf "$ROOT/tmp/desktop"
@@ -39,10 +66,13 @@ mkdir -p "$ROOT/tmp/desktop"
 cp -a "$REPO/desktop/." "$ROOT/tmp/desktop/"
 
 if [ "$ARCH" = amd64 ]; then
-	make -C "$REPO/desktop" dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
+	make -C "$REPO/desktop" clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
 	install -m 755 "$REPO/desktop/dev-compositor" "$REPO/desktop/dev-files" \
 		"$REPO/desktop/dev-settings" "$REPO/desktop/dev-swatch" \
 		"$REPO/desktop/dev-compat" "$REPO/desktop/dev-install" "$ROOT/usr/bin/"
+	if [ -x "$REPO/desktop/dev-clip-helper" ]; then
+		install -m 755 "$REPO/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+	fi
 	install -m 755 "$REPO/desktop/olympium-run" "$REPO/desktop/olympium-testapp" "$ROOT/usr/bin/"
 	install -m 755 "$REPO/desktop/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
 	sh "$REPO/image/build-sample-deb.sh" "$ROOT" "$REPO/desktop"
@@ -66,10 +96,13 @@ if [ "$ARCH" = amd64 ]; then
 	fi
 else
 	mount_chroot
-	chroot "$ROOT" make -C /tmp/desktop clean dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
+	chroot "$ROOT" make -C /tmp/desktop clean clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat dev-install olympium-run olympium-testapp
 	install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 		"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
 		"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
+	if [ -x "$ROOT/tmp/desktop/dev-clip-helper" ]; then
+		install -m 755 "$ROOT/tmp/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+	fi
 	install -m 755 "$ROOT/tmp/desktop/olympium-run" "$ROOT/tmp/desktop/olympium-testapp" "$ROOT/usr/bin/"
 	install -m 755 "$ROOT/tmp/desktop/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
 	cp "$REPO/image/build-sample-deb.sh" "$ROOT/tmp/build-sample-deb.sh"
@@ -100,6 +133,12 @@ fi
 if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
 	mount_chroot
 	bash "$REPO/image/install-wine.sh" "$ROOT" "$ARCH"
+	umount_chroot
+fi
+# OLYMPIUM_DARLING=1 copies in a Mac runtime staged by image/build-darling.sh.
+if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
+	mount_chroot
+	bash "$REPO/image/install-darling.sh" "$ROOT"
 	umount_chroot
 fi
 # A prefix built now is one the first Windows program does not wait for.

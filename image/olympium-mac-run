@@ -1,0 +1,82 @@
+#!/bin/sh
+# Copyright 2026 Development Desktop contributors
+# License: daniel.ye Source License, Version 1.0. See LICENSE.
+#
+# Starts one Mac program through Darling, when Darling is installed.
+#
+#   olympium-mac-run --check                 exit 0 when a Mac runtime is here
+#   olympium-mac-run APP PROGRAM [ARG...]    start PROGRAM, the program of APP
+#
+# Darling is the open-source project that runs macOS programs on Linux, the
+# way Wine runs Windows programs. It is not part of this tree and is not in
+# Ubuntu's or Debian's archives. This script only calls it. dev-install has
+# already checked the program's checksum and that it has code for this CPU.
+#
+# Darling's command line, as its source at 3fcd2e1a has it:
+#
+#   darling <program-path> [arguments...]
+#
+# The path is a path on this system. Darling resolves it and runs the file as
+# it appears inside its prefix, under /Volumes/SystemRoot. Arguments are
+# passed as they are, so a path with a space in it needs no quoting here.
+#
+# It does not check a code signature, and it does not get around one. Apple's
+# own applications are licensed for Apple hardware and are not what this is
+# for.
+set -u
+if [ "${1:-}" = "--check" ]; then
+	command -v darling >/dev/null 2>&1
+	exit $?
+fi
+if [ "$#" -lt 2 ]; then
+	echo "usage: olympium-mac-run APP PROGRAM [ARG...]" >&2
+	exit 2
+fi
+if ! command -v darling >/dev/null 2>&1; then
+	echo "olympium-mac-run: Darling is not installed" >&2
+	exit 3
+fi
+program=$2
+shift 2
+case "$program" in
+	/*) ;;
+	*) echo "olympium-mac-run: the program path must be absolute" >&2; exit 2 ;;
+esac
+# Darling keeps its prefix under the home directory. A session started by
+# the system may have no HOME set.
+if [ -z "${HOME:-}" ]; then
+	HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+	export HOME=${HOME:-/root}
+fi
+# Darling mounts its prefix as an overlay with the prefix as the upper layer,
+# and the kernel does not allow that on top of another overlay. The home
+# folder of a live system is one: Darling stops there with "Cannot mount an
+# overlay". So on such a home the prefix goes on a memory file system
+# instead, where it lasts until shutdown, like everything else a live system
+# writes. An installed system has an ordinary home and keeps ~/.darling.
+if [ -z "${DPREFIX:-}" ] && [ "$(stat -f -c %T "$HOME" 2>/dev/null)" = overlayfs ]; then
+	for base in "${XDG_RUNTIME_DIR:-/run}" /run /dev/shm; do
+		if [ -d "$base" ] && [ -w "$base" ] && [ "$(stat -f -c %T "$base" 2>/dev/null)" = tmpfs ]; then
+			mkdir -p "$base/olympium-mac" && chmod 700 "$base/olympium-mac"
+			export DPREFIX="$base/olympium-mac/prefix-$(id -u)"
+			break
+		fi
+	done
+fi
+# Darling keeps one container per prefix and starts it on first use. At the
+# revision this was run against, the container's server sometimes crashes the
+# very first time a new prefix is set up, and the command then says "Try
+# again", and says it again until the crashed container has been cleared
+# away. So the container is brought up first, with a command that does
+# nothing, and tried again if it went down. Once a prefix exists this takes a
+# fraction of a second and succeeds at once.
+tries=0
+until darling shell true >/dev/null 2>&1; do
+	tries=$((tries + 1))
+	if [ "$tries" -ge 12 ]; then
+		echo "olympium-mac-run: Darling's container did not start" >&2
+		exit 4
+	fi
+	sleep 1
+done
+exec darling "$program" "$@"

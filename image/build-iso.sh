@@ -171,7 +171,8 @@ verify_drivers() {
 			miss=1
 		fi
 	done
-	install -d "$ROOT/usr/share/olympium"
+	# build/ is not in the repository, so a fresh clone does not have it yet.
+	install -d "$ROOT/usr/share/olympium" "$REPO/build"
 	{
 		echo "arch ${ARCH}"
 		echo "kernel ${kver}"
@@ -198,7 +199,16 @@ install_packages() {
 		libdrm2 libpixman-1-0 libwayland-server0 libegl1 libgles2 libgl1-mesa-dri \
 		libgtk-3-0 foot fonts-dejavu-core adwaita-icon-theme ca-certificates \
 		e2fsprogs dosfstools parted grub-common util-linux bash coreutils \
-		libwlroots12t64 libseat1
+		libwlroots12t64 libseat1 \
+		7zip cpio librsvg2-common rpm rpm2cpio \
+		network-manager wpasupplicant iw rfkill bluez modemmanager usb-modeswitch
+	# network-manager with wpasupplicant joins Wi-Fi networks, bluez is the
+	# Bluetooth stack, and modemmanager with usb-modeswitch drives LTE and 5G
+	# modems that speak QMI, MBIM or AT. The kernel drivers and firmware for
+	# them come with linux-modules-extra and linux-firmware below.
+	# 7zip and cpio unpack Mac disk images and packages for dev-install.
+	# rpm and rpm2cpio are what it reads and unpacks an .rpm with.
+	# librsvg2-common lets Launchpad load a program's SVG icon.
 	if [ "$ARCH" = amd64 ]; then
 		DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
 			grub-efi-amd64-bin grub-pc-bin
@@ -206,7 +216,8 @@ install_packages() {
 		DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
 			grub-efi-arm64-bin xorriso mtools build-essential pkg-config libwlroots-dev libwayland-dev \
 			libcairo2-dev libpango1.0-dev libinput-dev libxkbcommon-dev libdrm-dev \
-			libpixman-1-dev libgtk-3-dev wayland-protocols
+			libpixman-1-dev libgtk-3-dev wayland-protocols libxcb1-dev libxcb-xfixes0-dev \
+			liblzma-dev zlib1g-dev
 	fi
 }
 
@@ -229,12 +240,21 @@ stage_desktop() {
 	install -m 755 "$REPO/desktop/dev-compositor" "$REPO/desktop/dev-files" \
 		"$REPO/desktop/dev-settings" "$REPO/desktop/dev-swatch" \
 		"$REPO/desktop/dev-compat" "$REPO/desktop/dev-install" "$ROOT/usr/bin/"
+	# The clipboard helper is built where xcb-xfixes is on the build machine.
+	if [ -x "$REPO/desktop/dev-clip-helper" ]; then
+		install -m 755 "$REPO/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+	fi
 	install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 		"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
+		"$REPO/image/olympium-mac-run" \
 		"$REPO/image/guest-fetch.sh" \
 		"$REPO/image/driver-report" "$REPO/image/driver-install" \
 		"$REPO/image/install-sample.sh" \
 		"$ROOT/usr/libexec/dev-desktop/"
+	# A Mac runtime, when one was staged by image/build-darling.sh and asked for.
+	if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
+		bash "$REPO/image/install-darling.sh" "$ROOT"
+	fi
 	install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
 	install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
 	install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
@@ -561,6 +581,9 @@ if [ "$ARCH" = arm64 ]; then
 	install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 		"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
 		"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
+	if [ -x "$ROOT/tmp/desktop/dev-clip-helper" ]; then
+		install -m 755 "$ROOT/tmp/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
+	fi
 	file "$ROOT/usr/bin/dev-compositor"
 fi
 # shellcheck source=image/stage-bitness.sh

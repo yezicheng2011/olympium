@@ -48,6 +48,12 @@ A `macos` file can be kept with `add`. The library row is `launch=refused`. Ther
 
 An `ios` file is not passed to `add` or `run`.
 
+## Mac files do not go to the runtime
+
+A `.dmg`, a `.pkg`, and an `.app` folder are recognized by the desktop before any of the calls above, and none of those calls is made for them. `classify`, `plan`, `add`, and `run` never see them. The desktop unpacks the application itself and starts it only through Darling when Darling is installed; `docs/mac-apps.md` describes that. The runtime's refusal to start macOS software is not touched and not worked around: nothing asks the runtime to start one.
+
+A Mach-O file on its own is still sent to `classify` and `plan` and can still be kept with `add`, as the section above says.
+
 ## What a newer runtime must keep
 
 A drop-in `olympium` can add JSON keys. It must not stop returning the fields above, and it must not start a macOS or iOS program on Linux. A native Linux plan must still say `launch.type` `process`, `surface.mode` `native`, and `hides_runtime_chrome` true, or the desktop will stop offering Launch.

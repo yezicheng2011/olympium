@@ -12,14 +12,28 @@ STAGE=${3:-/var/tmp/dev-live/iso-amd64-install}
 MON=/tmp/qemu-wine.sock
 LOG=$OUT/wine-serial.log
 mkdir -p "$OUT"
-KVM=()
+# Without /dev/kvm QEMU emulates every instruction. The boot still works, and
+# everything in it takes many times longer, so the waits here and the waits
+# inside the image (olympium.waitscale) are stretched by the same factor.
+# OLYMPIUM_BOOT_FLAGS adds kernel flags: olympium.winefresh=1 also times a
+# prefix Wine has to build, olympium.importmac=1 installs the Mac samples.
+# The emulated CPU is QEMU's fullest one with SMAP taken out. QEMU 8.2 reads
+# the stack as the kernel would when a program runs IRETQ in user mode, which
+# Wine does on every return from a system call it handles. With SMAP on, the
+# guest kernel takes that for its own fault and kills the Wine process
+# ("supervisor read access in user mode"). That is the emulator, not Wine and
+# not this image: a real CPU and KVM do not do it.
+KVM=(-cpu max,smap=off)
+SCALE=${OLYMPIUM_WAITSCALE:-4}
 if [ -e /dev/kvm ]; then
 	KVM=(-enable-kvm -cpu host)
+	SCALE=${OLYMPIUM_WAITSCALE:-1}
 fi
+FLAGS=${OLYMPIUM_BOOT_FLAGS:-}
 rm -f "$MON" "$LOG"
-qemu-system-x86_64 -m 3072 -smp 2 "${KVM[@]}" \
+qemu-system-x86_64 -m "${OLYMPIUM_VM_MB:-3072}" -smp "${OLYMPIUM_VM_CPUS:-2}" "${KVM[@]}" \
 	-kernel "$STAGE/boot/vmlinuz" -initrd "$STAGE/boot/initrd.img" \
-	-append "boot=live console=ttyS0,115200 console=tty0 olympium.showwine=1 olympium.importwine=1" \
+	-append "boot=live console=ttyS0,115200 console=tty0 olympium.showwine=1 olympium.importwine=1 olympium.waitscale=$SCALE $FLAGS" \
 	-cdrom "$ISO" -vga std -display none \
 	-serial file:"$LOG" \
 	-monitor unix:"$MON",server,nowait \
@@ -85,7 +99,7 @@ PY
 }
 
 wait_log() {
-	local pat=$1 tries=$2
+	local pat=$1 tries=$(($2 * SCALE))
 	for _ in $(seq 1 "$tries"); do
 		if grep -a -E -q "$pat" "$LOG" 2>/dev/null; then
 			return 0
@@ -113,6 +127,20 @@ if wait_log 'wine_cold_ms' 30; then
 	dump "$OUT/wine-marker.ppm" || true
 	png_from "$OUT/wine-marker.ppm" "$OUT/wine-marker.png" || true
 fi
+case " $FLAGS " in
+*" olympium.winefresh=1 "*)
+	wait_log 'wine_fresh_request_to_window_ms' 120 || true
+	;;
+esac
+case " $FLAGS " in
+*" olympium.importmac=1 "*)
+	if wait_log 'mac_program_said|mac refusal window mapped|mac runtime none' 90; then
+		sleep 3
+		dump "$OUT/mac.ppm" || true
+		png_from "$OUT/mac.ppm" "$OUT/mac.png" || true
+	fi
+	;;
+esac
 if wait_log 'launchpad entry:' 30; then
 	sleep 2
 	dump "$OUT/wine-launchpad.ppm" || true
@@ -121,6 +149,10 @@ fi
 kill "$pid" 2>/dev/null || true
 wait "$pid" 2>/dev/null || true
 echo '--- marks ---'
-grep -a -E 'xwayland on|wine install|wine import|wine_cold_ms|wine_request_to_window_ms|wine_prefix|wine_server_ms|prewarm|wine_exchange|rpm_exchange|launchpad entry|dock pin|window mapped|compositor on' "$LOG" | tail -80
+if [ ! -e /dev/kvm ]; then
+	echo "no /dev/kvm: this boot was emulated, and its times are not a real machine's"
+fi
+grep -a -E 'xwayland on|clipboard helper|wine install|wine import|wine_cold_ms|wine[a-z_]*_request_to_window_ms|wine[a-z_]*_prefix|wine[a-z_]*_server_ms|prewarm|wine_exchange|rpm_|mac |mac_|launchpad entry|dock pin|window mapped|compositor on|install-sample done' "$LOG" \
+	| sed 's/^\[ *[0-9.]*\] //' | awk '!seen[$0]++' | tail -120
 echo SHOT_INSTALL_DONE
 ls -l "$OUT"/*.png 2>/dev/null || true

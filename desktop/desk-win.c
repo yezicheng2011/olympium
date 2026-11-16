@@ -147,6 +147,32 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev, LPSTR cmd, int show) {
 	g_start = GetTickCount();
 	int once = cmd != NULL && strstr(cmd, "--once") != NULL;
 	g_paste = cmd != NULL && strstr(cmd, "--paste") != NULL;
+	/* A document path on the command line: say whether Windows can see it. */
+	if (cmd != NULL) {
+		const char *doc = cmd;
+		while (*doc == ' ') {
+			doc++;
+		}
+		if (*doc != '\0' && *doc != '-') {
+			char path[400];
+			char *end;
+			if (*doc == '"') {
+				/* A path with a space arrives in quotes. */
+				snprintf(path, sizeof path, "%s", doc + 1);
+				end = strchr(path, '"');
+			} else {
+				snprintf(path, sizeof path, "%s", doc);
+				end = strstr(path, " --");
+			}
+			if (end != NULL) {
+				*end = '\0';
+			}
+			char line[500];
+			snprintf(line, sizeof line, "%s %s\n",
+				GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES ? "opened" : "missing", path);
+			write_text("exchange/desk-win-open.txt", line);
+		}
+	}
 	WNDCLASSA cls;
 	memset(&cls, 0, sizeof cls);
 	cls.lpfnWndProc = wndproc;

@@ -10,17 +10,21 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 - If the renderer cannot read pixels back, the shell switches to an opaque drawing and says so in Settings. That fallback does not claim glass.
 - Menu bar: the dragon mark, the front application's name, File, Edit, View, Go, Window, and Help on the left. A network glyph, search and quick-settings glyphs, and the clock on the right. The network glyph is a fan wedge that fills with the live wireless signal, shows three dots under a full wedge for a wired link, and is struck through with no link.
 - Windows: rounded corners, a soft shadow, a centered title, and red, yellow, and green controls on the left. That includes Settings, Files, the terminal, and the purchase reminder.
-- Files: a sidebar of favorites and locations, back and forward, icon and list views, search, and an item count.
+- Files: a sidebar of favorites and locations, back and forward, icon and list views, search, and an item count. A Mac application folder is shown as one item with its own icon. A disk image and an installer package have their own drawings.
 - Dock: a centered glass capsule of unlabeled icons. An icon grows under the pointer, shows its name above the dock, and has a dot while that application has a window open.
-- Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
+- Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image, each with its own icon and its whole command: Linux programs, the shortcuts Windows installers create under Wine, and installed Mac applications. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
 - Settings: a search field, an icon sidebar, and grouped rows, in the arrangement of a system-settings window. The panes are appearance, drivers, compatibility, Olympium, license, and about. The sidebar glyphs are original.
+- Search: the magnifier in the menu bar, or Control or Super with Space, opens a glass panel. Typing finds programs by name in the same list Launchpad shows, names that start with what was typed first. Up and Down choose, Return starts, Escape closes. It finds programs, not files.
+- Quick settings: the two sliders in the menu bar open a short menu. Reduce Transparency and Widgets are ticked when on, a line reports the network, and the last line opens Settings.
+- Widgets: the time and date, this month, and memory, disk, and battery, as glass on the wallpaper under the windows. View, Show or Hide Widgets turns them off.
+- A window that is not in front has grey controls and a paler title.
 - Alt-drag moves a window.
 - The dock entry Olympium starts the Olympium runtime, a separate program that the image build copies in when a prebuilt copy is on the build machine. Without it the entry opens an explanation. See `docs/olympium-integration.md`.
 - The interface font is the Ubuntu family. Ubuntu Mono is the monospace face. Glyphs those faces do not include come from Noto Sans, then Noto Sans CJK, then DejaVu. Settings → Appearance names that chain.
 - Firefox is installed from Mozilla's package archive and is the default handler for http and https. The dock entry starts it. Ubuntu's transitional snap package is not used.
 - `install-to-disk /dev/sdX` copies the running system onto a whole disk and makes it bootable, for BIOS or UEFI, whichever this boot used.
 
-What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation, no Mission Control, no Spotlight panel behind the search glyph, and no quick-settings panel behind its glyph yet.
+What still differs from macOS at a glance: the system font is Ubuntu, not San Francisco. There is one title bar above each application's own toolbar instead of a single merged one. Application content is drawn by GTK, so buttons, text fields, and scroll bars inside a window are GTK's. There is no window-open or minimize animation and no Mission Control. The search panel finds programs and does not look in files. Quick settings is a menu of what this desktop can switch itself; it has no sound, brightness, or Wi-Fi controls.
 
 ## Build
 
@@ -45,9 +49,11 @@ Host checks that do not need an ISO:
 ```sh
 make -C desktop test
 make -C desktop test-wine
+make -C desktop test-mac
+make -C desktop test-packages
 ```
 
-The second one needs Wine, Xwayland, and mingw on the host, and exits 77 without them.
+The second one needs Wine, Xwayland, and mingw on the host. The third needs 7-Zip, cpio, and python3. The fourth needs dpkg-deb, and the rpm tools for its `.rpm` part. Each exits 77 without what it needs. Building `dev-install` needs the `liblzma` and `zlib` headers.
 
 `desktop/protocol/xdg-shell-protocol.h` is generated from wayland-protocols (MIT). Regenerate it with `wayland-scanner server-header` if you need to.
 
@@ -84,11 +90,17 @@ Use `-vga virtio`. Debian 6.1's bochs display does not advertise PRIME import, a
 
 `install-to-disk /dev/sdX` from a terminal on the live system erases that disk, copies the running system onto it, and installs the boot loader. It asks you to type the device name before it changes anything.
 
-## macOS applications
+## Mac applications
 
-The dock, Launchpad, and Files open the Lawful test app. It is a Linux window. It is not a Mac application. This image does not include Apple trademarks, fonts, artwork, an Apple SDK, or a macOS system image, and it does not bypass code signing or DRM.
+A Mac disk image (`.dmg`), installer package (`.pkg`), or application folder (`.app`) opens in Install. The application is copied into this desktop's Applications folder and appears in Launchpad with its own icon. Nothing from the file is run, and a package's installer scripts are not used. The unpacking is done by a confined child process that can write nowhere but its staging folder. `docs/mac-apps.md` says what was run.
 
-The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that program as a Linux executable. It also lists a Mach-O header fixture and does not start it. This repository does not change that runtime. iOS is not part of this system.
+An installed Mac application is started through Darling, the open-source project that runs macOS programs on Linux. `image/build-darling.sh` builds it from source and the image build copies it in when it is asked to with `OLYMPIUM_DARLING=1`. Without Darling, opening a Mac application shows a window that says so, and the application stays installed. This desktop has no Mach-O loader of its own and no other way to start one.
+
+On the build machine, with Darling built from source there, a real Mach-O command-line program was carried in a `.dmg` and in a `.pkg`, installed by the desktop, started through Darling, and printed its arguments. No graphical Mac application was run. The Darling that was built has no AppKit, and Darling describes its support for graphical applications as in development.
+
+This image does not include Apple trademarks, fonts, artwork, an Apple SDK, or a macOS system image, and it does not bypass code signing or DRM. Apple's own applications are licensed for Apple hardware and are not what this is for. The test files are written byte by byte by `desktop/mac-fixtures.py`; none comes from Apple or from any vendor.
+
+The dock, Launchpad, and Files also open the Lawful test app. It is a Linux window. It is not a Mac application. The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that program as a Linux executable. It also lists a Mach-O header fixture and does not start it. This repository does not change that runtime, and Mac files are not sent to it. iOS is not part of this system.
 
 `dev-compat probe FILE` identifies a Mach-O or fat header and stops. `docs/isa-and-abi.md` and `docs/compatibility-matrix.md` are the current matrix. No Apple, Google Play, or Windows system image is bundled. See `docs/guest-images.md`.
 
@@ -96,9 +108,9 @@ The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that pr
 
 Double-clicking a file in Files opens Install. The file is not run. A Linux program whose plan is a native process can be imported after a checkbox, then launched. Launch uses `olympium-run` when that helper is installed, so a 32-bit program on a 64-bit CPU still takes the native path and a 64-bit program on the i386 image still takes the swap-backed guest.
 
-A Mach-O file can be kept and is not started. The pinned runtime refuses macOS software on this Linux builder (`apple-platform-on-non-apple-hardware`). This desktop does not invent a launch for that refusal, and it does not download a macOS guest. An iOS package is refused. Nothing is downloaded.
+A Mach-O file on its own can be kept and is not started. The pinned runtime refuses macOS software on this Linux builder (`apple-platform-on-non-apple-hardware`), and that refusal is left as it is. A `.dmg`, `.pkg`, or `.app` is handled by the desktop, as the section above says. No macOS guest is downloaded. An iOS package is refused. Nothing is downloaded.
 
-A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, `.msi`, and `.dmg` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
+A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. The extraction, like that of an `.rpm`, runs in a confined child that can write only under the folder it unpacks into, and what comes out loses its set-user-ID bits; `docs/desktop-apps.md` says what was tried against it. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, and `.msi` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
 
 ## What this environment actually booted
 
@@ -150,6 +162,8 @@ QEMU `pc`, KVM, `-vga std`, on an x86_64 host, append `olympium.showwine=1 olymp
 - Launchpad at 55.6s listed `desk-win.exe` and `desk-rpm.rpm`, and the dock had a pin for each. Picture: `wine-launchpad.png`.
 
 Of that 43.3 s, about 22 s was the boot test sleeping so its pictures could be taken, about 19 s was Wine building its prefix for the first time, about 1 s was the desktop, and the program was 26 ms. `docs/startup-latency.md` has the table. The image build now builds that prefix (`image/wine-prefix.sh`), launch reuses `wineserver` for 60 s and then lets it exit, and prewarm exists and is off. On the build machine, with no ISO boot, the launch request to the mapped window was 4.8 s when Wine built the prefix, 0.67 s with the prefix in place, and 0.16 s when Wine was still running from the last launch. `9c1b41e4…` was not rebuilt, so it does not contain any of this.
+
+A Windows program and a Linux program share a clipboard for text, a folder that is drive `S:` on the Windows side, and documents: a Linux path handed to a Windows program arrives as `Z:\...`. `docs/interoperation.md` lists what was run and what is missing.
 
 `make -C desktop test-wine` on the build machine also copied text from the Wine window to a Wayland program and from a Wayland program to the Wine window. That is the compositor with the headless backend, not a booted ISO. There is no Android runtime in the image, so nothing connects an Android clipboard.
 

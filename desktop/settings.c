@@ -7,6 +7,8 @@
  * the glass title bar and the left window controls.
  */
 #define _GNU_SOURCE
+#include "accounts.h"
+
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdio.h>
@@ -71,6 +73,15 @@ static gboolean draw_nav_icon(GtkWidget *widget, cairo_t *cr, gpointer data) {
 	const char *id = data;
 	cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 	cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+	if (strcmp(id, "users") == 0) {
+		icon_fill(cr, 0.55, 0.60, 0.68, 0.36, 0.40, 0.48);
+		cairo_set_source_rgba(cr, 1, 1, 1, 0.95);
+		cairo_arc(cr, 14, 10.5, 4.2, 0, 6.2832);
+		cairo_fill(cr);
+		cairo_arc(cr, 14, 23, 8, 3.1416, 6.2832);
+		cairo_fill(cr);
+		return FALSE;
+	}
 	if (strcmp(id, "appearance") == 0) {
 		icon_fill(cr, 0.36, 0.62, 1.00, 0.18, 0.36, 0.90);
 		cairo_set_source_rgba(cr, 1, 1, 1, 0.95);
@@ -296,7 +307,12 @@ static GtkWidget *page_compat(void) {
 		"That path is slow. It is not used for a 32-bit program on a 64-bit CPU.\n\n"
 		"Test App opens a Linux program. It is not a Mac application. "
 		"The Olympium runtime can start that Linux program from its library. "
-		"It does not start macOS software. A Mach-O header is identified and not executed. "
+		"It does not start macOS software.\n\n"
+		"A Mac disk image, installer package, or application folder opens in Install. "
+		"The application is copied into Applications and appears in Launchpad with its own icon. "
+		"Nothing from the file is run, and a package's installer scripts are not used. "
+		"A Mac application starts only through the Darling runtime, when it is installed; "
+		"without it, opening one says so. A bare Mach-O file is identified and not executed. "
 		"No Apple operating system, framework, font, or artwork is included. "
 		"Code signatures and DRM are not bypassed.\n\n"
 		"iOS is not part of this system.\n\n"
@@ -364,6 +380,216 @@ static GtkWidget *page_about(void) {
 	gtk_box_pack_start(GTK_BOX(box), info, FALSE, FALSE, 0);
 	add_note(box, "Olympium is a native Linux system with its own desktop. It is not macOS and does not contain Apple software.");
 	return box;
+}
+
+/* Users and passwords. */
+static GtkWidget *secret_entry(const char *hint) {
+	GtkWidget *entry = gtk_entry_new();
+	gtk_entry_set_visibility(GTK_ENTRY(entry), FALSE);
+	gtk_entry_set_input_purpose(GTK_ENTRY(entry), GTK_INPUT_PURPOSE_PASSWORD);
+	gtk_entry_set_placeholder_text(GTK_ENTRY(entry), hint);
+	gtk_widget_set_margin_start(entry, 16);
+	gtk_widget_set_margin_end(entry, 16);
+	gtk_widget_set_margin_top(entry, 6);
+	gtk_widget_set_margin_bottom(entry, 6);
+	return entry;
+}
+
+static GtkWidget *plain_entry(const char *hint) {
+	GtkWidget *entry = secret_entry(hint);
+	gtk_entry_set_visibility(GTK_ENTRY(entry), TRUE);
+	gtk_entry_set_input_purpose(GTK_ENTRY(entry), GTK_INPUT_PURPOSE_FREE_FORM);
+	return entry;
+}
+
+struct change_form {
+	char account[40];
+	GtkWidget *current;
+	GtkWidget *fresh;
+	GtkWidget *again;
+	GtkWidget *result;
+};
+
+static void on_change_password(GtkButton *button, gpointer data) {
+	(void)button;
+	struct change_form *form = data;
+	const char *current = gtk_entry_get_text(GTK_ENTRY(form->current));
+	const char *fresh = gtk_entry_get_text(GTK_ENTRY(form->fresh));
+	const char *again = gtk_entry_get_text(GTK_ENTRY(form->again));
+	char why[160];
+	if (acct_has_password(form->account) && !acct_check_password(form->account, current)) {
+		snprintf(why, sizeof why, "The current password is not right. Nothing was changed.");
+	} else if (strcmp(fresh, again) != 0) {
+		snprintf(why, sizeof why, "The two new passwords are not the same. Nothing was changed.");
+	} else if (!acct_password_ok(fresh, why, sizeof why)) {
+		/* why is set */
+	} else if (acct_set_password(form->account, fresh) != 0) {
+		snprintf(why, sizeof why, "The password could not be changed. Changing it needs administrator rights.");
+	} else {
+		snprintf(why, sizeof why, "The password for %s was changed.", form->account);
+		gtk_entry_set_text(GTK_ENTRY(form->current), "");
+		gtk_entry_set_text(GTK_ENTRY(form->fresh), "");
+		gtk_entry_set_text(GTK_ENTRY(form->again), "");
+	}
+	gtk_label_set_text(GTK_LABEL(form->result), why);
+}
+
+static void add_change_form(GtkWidget *box, const char *account, const char *title) {
+	struct change_form *form = g_new0(struct change_form, 1);
+	snprintf(form->account, sizeof form->account, "%s", account);
+	GtkWidget *group = card();
+	add_text(group, title, "rowname");
+	form->current = secret_entry(acct_has_password(account)
+		? "Current password" : "No password is set yet; leave this empty");
+	form->fresh = secret_entry("New password, at least 8 characters");
+	form->again = secret_entry("New password again");
+	gtk_box_pack_start(GTK_BOX(group), form->current, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(group), form->fresh, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(group), form->again, FALSE, FALSE, 0);
+	GtkWidget *button = gtk_button_new_with_label("Change Password");
+	gtk_widget_set_halign(button, GTK_ALIGN_START);
+	gtk_widget_set_margin_start(button, 16);
+	gtk_widget_set_margin_bottom(button, 8);
+	g_signal_connect(button, "clicked", G_CALLBACK(on_change_password), form);
+	gtk_box_pack_start(GTK_BOX(group), button, FALSE, FALSE, 0);
+	form->result = gtk_label_new("");
+	gtk_label_set_xalign(GTK_LABEL(form->result), 0);
+	gtk_label_set_line_wrap(GTK_LABEL(form->result), TRUE);
+	gtk_widget_set_margin_start(form->result, 16);
+	gtk_widget_set_margin_bottom(form->result, 10);
+	gtk_box_pack_start(GTK_BOX(group), form->result, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(box), group, FALSE, FALSE, 0);
+}
+
+static GtkWidget *page_users(void) {
+	GtkWidget *box = pane("Users & Passwords");
+	char account[40];
+	if (acct_primary(account, sizeof account) == 0) {
+		char title[96];
+		snprintf(title, sizeof title, "Your account: %s", account);
+		add_change_form(box, account, title);
+	} else {
+		GtkWidget *group = card();
+		add_text(group, "No account has been set up yet. First-launch setup makes one.", NULL);
+		gtk_box_pack_start(GTK_BOX(box), group, FALSE, FALSE, 0);
+	}
+	add_change_form(box, "root", "Administrator (root)");
+	add_note(box, "A password is checked against the one stored on this computer and is "
+		"given to the system's own chpasswd. It is not written anywhere else.");
+	return box;
+}
+
+/* First-launch setup: one account and the administrator password. */
+struct setup_form {
+	GtkWidget *window;
+	GtkWidget *full;
+	GtkWidget *name;
+	GtkWidget *pass;
+	GtkWidget *pass2;
+	GtkWidget *root;
+	GtkWidget *root2;
+	GtkWidget *result;
+};
+
+static void on_setup_done(GtkButton *button, gpointer data) {
+	(void)button;
+	struct setup_form *form = data;
+	const char *name = gtk_entry_get_text(GTK_ENTRY(form->name));
+	const char *pass = gtk_entry_get_text(GTK_ENTRY(form->pass));
+	const char *root = gtk_entry_get_text(GTK_ENTRY(form->root));
+	char why[200];
+	if (!acct_name_ok(name)) {
+		snprintf(why, sizeof why, "The account name starts with a lower-case letter and has only "
+			"lower-case letters, digits, - and _. It cannot be root.");
+	} else if (strcmp(pass, gtk_entry_get_text(GTK_ENTRY(form->pass2))) != 0) {
+		snprintf(why, sizeof why, "The two account passwords are not the same.");
+	} else if (!acct_password_ok(pass, why, sizeof why)) {
+		/* why is set */
+	} else if (strcmp(root, gtk_entry_get_text(GTK_ENTRY(form->root2))) != 0) {
+		snprintf(why, sizeof why, "The two administrator passwords are not the same.");
+	} else if (!acct_password_ok(root, why, sizeof why)) {
+		/* why is set */
+	} else if (acct_create(name, gtk_entry_get_text(GTK_ENTRY(form->full)), pass) != 0) {
+		snprintf(why, sizeof why, "The account could not be created.");
+	} else if (acct_set_password("root", root) != 0) {
+		snprintf(why, sizeof why, "The administrator password could not be set.");
+	} else {
+		acct_mark_setup_done(name);
+		printf("setup: account %s created, administrator password set\n", name);
+		fflush(stdout);
+		gtk_widget_destroy(form->window);
+		return;
+	}
+	gtk_label_set_text(GTK_LABEL(form->result), why);
+}
+
+static gboolean setup_auto(gpointer data) {
+	/* For the test: OLYMPIUM_SETUP_AUTO=full|name|password|rootpassword */
+	struct setup_form *form = data;
+	char *spec = g_strdup(g_getenv("OLYMPIUM_SETUP_AUTO"));
+	char *save = NULL;
+	char *full = strtok_r(spec, "|", &save);
+	char *name = strtok_r(NULL, "|", &save);
+	char *pass = strtok_r(NULL, "|", &save);
+	char *root = strtok_r(NULL, "|", &save);
+	if (root != NULL) {
+		gtk_entry_set_text(GTK_ENTRY(form->full), full);
+		gtk_entry_set_text(GTK_ENTRY(form->name), name);
+		gtk_entry_set_text(GTK_ENTRY(form->pass), pass);
+		gtk_entry_set_text(GTK_ENTRY(form->pass2), pass);
+		gtk_entry_set_text(GTK_ENTRY(form->root), root);
+		gtk_entry_set_text(GTK_ENTRY(form->root2), root);
+		on_setup_done(NULL, form);
+	}
+	g_free(spec);
+	return G_SOURCE_REMOVE;
+}
+
+static int run_first_launch(void) {
+	struct setup_form *form = g_new0(struct setup_form, 1);
+	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	form->window = window;
+	gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+	gtk_window_set_default_size(GTK_WINDOW(window), 560, 520);
+	gtk_window_set_title(GTK_WINDOW(window), "Welcome to Olympium");
+	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+	GtkWidget *box = pane("Welcome to Olympium");
+	gtk_container_add(GTK_CONTAINER(window), box);
+	GtkWidget *who = card();
+	add_text(who, "Your account", "rowname");
+	form->full = plain_entry("Full name");
+	form->name = plain_entry("Account name, such as dana");
+	form->pass = secret_entry("Password, at least 8 characters");
+	form->pass2 = secret_entry("Password again");
+	gtk_box_pack_start(GTK_BOX(who), form->full, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(who), form->name, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(who), form->pass, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(who), form->pass2, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(box), who, FALSE, FALSE, 0);
+	GtkWidget *admin = card();
+	add_text(admin, "Administrator (root) password", "rowname");
+	form->root = secret_entry("Administrator password, at least 8 characters");
+	form->root2 = secret_entry("Administrator password again");
+	gtk_box_pack_start(GTK_BOX(admin), form->root, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(admin), form->root2, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(box), admin, FALSE, FALSE, 0);
+	add_note(box, "Both can be changed later in Settings, under Users & Passwords.");
+	form->result = gtk_label_new("");
+	gtk_label_set_xalign(GTK_LABEL(form->result), 0);
+	gtk_label_set_line_wrap(GTK_LABEL(form->result), TRUE);
+	gtk_label_set_max_width_chars(GTK_LABEL(form->result), 56);
+	gtk_box_pack_start(GTK_BOX(box), form->result, FALSE, FALSE, 0);
+	GtkWidget *go = gtk_button_new_with_label("Create Account");
+	gtk_widget_set_halign(go, GTK_ALIGN_END);
+	g_signal_connect(go, "clicked", G_CALLBACK(on_setup_done), form);
+	gtk_box_pack_start(GTK_BOX(box), go, FALSE, FALSE, 0);
+	gtk_widget_show_all(window);
+	gtk_widget_grab_focus(form->full);
+	if (g_getenv("OLYMPIUM_SETUP_AUTO") != NULL) {
+		g_timeout_add(300, setup_auto, form);
+	}
+	gtk_main();
+	return acct_setup_done() ? 0 : 1;
 }
 
 static void select_pane(const char *id) {
@@ -492,6 +718,9 @@ int main(int argc, char **argv) {
 
 	const char *page = "appearance";
 	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--first-run") == 0) {
+			return run_first_launch();
+		}
 		if (strncmp(argv[i], "--page=", 7) == 0) {
 			page = argv[i] + 7;
 		}
@@ -541,6 +770,7 @@ int main(int argc, char **argv) {
 	gtk_container_add(GTK_CONTAINER(scroll), stack);
 
 	add_pane(pad, "appearance", "Appearance", page_appearance());
+	add_pane(pad, "users", "Users & Passwords", page_users());
 	add_pane(pad, "drivers", "Drivers", page_drivers());
 	add_pane(pad, "compatibility", "Compatibility", page_compat());
 	add_pane(pad, "olympium", "Olympium", page_olympium());

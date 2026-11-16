@@ -14,6 +14,9 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "macbundle.h"
+#include "macicon.h"
+
 enum { STACK_MAX = 32 };
 
 static GtkWidget *window;
@@ -91,14 +94,113 @@ static void paint_document(cairo_t *cr, double scale) {
 	cairo_restore(cr);
 }
 
+/* Disk image: a drive, drawn here, for a .dmg. */
+static void paint_disk(cairo_t *cr) {
+	rrect(cr, 8, 14, 48, 30, 7);
+	cairo_pattern_t *body = cairo_pattern_create_linear(0, 14, 0, 44);
+	cairo_pattern_add_color_stop_rgb(body, 0, 0.97, 0.97, 0.98);
+	cairo_pattern_add_color_stop_rgb(body, 1, 0.82, 0.83, 0.87);
+	cairo_set_source(cr, body);
+	cairo_fill_preserve(cr);
+	cairo_pattern_destroy(body);
+	cairo_set_source_rgb(cr, 0.66, 0.67, 0.72);
+	cairo_set_line_width(cr, 1);
+	cairo_stroke(cr);
+	cairo_set_source_rgb(cr, 0.60, 0.62, 0.68);
+	rrect(cr, 14, 34, 26, 3, 1.5);
+	cairo_fill(cr);
+	cairo_set_source_rgb(cr, 0.22, 0.72, 0.36);
+	cairo_arc(cr, 48, 35.5, 2.2, 0, 2 * M_PI);
+	cairo_fill(cr);
+}
+
+/* Package: an open box, for a .pkg. */
+static void paint_package(cairo_t *cr) {
+	cairo_set_source_rgb(cr, 0.80, 0.60, 0.36);
+	cairo_move_to(cr, 12, 20);
+	cairo_line_to(cr, 32, 12);
+	cairo_line_to(cr, 52, 20);
+	cairo_line_to(cr, 32, 28);
+	cairo_close_path(cr);
+	cairo_fill(cr);
+	cairo_set_source_rgb(cr, 0.70, 0.50, 0.28);
+	cairo_move_to(cr, 12, 20);
+	cairo_line_to(cr, 32, 28);
+	cairo_line_to(cr, 32, 48);
+	cairo_line_to(cr, 12, 40);
+	cairo_close_path(cr);
+	cairo_fill(cr);
+	cairo_set_source_rgb(cr, 0.62, 0.43, 0.23);
+	cairo_move_to(cr, 52, 20);
+	cairo_line_to(cr, 32, 28);
+	cairo_line_to(cr, 32, 48);
+	cairo_line_to(cr, 52, 40);
+	cairo_close_path(cr);
+	cairo_fill(cr);
+	cairo_set_source_rgba(cr, 1, 1, 1, 0.55);
+	cairo_move_to(cr, 21, 16.5);
+	cairo_line_to(cr, 41, 24.5);
+	cairo_line_to(cr, 43, 23.7);
+	cairo_line_to(cr, 23, 15.7);
+	cairo_close_path(cr);
+	cairo_fill(cr);
+}
+
+/* What an item in the grid is drawn as. */
+enum { ITEM_DOCUMENT = 0, ITEM_FOLDER = 1, ITEM_DISK = 2, ITEM_PACKAGE = 3 };
+
 static gboolean draw_item_icon(GtkWidget *widget, cairo_t *cr, gpointer data) {
 	(void)widget;
-	if (GPOINTER_TO_INT(data)) {
+	switch (GPOINTER_TO_INT(data)) {
+	case ITEM_FOLDER:
 		paint_folder(cr, 1.0);
-	} else {
+		break;
+	case ITEM_DISK:
+		paint_disk(cr);
+		break;
+	case ITEM_PACKAGE:
+		paint_package(cr);
+		break;
+	default:
 		paint_document(cr, 1.0);
+		break;
 	}
 	return FALSE;
+}
+
+/* A Mac application is a folder whose name ends in .app. It is shown as one
+ * thing, with its own picture, and opening it does not show its insides. */
+static int is_app_bundle(const char *path) {
+	size_t len = strlen(path);
+	return len > 4 && g_ascii_strcasecmp(path + len - 4, ".app") == 0 && mac_is_bundle_dir(path);
+}
+
+static GdkPixbuf *app_bundle_picture(const char *path) {
+	struct mac_bundle b;
+	if (mac_bundle_read(path, &b) != 0 || b.icon_path[0] == '\0') {
+		return NULL;
+	}
+	/* The icon is the application's own file. It is decoded by a confined
+	 * child and kept as a picture this program drew, named after the icon's
+	 * place, size and date so a changed icon is drawn again. */
+	struct stat st;
+	if (stat(b.icon_path, &st) != 0) {
+		return NULL;
+	}
+	gchar *key = g_strdup_printf("%s:%lld:%lld", b.icon_path, (long long)st.st_size, (long long)st.st_mtime);
+	gchar *sum = g_compute_checksum_for_string(G_CHECKSUM_SHA256, key, -1);
+	gchar *dir = g_build_filename(g_get_user_cache_dir(), "olympium-desk", "icons", NULL);
+	gchar *file = g_strdup_printf("%s/%.24s.png", dir, sum);
+	g_mkdir_with_parents(dir, 0700);
+	GdkPixbuf *picture = NULL;
+	if (g_file_test(file, G_FILE_TEST_EXISTS) || mac_icon_render(b.icon_path, file) == 0) {
+		picture = gdk_pixbuf_new_from_file_at_scale(file, 52, 52, TRUE, NULL);
+	}
+	g_free(file);
+	g_free(dir);
+	g_free(sum);
+	g_free(key);
+	return picture;
 }
 
 /* Small sidebar glyphs. kind: 0 house, 1 sheet, 2 arrow, 3 grid, 4 drive. */
@@ -197,11 +299,11 @@ static void open_entry(const char *name) {
 	if (stat(next, &st) != 0) {
 		return;
 	}
-	if (S_ISDIR(st.st_mode)) {
+	if (S_ISDIR(st.st_mode) && !is_app_bundle(next)) {
 		go(next);
 		return;
 	}
-	if (!S_ISREG(st.st_mode)) {
+	if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) {
 		return;
 	}
 	/* Packages and programs open in the install window. Nothing runs here. */
@@ -228,17 +330,34 @@ static void free_name(gpointer data, GClosure *closure) {
 	g_free(data);
 }
 
-static void add_icon(const char *name, int folder) {
+static void add_icon(const char *name, int folder, const char *full) {
 	GtkWidget *button = gtk_button_new();
 	gtk_button_set_relief(GTK_BUTTON(button), GTK_RELIEF_NONE);
 	gtk_style_context_add_class(gtk_widget_get_style_context(button), "item");
 	gtk_widget_set_size_request(button, 112, 96);
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-	GtkWidget *art = gtk_drawing_area_new();
+	GtkWidget *art = NULL;
+	char shown[256];
+	snprintf(shown, sizeof shown, "%s", name);
+	if (folder == ITEM_FOLDER && is_app_bundle(full)) {
+		/* Its own picture, and its name without the ".app". */
+		GdkPixbuf *picture = app_bundle_picture(full);
+		if (picture != NULL) {
+			art = gtk_image_new_from_pixbuf(picture);
+			g_object_unref(picture);
+		}
+		size_t len = strlen(shown);
+		if (len > 4) {
+			shown[len - 4] = '\0';
+		}
+	}
+	if (art == NULL) {
+		art = gtk_drawing_area_new();
+		g_signal_connect(art, "draw", G_CALLBACK(draw_item_icon), GINT_TO_POINTER(folder));
+	}
 	gtk_widget_set_size_request(art, 64, 52);
 	gtk_widget_set_halign(art, GTK_ALIGN_CENTER);
-	g_signal_connect(art, "draw", G_CALLBACK(draw_item_icon), GINT_TO_POINTER(folder));
-	GtkWidget *label = gtk_label_new(name);
+	GtkWidget *label = gtk_label_new(shown);
 	gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
 	gtk_label_set_max_width_chars(GTK_LABEL(label), 13);
 	gtk_box_pack_start(GTK_BOX(box), art, FALSE, FALSE, 0);
@@ -296,10 +415,18 @@ static void reload(void) {
 		int folder = 0;
 		if (stat(full, &st) == 0) {
 			if (S_ISDIR(st.st_mode)) {
-				kind = "Folder";
-				folder = 1;
+				kind = is_app_bundle(full) ? "Application" : "Folder";
+				folder = ITEM_FOLDER;
 			} else {
-				if (st.st_mode & 0111) {
+				size_t name_len = strlen(name);
+				if (name_len > 4 && g_ascii_strcasecmp(name + name_len - 4, ".dmg") == 0) {
+					kind = "Disk Image";
+					folder = ITEM_DISK;
+				} else if (name_len > 4 && g_ascii_strcasecmp(name + name_len - 4, ".pkg") == 0) {
+					kind = "Installer Package";
+					folder = ITEM_PACKAGE;
+				}
+				if (folder == ITEM_DOCUMENT && (st.st_mode & 0111)) {
 					kind = "Program";
 				}
 				if (st.st_size >= 1024 * 1024) {
@@ -316,7 +443,7 @@ static void reload(void) {
 		gtk_list_store_set(store, &iter, 0, name, 1, kind, 2, size, -1);
 		/* The icon grid is capped so a very large folder still opens at once. */
 		if (i < 400) {
-			add_icon(name, folder);
+			add_icon(name, folder, full);
 		}
 	}
 	char status[96];

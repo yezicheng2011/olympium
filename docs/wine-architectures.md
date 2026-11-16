@@ -38,7 +38,7 @@ With `wine32` installed, a new prefix is 1.3 GB before deduplication, and Wine b
 
 ## What was not run
 
-No image was rebuilt or booted. `install-wine.sh` was not run in a chroot; the amd64 package set is the one installed on the build machine, which is the same Ubuntu release. The i386 Xwayland build of wlroots and Debian's `wine32` were not built or run. Wine on arm64 was not run, and no ARM64 Windows program was built.
+An amd64 image was built and booted under QEMU emulation with `install-wine.sh` and `wine-prefix.sh` run in its root (`docs/startup-latency.md`). i386 and arm64 images were not rebuilt. Before that boot, `install-wine.sh` had not been run in a chroot; the amd64 package set is the one installed on the build machine, which is the same Ubuntu release. The i386 Xwayland build of wlroots and Debian's `wine32` were not built or run. Wine on arm64 was not run, and no ARM64 Windows program was built.
 
 Running an x86 or x86_64 Windows program on arm64 needs an x86 translator under Wine, such as FEX or box64, or Wine's ARM64EC path. None is installed, none was tried, and this tree does not claim it.
 

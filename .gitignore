@@ -16,3 +16,8 @@ build/
 *.ppm
 *.png
 *.squashfs
+desktop/dev-clip-helper
+desktop/dev-compositor-nox
+__pycache__/
+desktop/test-xremap
+desktop/test-accounts

@@ -28,7 +28,7 @@ for tool in /usr/bin/wine /usr/bin/wineserver Xwayland x86_64-w64-mingw32-gcc; d
 done
 make dev-compositor dev-install desk-note desk-paste >/dev/null || exit 1
 ROOT=$(mktemp -d /tmp/test-wine.XXXXXX)
-trap 'kill $(cat "$ROOT/comp.pid" 2>/dev/null) 2>/dev/null; WINEPREFIX=$ROOT/desk/wine wineserver -k 2>/dev/null; rm -rf "$ROOT"' EXIT
+trap '[ -n "${TEST_WINE_KEEP:-}" ] && mkdir -p "$TEST_WINE_KEEP" && cp "$ROOT"/*.log "$TEST_WINE_KEEP"/ 2>/dev/null; kill $(cat "$ROOT/comp.pid" 2>/dev/null) 2>/dev/null; WINEPREFIX=$ROOT/desk/wine wineserver -k 2>/dev/null; rm -rf "$ROOT"' EXIT
 x86_64-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/desk-win.exe" desk-win.c || exit 1
 cat > "$ROOT/olympium" <<'EOF'
 #!/bin/sh
@@ -180,6 +180,27 @@ fi
 kill "$paste_pid" "$copy_pid" 2>/dev/null
 wineserver_wait
 
+# 6b. The Windows program and Wine are gone. What it copied must still paste.
+read_paste() {
+	: > "$ROOT/paste.log"
+	timeout 20 ./desk-paste >"$ROOT/paste.log" 2>&1 &
+	local pid=$!
+	for _ in $(seq 1 150); do
+		grep -q '^clipboard:' "$ROOT/paste.log" 2>/dev/null && break
+		sleep 0.1
+	done
+	kill "$pid" 2>/dev/null
+	sed -n 's/^clipboard: //p' "$ROOT/paste.log" | head -1
+}
+sleep 1
+got=$(read_paste)
+if [ "$got" = "Desk Win ready" ]; then
+	echo "clipboard after the Windows program closed: ok ($got)"
+else
+	echo "FAIL clipboard after the Windows program closed: got '${got:-nothing}'"
+	fail=1
+fi
+
 # 7. Wayland -> Windows. Desk Note owns "Desk Note ready". Desk Win --paste
 # reads CF_TEXT and writes what it got.
 printf 'note\n' > "$ROOT/hello.dnote"
@@ -205,6 +226,150 @@ else
 	fail=1
 fi
 kill "$note_pid" "$winpaste_pid" 2>/dev/null
+wineserver_wait
+sleep 1
+got=$(read_paste)
+if [ "$got" = "Desk Note ready" ]; then
+	echo "clipboard after the Wayland program closed: ok ($got)"
+else
+	echo "FAIL clipboard after the Wayland program closed: got '${got:-nothing}'"
+	fail=1
+fi
+
+# 7b. Files across systems. The shared folder is drive S: for a Windows
+# program, and a Linux document path reaches a Windows program as Z:\...
+ex=$OLYMPIUM_DESK_HOME/exchange
+printf 'from linux\n' > "$ex/from-linux.txt"
+printf 'doc\n' > "$ROOT/report one.txt"
+rm -f "$ex/desk-win-open.txt"
+./dev-install launch "$id" "$ROOT/report one.txt" --once >"$ROOT/open.log" 2>&1
+got=$(tr -d '\r\n' < "$ex/desk-win-open.txt" 2>/dev/null)
+want="opened Z:$(printf '%s' "$ROOT/report one.txt" | tr '/' '\\')"
+if [ "$got" = "$want" ]; then
+	echo "linux document opened by the windows program: ok"
+else
+	echo "FAIL linux document: got '${got:-nothing}', want '$want'"
+	fail=1
+fi
+seen=$(WINEPREFIX=$OLYMPIUM_DESK_HOME/wine WINEDLLOVERRIDES="mscoree,mshtml=" \
+	wine cmd /c 'type S:\from-linux.txt & echo from windows> S:\from-windows.txt' 2>/dev/null | tr -d '\r\n')
+if [ "$seen" = "from linux" ] && [ "$(tr -d '\r\n ' < "$ex/from-windows.txt" 2>/dev/null)" = "fromwindows" ]; then
+	echo "shared folder as drive S: ok, both directions"
+else
+	echo "FAIL shared folder: read '${seen:-nothing}', wrote '$(cat "$ex/from-windows.txt" 2>/dev/null)'"
+	fail=1
+fi
+wineserver_wait
+
+# 7c. Launchpad. A Windows installer puts a shortcut in the Start Menu, Wine
+# writes a desktop entry for it under the user's applications, and Launchpad
+# has to list that entry and start it with its whole command line.
+ctl() {
+	python3 - "$1" <<'PYEOF'
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect("/run/dev-desktop/control")
+s.sendall(sys.argv[1].encode())
+s.close()
+PYEOF
+}
+x86_64-w64-mingw32-gcc -O2 -o "$ROOT/desk-lnk.exe" desk-lnk.c -lole32 -luuid -lshell32 || exit 1
+WINEPREFIX=$OLYMPIUM_DESK_HOME/wine WINEDLLOVERRIDES="mscoree,mshtml=" \
+	wine "$ROOT/desk-lnk.exe" "Z:$(printf '%s' "$ROOT/desk-win.exe" | tr '/' '\\')" "Desk Win Shortcut" --once \
+	>"$ROOT/lnk.log" 2>&1
+WINEPREFIX=$OLYMPIUM_DESK_HOME/wine wineserver -w
+entry="$HOME/.local/share/applications/wine/Programs/Desk Win Shortcut.desktop"
+if [ ! -s "$entry" ]; then
+	echo "FAIL Wine wrote no desktop entry for the shortcut"
+	cat "$ROOT/lnk.log"
+	fail=1
+else
+	ctl "launchpad list"
+	sleep 0.5
+	if grep -q 'launchpad has: Desk Win Shortcut ' "$LOG"; then
+		echo "launchpad lists the windows shortcut: ok"
+	else
+		echo "FAIL launchpad does not list the Windows shortcut"
+		fail=1
+	fi
+	before=$(mapped_count 'Desk Win')
+	ctl "launchpad start Desk Win Shortcut"
+	if wait_mapped 'Desk Win' "$before" >/dev/null; then
+		echo "launchpad starts the windows shortcut: ok"
+	else
+		echo "FAIL launchpad did not start the Windows shortcut"
+		fail=1
+	fi
+fi
+# An icon from a place programs can write to, which is where Wine puts the
+# pictures of Windows shortcuts, is not decoded by the compositor. A confined
+# child decodes it and the compositor loads the 256 by 256 picture drawn from
+# the pixels that child returned.
+mkdir -p "$HOME/.local/share/icons/hicolor/64x64/apps" "$HOME/.local/share/applications"
+python3 - "$HOME/.local/share/icons/hicolor/64x64/apps/desk-user-icon.png" <<'PYEOF'
+import struct, sys, zlib
+size = 64
+rows = b"".join(b"\0" + bytes((40, 120, 240, 255)) * size for _ in range(size))
+def chunk(tag, data):
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+open(sys.argv[1], "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)) +
+                              chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+PYEOF
+cat > "$HOME/.local/share/applications/user-icon.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=User Icon Program
+Exec=/bin/true
+Icon=desk-user-icon
+EOF2
+rm -rf "$XDG_RUNTIME_DIR/olympium-icons"
+ctl "search open"
+ctl "search type User Icon"
+sleep 1.5
+ctl "search close"
+drawn=$(ls "$XDG_RUNTIME_DIR"/olympium-icons/*.png 2>/dev/null | head -1)
+if [ -n "$drawn" ] && python3 - "$drawn" <<'PYEOF'
+import struct, sys
+data = open(sys.argv[1], "rb").read()
+sys.exit(0 if struct.unpack(">II", data[16:24]) == (256, 256) else 1)
+PYEOF
+then
+	echo "an icon from the user's folder is decoded by a confined child, not by the compositor: ok"
+else
+	echo "FAIL the user's icon was not drawn through the confined child"
+	fail=1
+fi
+
+# An entry whose command has arguments keeps them, and one whose program is
+# missing is left out.
+mkdir -p "$HOME/.local/share/applications/sub/deeper"
+cat > "$HOME/.local/share/applications/sub/deeper/args.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=Args Kept
+Exec=/bin/sh -c "echo args-kept > $ROOT/args.out" %U
+
+[Desktop Action other]
+Name=Wrong Name
+Exec=/bin/false
+EOF2
+cat > "$HOME/.local/share/applications/missing.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=Not Installed
+Exec=/nonexistent/program --flag
+EOF2
+ctl "launchpad start Args Kept"
+sleep 1
+ctl "launchpad list"
+sleep 0.5
+if [ "$(cat "$ROOT/args.out" 2>/dev/null)" = "args-kept" ] && ! grep -q 'launchpad has: Not Installed ' "$LOG" &&
+		! grep -q 'launchpad has: Wrong Name ' "$LOG"; then
+	echo "launchpad keeps arguments and skips missing programs: ok"
+else
+	echo "FAIL launchpad arguments: got '$(cat "$ROOT/args.out" 2>/dev/null)'"
+	fail=1
+fi
 wineserver_wait
 
 # 8. A 32-bit Windows program. It needs the 32-bit half of Wine.
@@ -261,22 +426,106 @@ echo "$out" | grep -q '"action": "review"' && echo "$out" | grep -q '64-bit ARM'
 	{ echo "FAIL ARM64 program on x86 was not refused"; fail=1; }
 echo "wrong-CPU programs: refused"
 
-# 10. No X display: the launch is refused and Wine is not started.
+# 9b. An image built without the Olympium runtime. The desktop reads the
+# program itself, and it is imported and started the same way. The launch
+# uses the prefix named by OLYMPIUM_WINE_PREFIX, which is how the boot test
+# keeps a second prefix beside the image's own.
+if [ ! -x /usr/bin/olympium ]; then
+	norun=$ROOT/desk-norun
+	mkdir -p "$norun"
+	out=$(OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun ./dev-install inspect "$ROOT/desk-win.exe")
+	echo "$out" | grep -q '"runtime": "absent"' && echo "$out" | grep -q '"action": "wine"' ||
+		{ echo "FAIL without the runtime a Windows program was not recognized"; fail=1; }
+	OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun \
+		./dev-install import --consent "$ROOT/desk-win.exe" >"$ROOT/norun-import.log" 2>&1 ||
+		{ echo "FAIL import without the runtime"; cat "$ROOT/norun-import.log"; fail=1; }
+	nid=$(awk -F '\t' '$6=="windows_exe" {print $1; exit}' "$norun/library.tsv" 2>/dev/null)
+	before=$(mapped_count 'Desk Win')
+	main_prefix=$OLYMPIUM_DESK_HOME/wine
+	OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun OLYMPIUM_WINE_PREFIX=$main_prefix \
+		./dev-install launch "$nid" --once >"$ROOT/norun-launch.log" 2>&1 &
+	npid=$!
+	wait_mapped 'Desk Win' "$before" >/dev/null ||
+		{ echo "FAIL without the runtime the program opened no window"; cat "$ROOT/norun-launch.log"; fail=1; }
+	wait "$npid"
+	grep -q '^wine_prefix existing' "$norun/wine-launch-marks" ||
+		{ echo "FAIL OLYMPIUM_WINE_PREFIX was not used"; cat "$norun/wine-launch-marks"; fail=1; }
+	[ ! -e "$norun/wine" ] || { echo "FAIL a second prefix was built"; fail=1; }
+	echo "without the Olympium runtime: recognized, imported, and started in the prefix that was named"
+else
+	echo "without the Olympium runtime: /usr/bin/olympium is installed here; not tested"
+fi
+
+# 9c. An X window that is hidden and shown again, then hidden and destroyed,
+# which is the order Wine closes a window in. Hiding takes the window's
+# Wayland surface away while the X window lives on. The compositor has to let
+# go of the old surface and show the window again on its new one.
+if make test-xremap >/dev/null 2>&1; then
+	before=$(mapped_count 'Desk Remap')
+	./test-xremap 1
+	sleep 0.4
+	shown=$(( $(mapped_count 'Desk Remap') - before ))
+	[ "$shown" -eq 2 ] ||
+		{ echo "FAIL an X window hidden and shown again was mapped $shown times, not 2"; fail=1; }
+	./test-xremap 25
+	sleep 0.5
+	shown=$(( $(mapped_count 'Desk Remap') - before ))
+	if [ "$shown" -eq 52 ] && kill -0 "$(cat "$ROOT/comp.pid")" 2>/dev/null; then
+		echo "an X window hidden, shown again and destroyed, 26 times: shown each time, compositor still up"
+	else
+		echo "FAIL after 26 rounds of hide, show and destroy: mapped $shown times of 52, or the compositor is gone"
+		fail=1
+	fi
+else
+	echo "FAIL test-xremap did not build"
+	fail=1
+fi
+
+# 10. A program started without DISPLAY in its environment. That is what the
+# session's startup script and everything it starts have when the session
+# began before Xwayland was ready. The launch finds the display the
+# compositor wrote down and opens its window.
+grep -qx "$DISPLAY" "$XDG_RUNTIME_DIR/olympium-xdisplay" 2>/dev/null ||
+	{ echo "FAIL the compositor did not write down its X display"; fail=1; }
 before=$(mapped_count 'Desk Win')
-(unset DISPLAY; ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
+(unset DISPLAY; ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1) &
+npid=$!
+if wait_mapped 'Desk Win' "$before" >/dev/null; then
+	echo "launch without DISPLAY in its environment: found the session's X display, window opened"
+else
+	echo "FAIL launch without DISPLAY opened no window"
+	cat "$ROOT/nodisplay.log"
+	fail=1
+fi
+wait "$npid"
+# The session says it has no X display: refused at once, Wine not started.
+mkdir -p "$ROOT/run-none" "$ROOT/run-empty"
+echo none > "$ROOT/run-none/olympium-xdisplay"
+before=$(mapped_count 'Desk Win')
+t0=$(now_ms)
+(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run-none ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
 rc=$?
+t1=$(now_ms)
+if [ "$rc" -ne 3 ] || [ $((t1 - t0)) -gt 900 ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
+	echo "FAIL launch in a session with no X display: exit $rc after $((t1 - t0)) ms"
+	fail=1
+fi
+# Nothing written down at all: it waits as long as it was told to, then refuses.
+t0=$(now_ms)
+(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run-empty OLYMPIUM_XWAIT=1 ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
+rc=$?
+t1=$(now_ms)
 sleep 1
-if [ "$rc" -ne 3 ] || [ "$(mapped_count 'Desk Win')" -ne "$before" ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
-	echo "FAIL launch without an X display: exit $rc"
+if [ "$rc" -ne 3 ] || [ $((t1 - t0)) -lt 900 ] || [ $((t1 - t0)) -gt 3000 ] ||
+		[ "$(mapped_count 'Desk Win')" -ne "$before" ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
+	echo "FAIL launch with no X display to be found: exit $rc after $((t1 - t0)) ms"
 	fail=1
 else
-	echo "launch without an X display: refused"
+	echo "launch with no X display: refused, at once when the session says so, after the wait otherwise"
 fi
 
 # 11. The compositor built without Xwayland still starts a session.
-cc -O2 -DDEV_DESK_NO_XWAYLAND -o "$ROOT/comp-nox" compositor.c blur.c \
-	$(pkg-config --cflags --libs wlroots wayland-server cairo pango pangocairo xkbcommon libdrm pixman-1) \
-	-DWLR_USE_UNSTABLE -Iprotocol -lm 2>/dev/null || { echo "FAIL build without Xwayland"; fail=1; }
+make dev-compositor-nox >/dev/null 2>&1 && cp dev-compositor-nox "$ROOT/comp-nox" || { echo "FAIL build without Xwayland"; fail=1; }
 if [ -x "$ROOT/comp-nox" ]; then
 	mkdir -p "$ROOT/run2"
 	chmod 700 "$ROOT/run2"
@@ -284,8 +533,9 @@ if [ -x "$ROOT/comp-nox" ]; then
 	chmod 755 "$ROOT/nox.sh"
 	(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run2 WLR_BACKENDS=headless WLR_RENDERER=pixman \
 		DEV_DESK_HEADLESS=1 timeout 6 "$ROOT/comp-nox" -s "$ROOT/nox.sh" >"$ROOT/nox.log" 2>&1)
-	if [ "$(cat "$ROOT/nox.env" 2>/dev/null)" = "display=[]" ]; then
-		echo "compositor without Xwayland: session started, no DISPLAY"
+	if [ "$(cat "$ROOT/nox.env" 2>/dev/null)" = "display=[]" ] &&
+			[ "$(cat "$ROOT/run2/olympium-xdisplay" 2>/dev/null)" = none ]; then
+		echo "compositor without Xwayland: session started, no DISPLAY, and it says so"
 	else
 		echo "FAIL compositor without Xwayland did not start a session"
 		tail -n 5 "$ROOT/nox.log"
