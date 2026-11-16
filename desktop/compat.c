@@ -19,7 +19,9 @@ static void print_matrix(void) {
 	puts("dyld and libSystem     required, Apple's are not bundled");
 	puts("Objective-C runtime    required, not bundled");
 	puts("AppKit                 required, not bundled");
-	puts("this image             identifies a Mach-O header and does not execute it");
+	puts("this image             opens a .dmg, .pkg, or .app and copies the application into Applications");
+	puts("                       starts it only through Darling, which this image does not include");
+	puts("                       a bare Mach-O file is identified and not executed");
 	puts("Olympium runtime       does not start macOS software on Linux");
 	puts("lawful test app        a Linux window, not a Mac application");
 	puts("");

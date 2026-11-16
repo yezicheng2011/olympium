@@ -17,3 +17,4 @@ build/
 *.png
 *.squashfs
 desktop/dev-clip-helper
+__pycache__/

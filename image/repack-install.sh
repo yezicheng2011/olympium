@@ -31,7 +31,17 @@ umount_chroot() {
 
 install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" "$ROOT/usr/share/olympium/samples"
 install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
-	"$REPO/image/install-sample.sh" "$ROOT/usr/libexec/dev-desktop/"
+	"$REPO/image/install-sample.sh" "$REPO/image/olympium-mac-run" \
+	"$ROOT/usr/libexec/dev-desktop/"
+# dev-install unpacks Mac disk images and packages with 7-Zip and cpio. A
+# root made before that needs them added. Nothing else is downloaded.
+if [ ! -x "$ROOT/usr/bin/7z" ] && [ ! -x "$ROOT/usr/bin/7zz" ]; then
+	mount_chroot
+	chroot "$ROOT" apt-get update
+	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+		7zip cpio librsvg2-common
+	umount_chroot
+fi
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.note"
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.dnote"
 rm -rf "$ROOT/tmp/desktop"

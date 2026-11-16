@@ -10,9 +10,9 @@ This is a native Linux live system with its own Wayland desktop. It is not a web
 - If the renderer cannot read pixels back, the shell switches to an opaque drawing and says so in Settings. That fallback does not claim glass.
 - Menu bar: the dragon mark, the front application's name, File, Edit, View, Go, Window, and Help on the left. A network glyph, search and quick-settings glyphs, and the clock on the right. The network glyph is a fan wedge that fills with the live wireless signal, shows three dots under a full wedge for a wired link, and is struck through with no link.
 - Windows: rounded corners, a soft shadow, a centered title, and red, yellow, and green controls on the left. That includes Settings, Files, the terminal, and the purchase reminder.
-- Files: a sidebar of favorites and locations, back and forward, icon and list views, search, and an item count.
+- Files: a sidebar of favorites and locations, back and forward, icon and list views, search, and an item count. A Mac application folder is shown as one item with its own icon. A disk image and an installer package have their own drawings.
 - Dock: a centered glass capsule of unlabeled icons. An icon grows under the pointer, shows its name above the dock, and has a dot while that application has a window open.
-- Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
+- Launchpad: a full-screen blurred backdrop, a search field at the top center, a five-by-three grid of large icons, folders, and page dots. It lists programs that are really on the image, each with its own icon and its whole command: Linux programs, the shortcuts Windows installers create under Wine, and installed Mac applications. Arrow keys, Return, Page Up and Page Down, typing to search, and Escape all work.
 - Settings: a search field, an icon sidebar, and grouped rows, in the arrangement of a system-settings window. The panes are appearance, drivers, compatibility, Olympium, license, and about. The sidebar glyphs are original.
 - Widgets: the time and date, this month, and memory, disk, and battery, as glass on the wallpaper under the windows. View, Show or Hide Widgets turns them off.
 - A window that is not in front has grey controls and a paler title.
@@ -47,9 +47,10 @@ Host checks that do not need an ISO:
 ```sh
 make -C desktop test
 make -C desktop test-wine
+make -C desktop test-mac
 ```
 
-The second one needs Wine, Xwayland, and mingw on the host, and exits 77 without them.
+The second one needs Wine, Xwayland, and mingw on the host. The third needs 7-Zip, cpio, and python3. Each exits 77 without them. Building `dev-install` needs the `liblzma` and `zlib` headers.
 
 `desktop/protocol/xdg-shell-protocol.h` is generated from wayland-protocols (MIT). Regenerate it with `wayland-scanner server-header` if you need to.
 
@@ -86,11 +87,15 @@ Use `-vga virtio`. Debian 6.1's bochs display does not advertise PRIME import, a
 
 `install-to-disk /dev/sdX` from a terminal on the live system erases that disk, copies the running system onto it, and installs the boot loader. It asks you to type the device name before it changes anything.
 
-## macOS applications
+## Mac applications
 
-The dock, Launchpad, and Files open the Lawful test app. It is a Linux window. It is not a Mac application. This image does not include Apple trademarks, fonts, artwork, an Apple SDK, or a macOS system image, and it does not bypass code signing or DRM.
+A Mac disk image (`.dmg`), installer package (`.pkg`), or application folder (`.app`) opens in Install. The application is copied into this desktop's Applications folder and appears in Launchpad with its own icon. Nothing from the file is run, and a package's installer scripts are not used. The unpacking is done by a confined child process that can write nowhere but its staging folder. `docs/mac-apps.md` says what was run.
 
-The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that program as a Linux executable. It also lists a Mach-O header fixture and does not start it. This repository does not change that runtime. iOS is not part of this system.
+An installed Mac application is started through Darling, the open-source project that runs macOS programs on Linux. Darling is not in this image, and no Mac program was run for anything in this tree: the build machine could not get Darling. Without it, opening a Mac application shows a window that says so, and the application stays installed. This desktop has no Mach-O loader of its own and no other way to start one.
+
+This image does not include Apple trademarks, fonts, artwork, an Apple SDK, or a macOS system image, and it does not bypass code signing or DRM. Apple's own applications are licensed for Apple hardware and are not what this is for. The test files are written byte by byte by `desktop/mac-fixtures.py`; none comes from Apple or from any vendor.
+
+The dock, Launchpad, and Files also open the Lawful test app. It is a Linux window. It is not a Mac application. The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that program as a Linux executable. It also lists a Mach-O header fixture and does not start it. This repository does not change that runtime, and Mac files are not sent to it. iOS is not part of this system.
 
 `dev-compat probe FILE` identifies a Mach-O or fat header and stops. `docs/isa-and-abi.md` and `docs/compatibility-matrix.md` are the current matrix. No Apple, Google Play, or Windows system image is bundled. See `docs/guest-images.md`.
 
@@ -98,9 +103,9 @@ The Olympium runtime at `517aaaa5409f227de42444cf16612d546c29251b` lists that pr
 
 Double-clicking a file in Files opens Install. The file is not run. A Linux program whose plan is a native process can be imported after a checkbox, then launched. Launch uses `olympium-run` when that helper is installed, so a 32-bit program on a 64-bit CPU still takes the native path and a 64-bit program on the i386 image still takes the swap-backed guest.
 
-A Mach-O file can be kept and is not started. The pinned runtime refuses macOS software on this Linux builder (`apple-platform-on-non-apple-hardware`). This desktop does not invent a launch for that refusal, and it does not download a macOS guest. An iOS package is refused. Nothing is downloaded.
+A Mach-O file on its own can be kept and is not started. The pinned runtime refuses macOS software on this Linux builder (`apple-platform-on-non-apple-hardware`), and that refusal is left as it is. A `.dmg`, `.pkg`, or `.app` is handled by the desktop, as the section above says. No macOS guest is downloaded. An iOS package is refused. Nothing is downloaded.
 
-A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, `.msi`, and `.dmg` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
+A real `.deb` is extracted with `dpkg-deb -x` after consent. Maintainer scripts are not run. That path was booted on an earlier x86_64 image, `c30c081c502058e0859d4d1c72d874e0ca061181b38982bc03a13f9e520edc2f`, and is not the image below. A real `.rpm` is extracted with `rpm2cpio` and `cpio` after consent. Package scripts are not run. A real Windows `.exe` is imported after consent and launched with the distro Wine binary the runtime's plan names (`/usr/bin/wine`). Wine is not a Windows license, and no Windows image is downloaded. Flatpak, snap, AppImage, and `.msi` are not claimed. `desktop/test-install.sh` still requires stub archives to stay uninstalled. The matrix is `docs/desktop-apps.md`.
 
 ## What this environment actually booted
 

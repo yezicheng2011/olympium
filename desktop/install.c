@@ -26,6 +26,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "macbundle.h"
+#include "macpkg.h"
+#include "sandbox.h"
+
 struct review {
 	char file[512];
 	char name[128];
@@ -45,7 +49,14 @@ struct review {
 	int launchable;
 	int cache_hit;
 	const char *action;
+	/* Filled for a Mac disk image, package, or application folder. */
+	int mac_apps;
+	char mac_title[160];
+	char mac_icon[1024];
+	char mac_first[128];
 };
+
+enum { REC_MAX = 256 };
 
 static void mkdir_p(const char *path) {
 	char buf[512];
@@ -401,9 +412,103 @@ static int wine_can_run(unsigned machine, char *why, size_t n) {
 	return 0;
 }
 
+/* Where the helper that starts a Mac program is, and whether it can. The
+ * helper is a script, so the one place that knows how the Mac runtime is
+ * called can be changed without rebuilding this program. OLYMPIUM_MAC_RUNTIME
+ * names another helper, which is how the test stands in for the runtime. */
+static int mac_runtime(char *out, size_t n) {
+	const char *env = getenv("OLYMPIUM_MAC_RUNTIME");
+	snprintf(out, n, "%s", env != NULL && env[0] != '\0' ? env
+		: "/usr/libexec/dev-desktop/olympium-mac-run");
+	if (access(out, X_OK) != 0) {
+		return 0;
+	}
+	pid_t pid = fork();
+	if (pid < 0) {
+		return 0;
+	}
+	if (pid == 0) {
+		int nul = open("/dev/null", O_RDWR);
+		if (nul >= 0) {
+			dup2(nul, 0);
+			dup2(nul, 1);
+			dup2(nul, 2);
+		}
+		execl(out, out, "--check", (char *)NULL);
+		_exit(127);
+	}
+	int st = 0;
+	waitpid(pid, &st, 0);
+	return WIFEXITED(st) && WEXITSTATUS(st) == 0;
+}
+
+static void cache_file(const char *path, char *out, size_t n);
+
+/* A Mac disk image, installer package, or application folder. What is in it
+ * is read here. Nothing in it is run, and nothing is copied until Install. */
+static int review_mac(struct review *r) {
+	const char *kind = mac_detect(r->file);
+	if (kind == NULL) {
+		return 0;
+	}
+	char cache[600];
+	char work[640];
+	cache_file(r->file, cache, sizeof cache);
+	snprintf(work, sizeof work, "%s.mac", cache);
+	struct mac_review m;
+	if (mac_review_file(r->file, work, &m) != 0) {
+		return 0;
+	}
+	snprintf(r->guest, sizeof r->guest, "macos");
+	snprintf(r->kind, sizeof r->kind, "%s", kind);
+	snprintf(r->engine, sizeof r->engine, "mac");
+	r->runtime = runtime_bin() != NULL;
+	r->mac_apps = m.app_count;
+	snprintf(r->mac_title, sizeof r->mac_title, "%s", m.title);
+	const char *what = strcmp(kind, "mac_dmg") == 0 ? "Mac disk image"
+		: strcmp(kind, "mac_pkg") == 0 ? "Mac installer package" : "Mac application";
+	snprintf(r->detail, sizeof r->detail, "%s", what);
+	if (m.app_count == 0) {
+		snprintf(r->message, sizeof r->message, "%s. %s", what, m.note);
+		return 1;
+	}
+	snprintf(r->mac_icon, sizeof r->mac_icon, "%s", m.apps[0].icon);
+	snprintf(r->mac_first, sizeof r->mac_first, "%s", m.apps[0].name);
+	char names[240] = "";
+	for (int i = 0; i < m.app_count; i++) {
+		size_t used = strlen(names);
+		snprintf(names + used, sizeof names - used, "%s%.60s%s%.20s", i > 0 ? ", " : "",
+			m.apps[i].name, m.apps[i].version[0] != '\0' ? " " : "", m.apps[i].version);
+	}
+	char runtime[512];
+	const char *opens = mac_runtime(runtime, sizeof runtime)
+		? "It opens through the Mac runtime on this system."
+		: "Opening it needs the Darling runtime, which is not on this system.";
+	if (strcmp(kind, "mac_app") == 0) {
+		snprintf(r->message, sizeof r->message,
+			"Mac application %s%s%s%s. Install copies it into Applications on this desktop. "
+			"It is not run. %s", names, m.apps[0].archs[0] != '\0' ? ", built for " : "",
+			m.apps[0].archs, "", opens);
+	} else {
+		snprintf(r->message, sizeof r->message,
+			"%s. It holds %d application%s: %s. Install copies %s into Applications on this "
+			"desktop. Nothing in it is run%s. %s", what, m.app_count, m.app_count == 1 ? "" : "s",
+			names, m.app_count == 1 ? "it" : "them",
+			strcmp(kind, "mac_pkg") == 0 ? ", and the package's installer scripts are not used" : "",
+			opens);
+	}
+	return 1;
+}
+
 static void decide(struct review *r) {
 	r->launchable = 0;
 	r->action = "refuse";
+	if (strncmp(r->kind, "mac_", 4) == 0 && strcmp(r->engine, "mac") == 0) {
+		/* Install is offered when there is an application in it. Launch is
+		 * decided later, for each application, once it has been unpacked. */
+		r->action = r->mac_apps > 0 ? "mac" : "review";
+		return;
+	}
 	if (strcmp(r->guest, "ios") == 0) {
 		snprintf(r->message, sizeof r->message, "iOS is not part of this system.");
 		return;
@@ -607,6 +712,12 @@ static int fill_review(const char *path, struct review *r) {
 		snprintf(r->file, sizeof r->file, "%s", path);
 	}
 	base_name(r->file, r->name, sizeof r->name);
+	/* Mac files are read here and are not sent to the Olympium runtime. Its
+	 * answer for them is a refusal, and that refusal is left as it is. */
+	if (review_mac(r)) {
+		decide(r);
+		return 0;
+	}
 	if (!load_cache(r)) {
 		apply_runtime(r);
 		save_cache(r);
@@ -686,7 +797,9 @@ static int save_recs(struct rec *recs, int n) {
 	return 0;
 }
 
-static int write_launcher(const struct rec *rec) {
+/* Writes the wrapper and the desktop entry Launchpad reads. icon is a picture
+ * file for the entry, or NULL. pin adds the program to the dock. */
+static int write_launcher_for(const struct rec *rec, const char *icon, int pin) {
 	char root[512];
 	char dir[512];
 	char wrap[512];
@@ -725,16 +838,36 @@ static int write_launcher(const struct rec *rec) {
 	}
 	fprintf(f, "[Desktop Entry]\nType=Application\nName=%s\nExec=%s\n", rec->name, wrap);
 	fprintf(f, "Terminal=false\nNoDisplay=false\n");
+	if (icon != NULL && icon[0] != '\0') {
+		fprintf(f, "Icon=%s\n", icon);
+	}
 	if (rec->ext[0] != '\0') {
 		fprintf(f, "MimeType=application/x-olympium-%s;\n", rec->ext);
 	}
 	fclose(f);
-	char pin[512];
-	snprintf(pin, sizeof pin, "%s/pinned", root);
-	FILE *pins = fopen(pin, "a");
-	if (pins != NULL) {
-		fprintf(pins, "%s\t%s\n", rec->name, wrap);
-		fclose(pins);
+	char pin_path[512];
+	snprintf(pin_path, sizeof pin_path, "%s/pinned", root);
+	if (pin) {
+		/* Once. Importing the same program again does not pin it twice. */
+		char want[900];
+		char line[900];
+		int already = 0;
+		snprintf(want, sizeof want, "%s\t%s\n", rec->name, wrap);
+		FILE *have = fopen(pin_path, "r");
+		if (have != NULL) {
+			while (fgets(line, sizeof line, have) != NULL) {
+				if (strcmp(line, want) == 0) {
+					already = 1;
+					break;
+				}
+			}
+			fclose(have);
+		}
+		FILE *pins = already ? NULL : fopen(pin_path, "a");
+		if (pins != NULL) {
+			fputs(want, pins);
+			fclose(pins);
+		}
 	}
 	if (rec->ext[0] != '\0') {
 		char mime[512];
@@ -747,8 +880,14 @@ static int write_launcher(const struct rec *rec) {
 	}
 	printf("desktop=%s\n", desk);
 	printf("wrapper=%s\n", wrap);
-	printf("pinned=%s\n", pin);
+	if (pin) {
+		printf("pinned=%s\n", pin_path);
+	}
 	return 0;
+}
+
+static int write_launcher(const struct rec *rec) {
+	return write_launcher_for(rec, NULL, 1);
 }
 
 static int run_wait(char *const argv[]) {
@@ -1276,9 +1415,103 @@ static void ensure_runtime(void) {
 	fflush(stdout);
 }
 
+static void mac_progress(int step, int of, const char *what) {
+	printf("progress %d/%d %s\n", step, of, what);
+	fflush(stdout);
+}
+
+/* One library row, one wrapper and one Launchpad entry for each application
+ * that came out of the image or package. Nothing is added to the dock: an
+ * application that was just installed is found in Launchpad, as on a Mac. */
+static int import_mac(const struct review *r) {
+	char root[512];
+	desk_root(root, sizeof root);
+	mkdir_p(root);
+	static struct mac_app_info apps[MAC_APPS_MAX];
+	char err[400];
+	printf("confinement=%s\n", dev_confine_name(dev_confine_probe()));
+	int count = mac_install_file(r->file, root, apps, MAC_APPS_MAX, err, sizeof err, mac_progress);
+	if (count < 0) {
+		fprintf(stderr, "dev-install: not installed: %s\n", err);
+		printf("download: none\n");
+		return 1;
+	}
+	static struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX);
+	for (int i = 0; i < count; i++) {
+		char sha[80] = "";
+		if (file_sha256(apps[i].program, sha, sizeof sha) != 0) {
+			fprintf(stderr, "dev-install: could not checksum %s\n", apps[i].name);
+			return 1;
+		}
+		int slot = n;
+		for (int k = 0; k < n; k++) {
+			if (strcmp(recs[k].path, apps[i].bundle) == 0) {
+				slot = k;
+				break;
+			}
+		}
+		if (slot == n) {
+			if (n >= REC_MAX) {
+				fprintf(stderr, "dev-install: library is full\n");
+				return 1;
+			}
+			n++;
+		}
+		struct rec *rec = &recs[slot];
+		memset(rec, 0, sizeof *rec);
+		/* Named after where it is installed, not after its program. Two
+		 * applications can have the same program bytes, and each still
+		 * needs its own entry, wrapper and icon. */
+		unsigned long where = 5381;
+		for (const unsigned char *p = (const unsigned char *)apps[i].bundle; *p != '\0'; p++) {
+			where = where * 33 + *p;
+		}
+		snprintf(rec->id, sizeof rec->id, "mac-%08lx", where & 0xFFFFFFFFul);
+		snprintf(rec->name, sizeof rec->name, "%s", apps[i].name);
+		for (char *p = rec->name; *p != '\0'; p++) {
+			if (*p == '\t') {
+				*p = ' ';
+			}
+		}
+		snprintf(rec->path, sizeof rec->path, "%s", apps[i].bundle);
+		snprintf(rec->sha, sizeof rec->sha, "%s", sha);
+		snprintf(rec->guest, sizeof rec->guest, "macos");
+		snprintf(rec->kind, sizeof rec->kind, "mac_app");
+		snprintf(rec->launch, sizeof rec->launch, "mac");
+		snprintf(rec->program, sizeof rec->program, "%s", apps[i].program);
+		if (save_recs(recs, n) != 0) {
+			return 1;
+		}
+		printf("id=%s\n", rec->id);
+		printf("app=%s\n", rec->name);
+		printf("version=%s\n", apps[i].version);
+		printf("installed=%s\n", rec->path);
+		printf("archs=%s\n", apps[i].archs[0] != '\0' ? apps[i].archs : "none");
+		printf("runs_on_this_cpu=%s\n", apps[i].runs_on_this_cpu ? "yes" : "no");
+		printf("icon=%s\n", apps[i].icon[0] != '\0' ? apps[i].icon : "none");
+		printf("launch=mac\n");
+		if (write_launcher_for(rec, apps[i].icon, 0) != 0) {
+			return 1;
+		}
+	}
+	printf("installed_count=%d\n", count);
+	printf("scripts_run=0\n");
+	printf("download: none\n");
+	return 0;
+}
+
 static int cmd_import(const char *path, const char *ext, int consent) {
 	struct review r;
 	fill_review(path, &r);
+	if (strcmp(r.action, "mac") == 0) {
+		if (!consent) {
+			fprintf(stderr, "dev-install: refused to install without consent\n");
+			print_review(&r);
+			return 2;
+		}
+		return import_mac(&r);
+	}
 	printf("progress 1/4 classify\n");
 	printf("progress 2/4 plan\n");
 	if (!consent) {
@@ -1367,8 +1600,8 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 		}
 		json_string(text, "id", id, sizeof id);
 	}
-	struct rec recs[64];
-	int n = load_recs(recs, 64);
+	struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX);
 	int slot = n;
 	for (int i = 0; i < n; i++) {
 		if (strcmp(recs[i].path, r.file) == 0) {
@@ -1377,7 +1610,7 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 		}
 	}
 	if (slot == n) {
-		if (n >= 64) {
+		if (n >= REC_MAX) {
 			fprintf(stderr, "dev-install: library is full\n");
 			return 1;
 		}
@@ -1430,9 +1663,191 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 	return 0;
 }
 
+/* Tells the person why nothing opened. A launch from Launchpad or the dock
+ * has no terminal, so without this a refusal would look like nothing
+ * happening at all. OLYMPIUM_NO_DIALOG keeps a script from waiting on it. */
+static void show_notice(const char *title, const char *text, const char *icon) {
+	fprintf(stderr, "dev-install: %s\n", text);
+	if (getenv("OLYMPIUM_NO_DIALOG") != NULL ||
+			(getenv("WAYLAND_DISPLAY") == NULL && getenv("DISPLAY") == NULL)) {
+		return;
+	}
+	if (!gtk_init_check(NULL, NULL)) {
+		return;
+	}
+	GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_title(GTK_WINDOW(win), title);
+	gtk_window_set_decorated(GTK_WINDOW(win), FALSE);
+	gtk_window_set_default_size(GTK_WINDOW(win), 440, 180);
+	gtk_window_set_resizable(GTK_WINDOW(win), FALSE);
+	GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+	gtk_container_set_border_width(GTK_CONTAINER(row), 20);
+	gtk_container_add(GTK_CONTAINER(win), row);
+	if (icon != NULL && icon[0] != '\0') {
+		GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(icon, 64, 64, TRUE, NULL);
+		if (pixbuf != NULL) {
+			GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
+			gtk_widget_set_valign(image, GTK_ALIGN_START);
+			gtk_box_pack_start(GTK_BOX(row), image, FALSE, FALSE, 0);
+			g_object_unref(pixbuf);
+		}
+	}
+	GtkWidget *column = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+	gtk_box_pack_start(GTK_BOX(row), column, TRUE, TRUE, 0);
+	GtkWidget *heading = gtk_label_new(NULL);
+	char *markup = g_markup_printf_escaped("<b>%s</b>", title);
+	gtk_label_set_markup(GTK_LABEL(heading), markup);
+	g_free(markup);
+	gtk_label_set_xalign(GTK_LABEL(heading), 0);
+	gtk_box_pack_start(GTK_BOX(column), heading, FALSE, FALSE, 0);
+	GtkWidget *body = gtk_label_new(text);
+	gtk_label_set_xalign(GTK_LABEL(body), 0);
+	gtk_label_set_line_wrap(GTK_LABEL(body), TRUE);
+	gtk_label_set_max_width_chars(GTK_LABEL(body), 46);
+	gtk_box_pack_start(GTK_BOX(column), body, FALSE, FALSE, 0);
+	GtkWidget *ok = gtk_button_new_with_label("OK");
+	gtk_widget_set_halign(ok, GTK_ALIGN_END);
+	gtk_box_pack_end(GTK_BOX(column), ok, FALSE, FALSE, 0);
+	g_signal_connect_swapped(ok, "clicked", G_CALLBACK(gtk_widget_destroy), win);
+	g_signal_connect(win, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+	gtk_widget_show_all(win);
+	gtk_main();
+}
+
+/* The picture written for this application when it was installed. */
+static void mac_icon_of(const struct rec *rec, char *out, size_t n) {
+	char apps[512];
+	char desk[700];
+	out[0] = '\0';
+	apps_dir(apps, sizeof apps);
+	snprintf(desk, sizeof desk, "%s/olympium-%s.desktop", apps, rec->id);
+	FILE *f = fopen(desk, "r");
+	if (f == NULL) {
+		return;
+	}
+	char line[1100];
+	while (fgets(line, sizeof line, f) != NULL) {
+		if (strncmp(line, "Icon=", 5) == 0) {
+			line[strcspn(line, "\r\n")] = '\0';
+			snprintf(out, n, "%s", line + 5);
+			break;
+		}
+	}
+	fclose(f);
+}
+
+/* Starts a Mac application through the Mac runtime, when the application has
+ * a program for this computer's CPU and a runtime is installed. This desktop
+ * does not load Mach-O programs itself, and it never starts one any other
+ * way. Each refusal is said in a window, not only on standard error. */
+static int launch_mac(const struct rec *rec, int argc, char **argv) {
+	char icon[1024];
+	char text[640];
+	mac_icon_of(rec, icon, sizeof icon);
+	struct mac_bundle b;
+	if (mac_bundle_read(rec->path, &b) != 0 || b.program_kind != MAC_PROGRAM_MACHO) {
+		snprintf(text, sizeof text,
+			"%s was not opened. Its program is not a Mac program this desktop can read.", rec->name);
+		show_notice(rec->name, text, icon);
+		return 3;
+	}
+	if (!mac_host_can_run(b.archs, b.arch_count)) {
+		char archs[64];
+		mac_archs_text(b.archs, b.arch_count, archs, sizeof archs);
+		snprintf(text, sizeof text,
+			"%s was not opened. It is built for %s, and this computer is %s. "
+			"A program runs only on the kind of processor it was built for.",
+			rec->name, archs, mac_host_arch_name());
+		show_notice(rec->name, text, icon);
+		return 3;
+	}
+	char runtime[512];
+	if (!mac_runtime(runtime, sizeof runtime)) {
+		snprintf(text, sizeof text,
+			"%s was not opened. A Mac application runs here through the Darling runtime, "
+			"and Darling is not installed on this system. The application stays in Applications.",
+			rec->name);
+		show_notice(rec->name, text, icon);
+		return 3;
+	}
+	printf("engine mac\n");
+	printf("mac_runtime %s\n", runtime);
+	fflush(stdout);
+	char *args[64];
+	int k = 0;
+	args[k++] = runtime;
+	args[k++] = (char *)rec->path;
+	args[k++] = (char *)rec->program;
+	for (int i = 0; i < argc && k < 62; i++) {
+		args[k++] = argv[i];
+	}
+	args[k] = NULL;
+	execv(args[0], args);
+	perror(args[0]);
+	return 127;
+}
+
+/* Takes an installed Mac application away again: the application itself, its
+ * row in the library, its wrapper, its Launchpad entry and its icon. Only an
+ * application this program installed under its own Applications folder. */
+static int cmd_remove(const char *id) {
+	static struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX);
+	int at = -1;
+	for (int i = 0; i < n; i++) {
+		if (strcmp(recs[i].id, id) == 0) {
+			at = i;
+			break;
+		}
+	}
+	if (at < 0) {
+		fprintf(stderr, "dev-install: unknown id %s\n", id);
+		return 1;
+	}
+	if (strcmp(recs[at].launch, "mac") != 0) {
+		fprintf(stderr, "dev-install: %s is not a Mac application; it was not removed\n", recs[at].name);
+		return 3;
+	}
+	char root[512];
+	char apps_root[640];
+	desk_root(root, sizeof root);
+	snprintf(apps_root, sizeof apps_root, "%s/mac/Applications/", root);
+	size_t prefix = strlen(apps_root);
+	if (strncmp(recs[at].path, apps_root, prefix) != 0 || strchr(recs[at].path + prefix, '/') != NULL ||
+			strstr(recs[at].path, "/../") != NULL || recs[at].path[prefix] == '\0') {
+		/* The row was edited to point somewhere else. Nothing is deleted. */
+		fprintf(stderr, "dev-install: %s is not under %s; it was not removed\n", recs[at].path, apps_root);
+		return 3;
+	}
+	char icon[1024];
+	mac_icon_of(&recs[at], icon, sizeof icon);
+	char *rm[] = {"/bin/rm", "-rf", "--", recs[at].path, NULL};
+	if (run_quiet(rm) != 0) {
+		fprintf(stderr, "dev-install: %s could not be removed\n", recs[at].path);
+		return 1;
+	}
+	char path[900];
+	char apps[512];
+	apps_dir(apps, sizeof apps);
+	snprintf(path, sizeof path, "%s/olympium-%s.desktop", apps, recs[at].id);
+	unlink(path);
+	snprintf(path, sizeof path, "%s/launch/%s", root, recs[at].id);
+	unlink(path);
+	char icons_root[640];
+	snprintf(icons_root, sizeof icons_root, "%s/icons/", root);
+	if (icon[0] != '\0' && strncmp(icon, icons_root, strlen(icons_root)) == 0) {
+		unlink(icon);
+	}
+	printf("removed=%s\n", recs[at].path);
+	for (int i = at; i + 1 < n; i++) {
+		recs[i] = recs[i + 1];
+	}
+	return save_recs(recs, n - 1) == 0 ? 0 : 1;
+}
+
 static int cmd_launch(const char *id, int argc, char **argv) {
-	struct rec recs[64];
-	int n = load_recs(recs, 64);
+	struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX);
 	struct rec *rec = NULL;
 	for (int i = 0; i < n; i++) {
 		if (strcmp(recs[i].id, id) == 0) {
@@ -1444,10 +1859,16 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		fprintf(stderr, "dev-install: unknown id %s\n", id);
 		return 1;
 	}
+	int is_mac = strcmp(rec->launch, "mac") == 0;
 	char sha[80];
-	if (file_sha256(rec->path, sha, sizeof sha) != 0 || strcmp(sha, rec->sha) != 0) {
+	/* A Mac application is a folder. Its program is what was checksummed. */
+	if (file_sha256(is_mac ? rec->program : rec->path, sha, sizeof sha) != 0 ||
+			strcmp(sha, rec->sha) != 0) {
 		fprintf(stderr, "dev-install: checksum changed; not started\n");
 		return 4;
+	}
+	if (is_mac) {
+		return launch_mac(rec, argc, argv);
 	}
 	if (strcmp(rec->launch, "wine") == 0) {
 		struct review again;
@@ -1611,20 +2032,159 @@ static struct review g_review;
 static GtkWidget *g_status;
 static GtkWidget *g_import;
 static GtkWidget *g_launch;
+static GtkWidget *g_bar;
+static GtkWidget *g_check;
 static char g_ext[32];
+
+/* The install of a Mac file runs as a second copy of this program, so the
+ * window keeps answering while a large image unpacks, shows how far it is,
+ * and can stop it. */
+static GPid g_child;
+static int g_child_running;
+static int g_child_stopped;
+static char g_mac_id[80];
+static char g_child_error[400];
+
+static int is_mac_review(void) {
+	return strcmp(g_review.action, "mac") == 0;
+}
 
 static void on_consent(GtkToggleButton *button, gpointer data) {
 	(void)data;
 	int on = gtk_toggle_button_get_active(button);
 	int allow = on && (strcmp(g_review.action, "import") == 0 ||
 		strcmp(g_review.action, "keep") == 0 || strcmp(g_review.action, "install") == 0 ||
-		strcmp(g_review.action, "rpm") == 0 || strcmp(g_review.action, "wine") == 0);
-	gtk_widget_set_sensitive(g_import, allow);
+		strcmp(g_review.action, "rpm") == 0 || strcmp(g_review.action, "wine") == 0 ||
+		is_mac_review());
+	gtk_widget_set_sensitive(g_import, allow || g_child_running);
+}
+
+static gboolean on_child_line(GIOChannel *channel, GIOCondition condition, gpointer data) {
+	int is_error = GPOINTER_TO_INT(data);
+	if (condition & G_IO_IN) {
+		gchar *line = NULL;
+		while (g_io_channel_read_line(channel, &line, NULL, NULL, NULL) == G_IO_STATUS_NORMAL) {
+			g_strchomp(line);
+			int step = 0;
+			int of = 0;
+			char what[32] = "";
+			if (is_error) {
+				const char *text = strstr(line, "not installed: ");
+				snprintf(g_child_error, sizeof g_child_error, "%s", text != NULL ? text + 15 : line);
+			} else if (sscanf(line, "progress %d/%d %31s", &step, &of, what) == 3 && of > 0) {
+				gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), (double)step / of);
+				const char *label = strcmp(what, "read") == 0 ? "Reading"
+					: strcmp(what, "unpack") == 0 ? "Unpacking"
+					: strcmp(what, "copy") == 0 ? "Copying"
+					: strcmp(what, "check") == 0 ? "Checking"
+					: strcmp(what, "install") == 0 ? "Moving into Applications" : "Done";
+				gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), label);
+			} else if (strncmp(line, "id=", 3) == 0 && g_mac_id[0] == '\0') {
+				snprintf(g_mac_id, sizeof g_mac_id, "%s", line + 3);
+			}
+			g_free(line);
+			line = NULL;
+		}
+		g_free(line);
+	}
+	if (condition & (G_IO_HUP | G_IO_ERR)) {
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static void on_child_done(GPid pid, gint status, gpointer data) {
+	(void)data;
+	g_spawn_close_pid(pid);
+	g_child_running = 0;
+	gtk_button_set_label(GTK_BUTTON(g_import), "Install");
+	gtk_widget_set_sensitive(g_check, TRUE);
+	int ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+	if (g_child_stopped) {
+		/* The unpacker was stopped. What it had staged is removed here, so
+		 * nothing half installed is left behind. */
+		char root[512];
+		desk_root(root, sizeof root);
+		mac_clear_stale(root);
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 0);
+		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), "Stopped");
+		gtk_label_set_text(GTK_LABEL(g_status), "Stopped. Nothing was installed.");
+	} else if (ok) {
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 1);
+		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), "Installed");
+		gtk_label_set_text(GTK_LABEL(g_status),
+			"Installed in Applications. It is in Launchpad. Open starts it.");
+		gtk_widget_set_sensitive(g_launch, g_mac_id[0] != '\0');
+	} else {
+		char text[480];
+		snprintf(text, sizeof text, "Not installed%s%s", g_child_error[0] != '\0' ? ": " : ".",
+			g_child_error);
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 0);
+		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), "Not installed");
+		gtk_label_set_text(GTK_LABEL(g_status), text);
+	}
+	on_consent(GTK_TOGGLE_BUTTON(g_check), NULL);
+}
+
+static void child_own_group(gpointer data) {
+	(void)data;
+	/* Its own group, so stopping it also stops the unpacker it started. */
+	setpgid(0, 0);
+}
+
+static void start_mac_install(void) {
+	char self[512];
+	ssize_t len = readlink("/proc/self/exe", self, sizeof self - 1);
+	if (len < 0) {
+		snprintf(self, sizeof self, "/usr/bin/dev-install");
+	} else {
+		self[len] = '\0';
+	}
+	gchar *argv[] = {self, "import", "--consent", g_review.file, NULL};
+	gint out_fd = -1;
+	gint err_fd = -1;
+	GError *error = NULL;
+	g_mac_id[0] = '\0';
+	g_child_error[0] = '\0';
+	g_child_stopped = 0;
+	if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, child_own_group,
+			NULL, &g_child, NULL, &out_fd, &err_fd, &error)) {
+		gtk_label_set_text(GTK_LABEL(g_status), "Not installed. The installer could not be started.");
+		g_clear_error(&error);
+		return;
+	}
+	g_child_running = 1;
+	GIOChannel *out = g_io_channel_unix_new(out_fd);
+	GIOChannel *err = g_io_channel_unix_new(err_fd);
+	g_io_channel_set_flags(out, g_io_channel_get_flags(out) | G_IO_FLAG_NONBLOCK, NULL);
+	g_io_channel_set_flags(err, g_io_channel_get_flags(err) | G_IO_FLAG_NONBLOCK, NULL);
+	g_io_channel_set_close_on_unref(out, TRUE);
+	g_io_channel_set_close_on_unref(err, TRUE);
+	g_io_add_watch(out, G_IO_IN | G_IO_HUP | G_IO_ERR, on_child_line, GINT_TO_POINTER(0));
+	g_io_add_watch(err, G_IO_IN | G_IO_HUP | G_IO_ERR, on_child_line, GINT_TO_POINTER(1));
+	g_io_channel_unref(out);
+	g_io_channel_unref(err);
+	g_child_watch_add(g_child, on_child_done, NULL);
+	gtk_button_set_label(GTK_BUTTON(g_import), "Stop");
+	gtk_widget_set_sensitive(g_check, FALSE);
+	gtk_widget_set_sensitive(g_launch, FALSE);
+	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 0.02);
+	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), "Reading");
+	gtk_label_set_text(GTK_LABEL(g_status), "Installing. Nothing from the file is run.");
 }
 
 static void on_import(GtkButton *button, gpointer data) {
 	(void)button;
 	(void)data;
+	if (is_mac_review()) {
+		if (g_child_running) {
+			g_child_stopped = 1;
+			kill(-g_child, SIGTERM);
+			return;
+		}
+		start_mac_install();
+		return;
+	}
 	int code = cmd_import(g_review.file, g_ext[0] ? g_ext : NULL, 1);
 	if (code == 0 && (g_review.launchable || strcmp(g_review.action, "install") == 0 ||
 			strcmp(g_review.action, "rpm") == 0 || strcmp(g_review.action, "wine") == 0)) {
@@ -1640,8 +2200,21 @@ static void on_import(GtkButton *button, gpointer data) {
 static void on_launch(GtkButton *button, gpointer data) {
 	(void)button;
 	(void)data;
-	struct rec recs[64];
-	int n = load_recs(recs, 64);
+	if (is_mac_review()) {
+		if (g_mac_id[0] == '\0') {
+			gtk_label_set_text(GTK_LABEL(g_status), "Nothing to open.");
+			return;
+		}
+		pid_t pid = fork();
+		if (pid == 0) {
+			execl("/proc/self/exe", "dev-install", "launch", g_mac_id, (char *)NULL);
+			_exit(127);
+		}
+		gtk_label_set_text(GTK_LABEL(g_status), "Opening.");
+		return;
+	}
+	struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX);
 	for (int i = 0; i < n; i++) {
 		if (strcmp(recs[i].path, g_review.file) == 0 &&
 				(strcmp(recs[i].launch, "native") == 0 || strcmp(recs[i].launch, "wine") == 0)) {
@@ -1658,40 +2231,98 @@ static void on_launch(GtkButton *button, gpointer data) {
 }
 
 static GtkWidget *build_window(const struct review *r) {
+	int mac = strncmp(r->kind, "mac_", 4) == 0;
 	GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(win), "Install");
-	gtk_window_set_default_size(GTK_WINDOW(win), 560, 420);
+	/* The compositor draws the title bar and the window controls. Without
+	 * this GTK draws a second bar of its own underneath. */
+	gtk_window_set_decorated(GTK_WINDOW(win), FALSE);
+	gtk_window_set_default_size(GTK_WINDOW(win), 560, mac ? 300 : 420);
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
 	gtk_container_set_border_width(GTK_CONTAINER(box), 18);
 	gtk_container_add(GTK_CONTAINER(win), box);
-	GtkWidget *title = gtk_label_new(NULL);
-	gtk_label_set_markup(GTK_LABEL(title), "<span size='large' weight='bold'>Install</span>");
-	gtk_widget_set_halign(title, GTK_ALIGN_START);
-	gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
-	char line[700];
-	snprintf(line, sizeof line, "%s\n%s · %s\n%s", r->name, r->kind[0] ? r->kind : "unknown",
-		r->guest[0] ? r->guest : "unknown", r->message);
-	GtkWidget *body = gtk_label_new(line);
-	gtk_label_set_xalign(GTK_LABEL(body), 0);
-	gtk_label_set_line_wrap(GTK_LABEL(body), TRUE);
-	gtk_box_pack_start(GTK_BOX(box), body, FALSE, FALSE, 0);
+	char line[900];
+	if (mac) {
+		/* The application's own picture and name first, the way a disk
+		 * image shows what is in it when it is opened on a Mac. */
+		GtkWidget *head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+		GtkWidget *picture = NULL;
+		if (r->mac_icon[0] != '\0') {
+			GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(r->mac_icon, 96, 96, TRUE, NULL);
+			if (pixbuf != NULL) {
+				picture = gtk_image_new_from_pixbuf(pixbuf);
+				g_object_unref(pixbuf);
+			}
+		}
+		if (picture == NULL) {
+			picture = gtk_image_new_from_icon_name("package-x-generic", GTK_ICON_SIZE_DIALOG);
+			gtk_image_set_pixel_size(GTK_IMAGE(picture), 96);
+		}
+		gtk_widget_set_valign(picture, GTK_ALIGN_START);
+		gtk_box_pack_start(GTK_BOX(head), picture, FALSE, FALSE, 0);
+		GtkWidget *column = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+		gtk_box_pack_start(GTK_BOX(head), column, TRUE, TRUE, 0);
+		GtkWidget *title = gtk_label_new(NULL);
+		const char *shown = r->mac_first[0] != '\0' ? r->mac_first
+			: r->mac_title[0] != '\0' ? r->mac_title : r->name;
+		char *markup = g_markup_printf_escaped("<span size='x-large' weight='bold'>%s</span>", shown);
+		gtk_label_set_markup(GTK_LABEL(title), markup);
+		g_free(markup);
+		gtk_label_set_xalign(GTK_LABEL(title), 0);
+		gtk_box_pack_start(GTK_BOX(column), title, FALSE, FALSE, 0);
+		snprintf(line, sizeof line, "%s · %s", r->detail, r->name);
+		GtkWidget *kind = gtk_label_new(line);
+		gtk_label_set_xalign(GTK_LABEL(kind), 0);
+		gtk_label_set_ellipsize(GTK_LABEL(kind), PANGO_ELLIPSIZE_MIDDLE);
+		gtk_box_pack_start(GTK_BOX(column), kind, FALSE, FALSE, 0);
+		/* The line above already says what kind of file this is. */
+		const char *text = r->message;
+		size_t kind_len = strlen(r->detail);
+		if (kind_len > 0 && strncmp(text, r->detail, kind_len) == 0 && text[kind_len] == '.' &&
+				text[kind_len + 1] == ' ') {
+			text += kind_len + 2;
+		}
+		GtkWidget *body = gtk_label_new(text);
+		gtk_label_set_xalign(GTK_LABEL(body), 0);
+		gtk_label_set_line_wrap(GTK_LABEL(body), TRUE);
+		gtk_label_set_max_width_chars(GTK_LABEL(body), 52);
+		gtk_box_pack_start(GTK_BOX(column), body, FALSE, FALSE, 0);
+		gtk_box_pack_start(GTK_BOX(box), head, FALSE, FALSE, 0);
+	} else {
+		GtkWidget *title = gtk_label_new(NULL);
+		gtk_label_set_markup(GTK_LABEL(title), "<span size='large' weight='bold'>Install</span>");
+		gtk_widget_set_halign(title, GTK_ALIGN_START);
+		gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
+		snprintf(line, sizeof line, "%s\n%s · %s\n%s", r->name, r->kind[0] ? r->kind : "unknown",
+			r->guest[0] ? r->guest : "unknown", r->message);
+		GtkWidget *body = gtk_label_new(line);
+		gtk_label_set_xalign(GTK_LABEL(body), 0);
+		gtk_label_set_line_wrap(GTK_LABEL(body), TRUE);
+		gtk_box_pack_start(GTK_BOX(box), body, FALSE, FALSE, 0);
+	}
 	int can_import = strcmp(r->action, "import") == 0 || strcmp(r->action, "keep") == 0 ||
 		strcmp(r->action, "install") == 0 || strcmp(r->action, "rpm") == 0 ||
-		strcmp(r->action, "wine") == 0;
-	GtkWidget *bar = gtk_progress_bar_new();
-	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(bar), 0);
-	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(bar),
+		strcmp(r->action, "wine") == 0 || strcmp(r->action, "mac") == 0;
+	g_bar = gtk_progress_bar_new();
+	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 0);
+	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar),
 		"No download. This desktop does not fetch guest images.");
-	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(bar), TRUE);
-	gtk_box_pack_start(GTK_BOX(box), bar, FALSE, FALSE, 0);
-	GtkWidget *check = gtk_check_button_new_with_label(
-		can_import ? "Import this file. It will not run until Launch."
-			: "Import stays off. This format has not been installed here.");
-	gtk_widget_set_sensitive(check, can_import);
-	gtk_box_pack_start(GTK_BOX(box), check, FALSE, FALSE, 0);
+	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(g_bar), TRUE);
+	gtk_box_pack_start(GTK_BOX(box), g_bar, FALSE, FALSE, 0);
+	if (mac) {
+		g_check = gtk_check_button_new_with_label(can_import
+			? "Install into Applications. It will not run until it is opened."
+			: "Install stays off. There is no application in this file.");
+	} else {
+		g_check = gtk_check_button_new_with_label(
+			can_import ? "Import this file. It will not run until Launch."
+				: "Import stays off. This format has not been installed here.");
+	}
+	gtk_widget_set_sensitive(g_check, can_import);
+	gtk_box_pack_start(GTK_BOX(box), g_check, FALSE, FALSE, 0);
 	GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-	g_import = gtk_button_new_with_label("Import");
-	g_launch = gtk_button_new_with_label("Launch");
+	g_import = gtk_button_new_with_label(mac ? "Install" : "Import");
+	g_launch = gtk_button_new_with_label(mac ? "Open" : "Launch");
 	gtk_widget_set_sensitive(g_import, FALSE);
 	gtk_widget_set_sensitive(g_launch, FALSE);
 	gtk_box_pack_start(GTK_BOX(row), g_import, FALSE, FALSE, 0);
@@ -1701,12 +2332,55 @@ static GtkWidget *build_window(const struct review *r) {
 		? "Nothing has been run."
 		: "Recognized only. Nothing was installed or run.");
 	gtk_widget_set_halign(g_status, GTK_ALIGN_START);
+	gtk_label_set_line_wrap(GTK_LABEL(g_status), TRUE);
+	gtk_label_set_xalign(GTK_LABEL(g_status), 0);
 	gtk_box_pack_start(GTK_BOX(box), g_status, FALSE, FALSE, 0);
-	g_signal_connect(check, "toggled", G_CALLBACK(on_consent), NULL);
+	g_signal_connect(g_check, "toggled", G_CALLBACK(on_consent), NULL);
 	g_signal_connect(g_import, "clicked", G_CALLBACK(on_import), NULL);
 	g_signal_connect(g_launch, "clicked", G_CALLBACK(on_launch), NULL);
 	g_signal_connect(win, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 	return win;
+}
+
+/* OLYMPIUM_INSTALL_AUTO is for tests, which have no pointer to click with.
+ * "install" ticks the box and presses Install. "stop" does the same and then
+ * presses Stop at once. The window reports what happened and closes. It does
+ * nothing that "dev-install import --consent" does not already do. */
+static gboolean auto_report(gpointer data) {
+	(void)data;
+	if (g_child_running) {
+		return TRUE;
+	}
+	printf("auto: %s\n", gtk_label_get_text(GTK_LABEL(g_status)));
+	printf("auto_id: %s\n", g_mac_id[0] != '\0' ? g_mac_id : "none");
+	fflush(stdout);
+	gtk_main_quit();
+	return FALSE;
+}
+
+static gboolean auto_stop(gpointer data) {
+	(void)data;
+	if (g_child_running) {
+		gtk_button_clicked(GTK_BUTTON(g_import));
+	}
+	return FALSE;
+}
+
+static gboolean auto_press(gpointer data) {
+	const char *mode = data;
+	if (!is_mac_review()) {
+		printf("auto: not a Mac file with an application\n");
+		gtk_main_quit();
+		return FALSE;
+	}
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g_check), TRUE);
+	gtk_button_clicked(GTK_BUTTON(g_import));
+	if (strcmp(mode, "stop") == 0) {
+		g_timeout_add(atoi(getenv("OLYMPIUM_INSTALL_AUTO_STOP_MS") != NULL
+			? getenv("OLYMPIUM_INSTALL_AUTO_STOP_MS") : "30"), auto_stop, NULL);
+	}
+	g_timeout_add(100, auto_report, NULL);
+	return FALSE;
 }
 
 static int cmd_preview(const char *path, const char *png) {
@@ -1771,8 +2445,18 @@ static int is_package(const struct review *r) {
 static int cmd_open(const char *path, int no_ui) {
 	char ext[32];
 	extension_of(path, ext, sizeof ext);
-	struct rec recs[64];
-	int n = load_recs(recs, 64);
+	struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX);
+	/* An application that is already in Applications is opened, not offered
+	 * for install again. That is what a double-click on it means. */
+	char resolved[PATH_MAX];
+	if (realpath(path, resolved) != NULL) {
+		for (int i = 0; i < n; i++) {
+			if (strcmp(recs[i].launch, "mac") == 0 && strcmp(recs[i].path, resolved) == 0) {
+				return cmd_launch(recs[i].id, 0, NULL);
+			}
+		}
+	}
 	struct review r;
 	fill_review(path, &r);
 	if (!is_package(&r)) {
@@ -1797,6 +2481,10 @@ static int cmd_open(const char *path, int no_ui) {
 		gtk_init(NULL, NULL);
 		GtkWidget *win = build_window(&r);
 		gtk_widget_show_all(win);
+		const char *automatic = getenv("OLYMPIUM_INSTALL_AUTO");
+		if (automatic != NULL && automatic[0] != '\0') {
+			g_timeout_add(400, auto_press, (gpointer)automatic);
+		}
 		gtk_main();
 	}
 	return 0;
@@ -1807,10 +2495,12 @@ static void usage(void) {
 		"usage: dev-install inspect FILE\n"
 		"       dev-install import --consent FILE [--mime EXT]\n"
 		"       dev-install launch ID [ARG...]\n"
+		"       dev-install remove ID\n"
 		"       dev-install open [--no-ui] FILE\n"
 		"       dev-install preview FILE PNG\n"
 		"       dev-install timings\n"
 		"       dev-install prewarm on|off|status|run\n"
+		"       dev-install confinement\n"
 		"       dev-install exchange\n");
 }
 
@@ -1847,6 +2537,9 @@ int main(int argc, char **argv) {
 	if (strcmp(argv[1], "launch") == 0 && argc >= 3) {
 		return cmd_launch(argv[2], argc - 3, argv + 3);
 	}
+	if (strcmp(argv[1], "remove") == 0 && argc == 3) {
+		return cmd_remove(argv[2]);
+	}
 	if (strcmp(argv[1], "open") == 0) {
 		int no_ui = 0;
 		const char *file = NULL;
@@ -1868,6 +2561,11 @@ int main(int argc, char **argv) {
 	}
 	if (strcmp(argv[1], "timings") == 0) {
 		return cmd_timings();
+	}
+	if (strcmp(argv[1], "confinement") == 0) {
+		/* How an unvetted disk image or package would be unpacked here. */
+		printf("%s\n", dev_confine_name(dev_confine_probe()));
+		return 0;
 	}
 	if (strcmp(argv[1], "prewarm") == 0 && argc == 3) {
 		int rc = cmd_prewarm(argv[2]);

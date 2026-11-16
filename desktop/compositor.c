@@ -3357,21 +3357,24 @@ static void pad_scan_desktops(struct server *server, const char *dirpath, int de
 		if (strncmp(name, "Foot", 4) == 0 || strncmp(name, "Python", 6) == 0) {
 			continue;
 		}
+		char cmd[768];
+		if (in_term) {
+			snprintf(cmd, sizeof cmd, "/usr/bin/foot -e %s", command);
+		} else {
+			snprintf(cmd, sizeof cmd, "%s", command);
+		}
+		/* The same entry found twice is listed once. Two programs that
+		 * happen to share a name, a Mac application and a Linux one say,
+		 * are two programs and are both listed. */
 		int already = 0;
 		for (int j = 0; j < server->pad_count; j++) {
-			if (strcmp(server->pad[j].name, name) == 0) {
+			if (strcmp(server->pad[j].name, name) == 0 && strcmp(server->pad[j].cmd, cmd) == 0) {
 				already = 1;
 				break;
 			}
 		}
 		if (already) {
 			continue;
-		}
-		char cmd[768];
-		if (in_term) {
-			snprintf(cmd, sizeof cmd, "/usr/bin/foot -e %s", command);
-		} else {
-			snprintf(cmd, sizeof cmd, "%s", command);
 		}
 		struct pad_app *app = pad_add(server, name, cmd, "installed", "", 0);
 		if (app != NULL && !find_icon_file(icon, app->icon_file, sizeof app->icon_file)) {

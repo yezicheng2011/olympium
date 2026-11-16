@@ -128,3 +128,41 @@ int dev_macho_identify(const uint8_t *data, size_t length, struct dev_macho_info
 		out->filetype);
 	return 0;
 }
+
+static uint32_t read_be32(const uint8_t *p) {
+	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+int dev_macho_archs(const uint8_t *data, size_t length, uint32_t *cputypes, int max) {
+	if (data == NULL || length < 8 || max <= 0) {
+		return 0;
+	}
+	uint32_t magic = read_be32(data);
+	if (magic == 0xCAFEBABE || magic == 0xCAFEBABF) {
+		/* A universal file: a count, then one entry per slice, all
+		 * big-endian. An entry is 20 bytes, or 32 in the 64-bit variant,
+		 * and starts with the CPU type. Java class files begin with the
+		 * same four bytes followed by a version number, so a count this
+		 * table could not hold means the file is not Mach-O. */
+		uint32_t slices = read_be32(data + 4);
+		if (slices == 0 || slices > 16) {
+			return 0;
+		}
+		size_t entry = magic == 0xCAFEBABF ? 32 : 20;
+		int count = 0;
+		for (uint32_t i = 0; i < slices && count < max; i++) {
+			size_t at = 8 + (size_t)i * entry;
+			if (at + 4 > length) {
+				break;
+			}
+			cputypes[count++] = read_be32(data + at);
+		}
+		return count;
+	}
+	struct dev_macho_info info;
+	if (dev_macho_identify(data, length, &info) != 0 || info.kind == DEV_MACHO_FAT) {
+		return 0;
+	}
+	cputypes[0] = info.cputype;
+	return 1;
+}

@@ -12,7 +12,7 @@ GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 # built where Xwayland can be: it needs xcb and xcb-xfixes.
 CLIP_HELPER := $(shell pkg-config --exists xcb xcb-xfixes && echo dev-clip-helper)
 
-.PHONY: all clip-helper test test-wine clean
+.PHONY: all clip-helper test test-wine test-mac clean
 
 all: $(CLIP_HELPER) dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
 
@@ -29,8 +29,8 @@ clip-helper: $(CLIP_HELPER)
 dev-clip-helper: clip-helper.c
 	$(CC) $(CFLAGS) -o $@ clip-helper.c $(shell pkg-config --cflags --libs xcb xcb-xfixes)
 
-dev-files: files.c
-	$(CC) $(CFLAGS) -o $@ files.c $(GTK_FLAGS)
+dev-files: files.c macbundle.c macho.c macbundle.h macho.h
+	$(CC) $(CFLAGS) $(LARGE_FILES) -o $@ files.c macbundle.c macho.c $(GTK_FLAGS)
 
 dev-settings: settings.c
 	$(CC) $(CFLAGS) -o $@ settings.c $(GTK_FLAGS)
@@ -47,8 +47,17 @@ olympium-run: run.c
 olympium-testapp: testapp.c
 	$(CC) $(CFLAGS) -o $@ testapp.c $(GTK_FLAGS)
 
-dev-install: install.c
-	$(CC) $(CFLAGS) -o $@ install.c $(GTK_FLAGS)
+# Mac disk images and packages are unpacked by 7-Zip and cpio in a confined
+# child. The payload decoder needs liblzma and zlib.
+MAC_SOURCES := macpkg.c macbundle.c macho.c sandbox.c
+MAC_HEADERS := macpkg.h macbundle.h macho.h sandbox.h
+
+# A disk image is often larger than 2 GB. On a 32-bit system the file
+# calls only see a file that size when they are built for large files.
+LARGE_FILES := -D_FILE_OFFSET_BITS=64
+
+dev-install: install.c $(MAC_SOURCES) $(MAC_HEADERS)
+	$(CC) $(CFLAGS) $(LARGE_FILES) -o $@ install.c $(MAC_SOURCES) $(GTK_FLAGS) -llzma -lz
 
 desk-note: desk-note.c
 	$(CC) $(CFLAGS) -o $@ desk-note.c $(GTK_FLAGS)
@@ -69,6 +78,10 @@ test: test-blur test-macho
 # Needs wine, Xwayland, and mingw. It exits 77 when one is missing.
 test-wine:
 	./test-wine.sh
+
+# Needs 7-Zip, cpio, and python3. It exits 77 without the first two.
+test-mac:
+	./test-mac.sh
 
 clean:
 	rm -f dev-clip-helper dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash-gen splash.png

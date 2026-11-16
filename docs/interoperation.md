@@ -1,6 +1,6 @@
 # Programs from different systems on one desktop
 
-This is what a Linux program and a Windows program can do with each other on this desktop, what the desktop draws around them, and what was run. There is no Android runtime in the image, and macOS programs are kept and not started, so neither takes part.
+This is what a Linux program and a Windows program can do with each other on this desktop, what the desktop draws around them, and what was run. There is no Android runtime in the image, so Android takes no part. A Mac application can be installed and listed, and is started only through Darling, which is not in the image; `docs/mac-apps.md` covers that, and no Mac program took part in anything here.
 
 ## Between a Windows program and a Linux program
 
@@ -10,7 +10,7 @@ This is what a Linux program and a Windows program can do with each other on thi
 | One shared folder | `$OLYMPIUM_DESK_HOME/exchange` is drive `S:` in the Wine prefix. `dev-install launch` adds the link to a finished prefix. | A file written on Linux was read with `type S:\from-linux.txt`. A file written to `S:\` by `cmd` was read on Linux. |
 | Opening a Linux document with a Windows program | A path argument that exists is handed to the Windows program as `Z:\...`. | `report one.txt`, with a space in its name, reached `desk-win.exe` and `GetFileAttributes` found it. |
 | A window like any other | A Wine window gets the same title bar, shadow, corners, dock dot, and focus rules as a Wayland window. | The window mapped in every test run. No picture of a Wine window was taken in this pass. |
-| Launchpad and dock | Import writes a `.desktop` file and a dock pin for every kind of program. | On the boot of `9c1b41e4…`, before this pass. |
+| Launchpad and dock | Import writes a `.desktop` file for every kind of program, and a dock pin for Linux and Windows ones. A shortcut that a Windows installer puts in the Start Menu becomes an entry too: Wine writes it under the user's applications, and Launchpad reads that folder and the folders under it. | Import: on the boot of `9c1b41e4…`. The Start Menu shortcut: `make -C desktop test-wine` made one under Wine, and Launchpad listed it and started it. |
 
 ## The clipboard
 
@@ -28,7 +28,7 @@ The helper reads no clipboard contents. It asks only for the list of formats and
 
 - Images, files, and rich text on the clipboard were not tested. Drag and drop between a Wine window and a Wayland window was not tried.
 - A copy made by a Windows program before its window is in front is ignored.
-- Windows programs do not appear in Launchpad by themselves. Wine's own start-menu entries are not read. Only a file imported through Install is listed.
+- A Windows program that puts no shortcut in the Start Menu appears in Launchpad only when it was imported through Install. One with a shortcut and no icon of its own is drawn with the stand-in tile.
 - A Windows program is not offered as the handler of a file type unless it was imported with `--mime EXT`.
 
 ## Widgets
