@@ -219,6 +219,12 @@ static void base_name(const char *path, char *out, size_t n) {
 	snprintf(out, n, "%s", slash != NULL ? slash + 1 : path);
 }
 
+static int real_pe(const char *path);
+
+/* What this desktop can tell about a file by itself, for an image that does
+ * not carry the Olympium runtime. Debian and RPM packages and Windows
+ * programs are unpacked and started by this desktop and by Wine, so nothing
+ * about them needs that runtime's answer. */
 static int local_kind(const char *path, struct review *r) {
 	unsigned char mag[128];
 	FILE *f = fopen(path, "rb");
@@ -260,6 +266,27 @@ static int local_kind(const char *path, struct review *r) {
 		snprintf(r->detail, sizeof r->detail, "Debian package.");
 		return 0;
 	}
+	if (n >= 4 && mag[0] == 0xed && mag[1] == 0xab && mag[2] == 0xee && mag[3] == 0xdb) {
+		snprintf(r->guest, sizeof r->guest, "linux");
+		snprintf(r->kind, sizeof r->kind, "linux_rpm");
+		snprintf(r->detail, sizeof r->detail, "RPM package.");
+		return 0;
+	}
+	if (n >= 2 && mag[0] == 'M' && mag[1] == 'Z' && real_pe(path)) {
+		snprintf(r->guest, sizeof r->guest, "windows");
+		snprintf(r->kind, sizeof r->kind, "windows_exe");
+		snprintf(r->detail, sizeof r->detail, "Windows program.");
+		snprintf(r->engine, sizeof r->engine, "wine");
+		snprintf(r->launch_type, sizeof r->launch_type, "process");
+		snprintf(r->program, sizeof r->program, "/usr/bin/wine");
+		r->hides = 1;
+		r->plan_ok = 1;
+		if (access(r->program, X_OK) != 0) {
+			snprintf(r->message, sizeof r->message,
+				"Windows program. Wine is not installed on this system, so it cannot be started here.");
+		}
+		return 0;
+	}
 	return 0;
 }
 
@@ -268,8 +295,10 @@ static void apply_runtime(struct review *r) {
 	if (bin == NULL) {
 		r->runtime = 0;
 		local_kind(r->file, r);
-		snprintf(r->message, sizeof r->message,
-			"The Olympium command is not on this image. Only a Linux program is launchable here.");
+		if (r->message[0] == '\0') {
+			snprintf(r->message, sizeof r->message,
+				"The Olympium runtime is not on this image, so this desktop read the file itself.");
+		}
 		return;
 	}
 	r->runtime = 1;
@@ -1213,7 +1242,59 @@ static int run_quiet(char *const argv[]) {
 	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 }
 
+/* The X display Wine draws through. DISPLAY, when it is set. Otherwise the
+ * name the compositor wrote down once Xwayland was ready: a program can be
+ * started in the first seconds of a session, before that, and its
+ * environment then has no DISPLAY in it. So this waits for the name, up to
+ * OLYMPIUM_XWAIT seconds (20 unless set), and gives up at once when the
+ * compositor wrote that the session has no X display. */
+static int env_seconds(const char *name, int fallback);
+
+static int find_x_display(char *out, size_t n) {
+	const char *env = getenv("DISPLAY");
+	if (env != NULL && env[0] != '\0') {
+		snprintf(out, n, "%s", env);
+		return 1;
+	}
+	const char *run = getenv("XDG_RUNTIME_DIR");
+	char path[600];
+	snprintf(path, sizeof path, "%s/olympium-xdisplay",
+		run != NULL && run[0] != '\0' ? run : "/run/dev-desktop");
+	long wait_ms = (long)env_seconds("OLYMPIUM_XWAIT", 20) * 1000;
+	long start = mono_ms();
+	for (;;) {
+		FILE *f = fopen(path, "r");
+		if (f != NULL) {
+			char line[64] = "";
+			if (fgets(line, sizeof line, f) == NULL) {
+				line[0] = '\0';
+			}
+			fclose(f);
+			line[strcspn(line, "\r\n")] = '\0';
+			if (strcmp(line, "none") == 0) {
+				return 0;
+			}
+			if (line[0] == ':' && line[1] != '\0') {
+				snprintf(out, n, "%s", line);
+				return 1;
+			}
+		}
+		if (mono_ms() - start >= wait_ms) {
+			return 0;
+		}
+		usleep(100000);
+	}
+}
+
+/* The Wine prefix: "wine" in the desk directory, or OLYMPIUM_WINE_PREFIX for
+ * someone who keeps theirs elsewhere. The boot test uses the second to time
+ * a prefix Wine has to build, beside the one the image already carries. */
 static void wine_prefix_path(char *out, size_t n) {
+	const char *env = getenv("OLYMPIUM_WINE_PREFIX");
+	if (env != NULL && env[0] == '/') {
+		snprintf(out, n, "%s", env);
+		return;
+	}
 	char root[512];
 	desk_root(root, sizeof root);
 	snprintf(out, n, "%s/wine", root);
@@ -1874,14 +1955,15 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 				again.message[0] != '\0' ? again.message : "Wine is not available.");
 			return 3;
 		}
-		const char *xdisplay = getenv("DISPLAY");
-		if (xdisplay == NULL || xdisplay[0] == '\0') {
+		char xdisplay[64];
+		if (!find_x_display(xdisplay, sizeof xdisplay)) {
 			/* Wine draws through X. Without Xwayland it would start, fail to
 			 * create its window, and take the program down with it. */
 			fprintf(stderr, "dev-install: %s was not started. This desktop has no X display "
 				"for Wine (Xwayland is not running).\n", rec->name);
 			return 3;
 		}
+		setenv("DISPLAY", xdisplay, 1);
 		char prefix[640];
 		long prefix_ms = 0;
 		long t0 = mono_ms();

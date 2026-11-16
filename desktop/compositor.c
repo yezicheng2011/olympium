@@ -123,6 +123,7 @@ struct view {
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
 	struct wl_listener associate;
+	struct wl_listener dissociate;
 	struct wl_listener request_configure;
 	int placed;
 	int is_xwayland;
@@ -4370,6 +4371,34 @@ static void view_request_fullscreen(struct wl_listener *listener, void *data) {
 	wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
 }
 
+/* Where a program finds this session's X display when DISPLAY was not in the
+ * environment it was started with. The session's startup script, and all it
+ * starts, can begin before Xwayland is ready, and DISPLAY is only known once
+ * it is. The file holds the display's name, or "none" when this session will
+ * not have one. While it is absent the answer is not known yet. dev-install
+ * reads it before it starts a Windows program. */
+static void x_display_note(const char *value) {
+	const char *run = getenv("XDG_RUNTIME_DIR");
+	char path[600];
+	char tmp[640];
+	snprintf(path, sizeof path, "%s/olympium-xdisplay",
+		run != NULL && run[0] != '\0' ? run : "/run/dev-desktop");
+	if (value == NULL) {
+		unlink(path);
+		return;
+	}
+	snprintf(tmp, sizeof tmp, "%s.tmp", path);
+	FILE *f = fopen(tmp, "w");
+	if (f == NULL) {
+		return;
+	}
+	fprintf(f, "%s\n", value);
+	fclose(f);
+	if (rename(tmp, path) != 0) {
+		unlink(tmp);
+	}
+}
+
 static void launch_startup(struct server *server, const char *why) {
 	if (server->startup_sent || server->startup_cmd[0] == '\0') {
 		return;
@@ -4392,6 +4421,7 @@ static void xwayland_ready(struct wl_listener *listener, void *data) {
 	struct server *server = wl_container_of(listener, server, xwayland_ready);
 	if (server->xwayland != NULL && server->xwayland->display_name != NULL) {
 		setenv("DISPLAY", server->xwayland->display_name, 1);
+		x_display_note(server->xwayland->display_name);
 		wlr_log(WLR_INFO, "xwayland on DISPLAY=%s", server->xwayland->display_name);
 		server->xwayland_up = 1;
 		clip_helper_start(server);
@@ -4463,9 +4493,42 @@ static void xwayland_associate(struct wl_listener *listener, void *data) {
 	}
 }
 
+/* An X window loses its Wayland surface when it is withdrawn, and the surface
+ * is freed soon after, while the X window itself can live on and be shown
+ * again with a new surface. The two listeners on the old surface have to come
+ * off here. Left on, they stay linked into freed memory, and taking them off
+ * later, when the X window is destroyed, writes into whatever that memory has
+ * become. wlroots has already unmapped the surface when it sends this. */
+static void xwayland_dissociate(struct wl_listener *listener, void *data) {
+	(void)data;
+	struct view *view = wl_container_of(listener, view, dissociate);
+	if (!view->bound) {
+		return;
+	}
+	wl_list_remove(&view->map.link);
+	wl_list_remove(&view->unmap.link);
+	view->bound = 0;
+	if (view == view->server->grabbed) {
+		reset_cursor_mode(view->server);
+	}
+	if (view->mapped) {
+		wl_list_remove(&view->link);
+		view->mapped = 0;
+	}
+	/* The scene node showed the surface that is going away. A window that is
+	 * shown again gets a new one for its new surface. */
+	if (view->scene_tree != NULL) {
+		wlr_scene_node_destroy(&view->scene_tree->node);
+		view->scene_tree = NULL;
+	}
+}
+
 static void xwayland_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct view *view = wl_container_of(listener, view, destroy);
+	if (view == view->server->grabbed) {
+		reset_cursor_mode(view->server);
+	}
 	if (view->mapped) {
 		wl_list_remove(&view->link);
 		view->mapped = 0;
@@ -4475,6 +4538,7 @@ static void xwayland_destroy(struct wl_listener *listener, void *data) {
 		wl_list_remove(&view->unmap.link);
 	}
 	wl_list_remove(&view->associate.link);
+	wl_list_remove(&view->dissociate.link);
 	wl_list_remove(&view->request_configure.link);
 	wl_list_remove(&view->destroy.link);
 	if (view->scene_tree != NULL) {
@@ -4494,6 +4558,8 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
 	surface->data = view;
 	view->associate.notify = xwayland_associate;
 	wl_signal_add(&surface->events.associate, &view->associate);
+	view->dissociate.notify = xwayland_dissociate;
+	wl_signal_add(&surface->events.dissociate, &view->dissociate);
 	view->request_configure.notify = xwayland_request_configure;
 	wl_signal_add(&surface->events.request_configure, &view->request_configure);
 	view->destroy.notify = xwayland_destroy;
@@ -4853,8 +4919,11 @@ int main(int argc, char *argv[]) {
 		wl_signal_add(&server.xwayland->events.new_surface, &server.new_xwayland_surface);
 		server.xwayland_ready.notify = xwayland_ready;
 		wl_signal_add(&server.xwayland->events.ready, &server.xwayland_ready);
+		/* Not known yet. A note left by an earlier session is not this one's. */
+		x_display_note(NULL);
 	} else {
 		wlr_log(WLR_ERROR, "xwayland was not created");
+		x_display_note("none");
 	}
 
 	const char *socket = wl_display_add_socket_auto(server.wl_display);
@@ -4906,6 +4975,7 @@ int main(int argc, char *argv[]) {
 	}
 	wlr_log(WLR_INFO, "compositor on WAYLAND_DISPLAY=%s title=%s", socket, server.title);
 	wl_display_run(server.wl_display);
+	x_display_note(NULL);
 	wl_display_destroy_clients(server.wl_display);
 	wl_display_destroy(server.wl_display);
 	return server.shot_path[0] != '\0' && !server.shot_written ? 2 : 0;

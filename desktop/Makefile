@@ -81,6 +81,9 @@ test-blur: test_blur.c blur.c blur.h
 test-macho: test_macho.c macho.c macho.h
 	$(CC) $(CFLAGS) -o $@ test_macho.c macho.c
 
+test-xremap: test_xremap.c
+	$(CC) $(CFLAGS) -o $@ test_xremap.c $(shell pkg-config --cflags --libs xcb)
+
 test: test-blur test-macho
 	./test-blur
 	./test-macho
@@ -98,4 +101,4 @@ test-packages:
 	./test-packages.sh
 
 clean:
-	rm -f dev-clip-helper dev-compositor-nox dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash-gen splash.png
+	rm -f dev-clip-helper dev-compositor-nox dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho test-xremap splash-gen splash.png

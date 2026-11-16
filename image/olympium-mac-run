@@ -42,16 +42,38 @@ case "$program" in
 	/*) ;;
 	*) echo "olympium-mac-run: the program path must be absolute" >&2; exit 2 ;;
 esac
+# Darling keeps its prefix under the home directory. A session started by
+# the system may have no HOME set.
+if [ -z "${HOME:-}" ]; then
+	HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+	export HOME=${HOME:-/root}
+fi
+# Darling mounts its prefix as an overlay with the prefix as the upper layer,
+# and the kernel does not allow that on top of another overlay. The home
+# folder of a live system is one: Darling stops there with "Cannot mount an
+# overlay". So on such a home the prefix goes on a memory file system
+# instead, where it lasts until shutdown, like everything else a live system
+# writes. An installed system has an ordinary home and keeps ~/.darling.
+if [ -z "${DPREFIX:-}" ] && [ "$(stat -f -c %T "$HOME" 2>/dev/null)" = overlayfs ]; then
+	for base in "${XDG_RUNTIME_DIR:-/run}" /run /dev/shm; do
+		if [ -d "$base" ] && [ -w "$base" ] && [ "$(stat -f -c %T "$base" 2>/dev/null)" = tmpfs ]; then
+			mkdir -p "$base/olympium-mac" && chmod 700 "$base/olympium-mac"
+			export DPREFIX="$base/olympium-mac/prefix-$(id -u)"
+			break
+		fi
+	done
+fi
 # Darling keeps one container per prefix and starts it on first use. At the
 # revision this was run against, the container's server sometimes crashes the
 # very first time a new prefix is set up, and the command then says "Try
-# again". So the container is brought up first, with a command that does
+# again", and says it again until the crashed container has been cleared
+# away. So the container is brought up first, with a command that does
 # nothing, and tried again if it went down. Once a prefix exists this takes a
 # fraction of a second and succeeds at once.
 tries=0
 until darling shell true >/dev/null 2>&1; do
 	tries=$((tries + 1))
-	if [ "$tries" -ge 5 ]; then
+	if [ "$tries" -ge 12 ]; then
 		echo "olympium-mac-run: Darling's container did not start" >&2
 		exit 4
 	fi

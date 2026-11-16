@@ -80,10 +80,10 @@ fi
 # dev-install reads Mac disk images and packages with 7-Zip and cpio, and its
 # payload decoder is built against liblzma and zlib. librsvg2-common lets
 # Launchpad load SVG icons. A root made before these were needed gets them here.
-if ! chroot "$ROOT" dpkg -s 7zip liblzma-dev zlib1g-dev librsvg2-common >/dev/null 2>&1; then
+if ! chroot "$ROOT" dpkg -s 7zip liblzma-dev zlib1g-dev librsvg2-common rpm rpm2cpio >/dev/null 2>&1; then
 	chroot "$ROOT" apt-get update
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
-		7zip cpio librsvg2-common liblzma-dev zlib1g-dev
+		7zip cpio librsvg2-common liblzma-dev zlib1g-dev rpm rpm2cpio
 fi
 
 install -d "$ROOT/usr/share/olympium"

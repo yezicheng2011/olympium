@@ -33,15 +33,32 @@ install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" "$ROOT/usr/share/olym
 install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
 	"$REPO/image/install-sample.sh" "$REPO/image/olympium-mac-run" \
 	"$ROOT/usr/libexec/dev-desktop/"
-# dev-install unpacks Mac disk images and packages with 7-Zip and cpio. A
-# root made before that needs them added. Nothing else is downloaded.
-if [ ! -x "$ROOT/usr/bin/7z" ] && [ ! -x "$ROOT/usr/bin/7zz" ]; then
+# dev-install unpacks Mac disk images and packages with 7-Zip and cpio, and
+# an .rpm with rpm and rpm2cpio. A root made before those were needed gets
+# them added. Nothing else is downloaded.
+if { [ ! -x "$ROOT/usr/bin/7z" ] && [ ! -x "$ROOT/usr/bin/7zz" ]; } || [ ! -x "$ROOT/usr/bin/rpm2cpio" ]; then
 	mount_chroot
 	chroot "$ROOT" apt-get update
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
-		7zip cpio librsvg2-common
+		7zip cpio librsvg2-common rpm rpm2cpio
 	umount_chroot
 fi
+# Mac samples for the boot test: a disk image and an installer package that
+# desktop/mac-fixtures.py writes byte by byte. Nothing in them is Apple's.
+macfx=$(mktemp -d)
+python3 "$REPO/desktop/mac-fixtures.py" "$macfx" >/dev/null
+install -m 644 "$macfx/DeskMac.dmg" "$macfx/DeskMac.pkg" "$ROOT/usr/share/olympium/samples/"
+# With a staged Darling, one more: a disk image around a real Mach-O program,
+# Darling's own build of echo, so the boot test can start a Mac program.
+DARLING_STAGE=${DARLING_OUT:-/var/tmp/darling-out}
+rm -f "$ROOT/usr/share/olympium/samples/DeskEcho.dmg"
+if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ] \
+		&& [ -f "$DARLING_STAGE/usr/local/libexec/darling/bin/echo" ]; then
+	python3 "$REPO/desktop/mac-fixtures.py" --wrap \
+		"$DARLING_STAGE/usr/local/libexec/darling/bin/echo" "Desk Echo" "$macfx/DeskEcho.dmg"
+	install -m 644 "$macfx/DeskEcho.dmg" "$ROOT/usr/share/olympium/samples/"
+fi
+rm -rf "$macfx"
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.note"
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.dnote"
 rm -rf "$ROOT/tmp/desktop"

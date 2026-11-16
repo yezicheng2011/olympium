@@ -171,7 +171,8 @@ verify_drivers() {
 			miss=1
 		fi
 	done
-	install -d "$ROOT/usr/share/olympium"
+	# build/ is not in the repository, so a fresh clone does not have it yet.
+	install -d "$ROOT/usr/share/olympium" "$REPO/build"
 	{
 		echo "arch ${ARCH}"
 		echo "kernel ${kver}"
@@ -199,8 +200,9 @@ install_packages() {
 		libgtk-3-0 foot fonts-dejavu-core adwaita-icon-theme ca-certificates \
 		e2fsprogs dosfstools parted grub-common util-linux bash coreutils \
 		libwlroots12t64 libseat1 \
-		7zip cpio librsvg2-common
+		7zip cpio librsvg2-common rpm rpm2cpio
 	# 7zip and cpio unpack Mac disk images and packages for dev-install.
+	# rpm and rpm2cpio are what it reads and unpacks an .rpm with.
 	# librsvg2-common lets Launchpad load a program's SVG icon.
 	if [ "$ARCH" = amd64 ]; then
 		DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \

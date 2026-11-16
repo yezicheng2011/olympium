@@ -152,8 +152,13 @@ int mac_icon_render(const char *icns_path, const char *png_out) {
 			}
 		}
 		signal(SIGPIPE, SIG_DFL);
+#if !defined(__SANITIZE_ADDRESS__)
+		/* A build with the address sanitizer reserves terabytes of address
+		 * space for itself and cannot start under this limit, so that build
+		 * goes without it. It still has the ten seconds and the confinement. */
 		struct rlimit memory = {.rlim_cur = 768u * 1024 * 1024, .rlim_max = 768u * 1024 * 1024};
 		setrlimit(RLIMIT_AS, &memory);
+#endif
 		alarm(10);
 		if (dev_confine_self(NULL, NULL) < 0) {
 			_exit(125);

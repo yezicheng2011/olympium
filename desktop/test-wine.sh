@@ -426,16 +426,102 @@ echo "$out" | grep -q '"action": "review"' && echo "$out" | grep -q '64-bit ARM'
 	{ echo "FAIL ARM64 program on x86 was not refused"; fail=1; }
 echo "wrong-CPU programs: refused"
 
-# 10. No X display: the launch is refused and Wine is not started.
+# 9b. An image built without the Olympium runtime. The desktop reads the
+# program itself, and it is imported and started the same way. The launch
+# uses the prefix named by OLYMPIUM_WINE_PREFIX, which is how the boot test
+# keeps a second prefix beside the image's own.
+if [ ! -x /usr/bin/olympium ]; then
+	norun=$ROOT/desk-norun
+	mkdir -p "$norun"
+	out=$(OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun ./dev-install inspect "$ROOT/desk-win.exe")
+	echo "$out" | grep -q '"runtime": "absent"' && echo "$out" | grep -q '"action": "wine"' ||
+		{ echo "FAIL without the runtime a Windows program was not recognized"; fail=1; }
+	OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun \
+		./dev-install import --consent "$ROOT/desk-win.exe" >"$ROOT/norun-import.log" 2>&1 ||
+		{ echo "FAIL import without the runtime"; cat "$ROOT/norun-import.log"; fail=1; }
+	nid=$(awk -F '\t' '$6=="windows_exe" {print $1; exit}' "$norun/library.tsv" 2>/dev/null)
+	before=$(mapped_count 'Desk Win')
+	main_prefix=$OLYMPIUM_DESK_HOME/wine
+	OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun OLYMPIUM_WINE_PREFIX=$main_prefix \
+		./dev-install launch "$nid" --once >"$ROOT/norun-launch.log" 2>&1 &
+	npid=$!
+	wait_mapped 'Desk Win' "$before" >/dev/null ||
+		{ echo "FAIL without the runtime the program opened no window"; cat "$ROOT/norun-launch.log"; fail=1; }
+	wait "$npid"
+	grep -q '^wine_prefix existing' "$norun/wine-launch-marks" ||
+		{ echo "FAIL OLYMPIUM_WINE_PREFIX was not used"; cat "$norun/wine-launch-marks"; fail=1; }
+	[ ! -e "$norun/wine" ] || { echo "FAIL a second prefix was built"; fail=1; }
+	echo "without the Olympium runtime: recognized, imported, and started in the prefix that was named"
+else
+	echo "without the Olympium runtime: /usr/bin/olympium is installed here; not tested"
+fi
+
+# 9c. An X window that is hidden and shown again, then hidden and destroyed,
+# which is the order Wine closes a window in. Hiding takes the window's
+# Wayland surface away while the X window lives on. The compositor has to let
+# go of the old surface and show the window again on its new one.
+if make test-xremap >/dev/null 2>&1; then
+	before=$(mapped_count 'Desk Remap')
+	./test-xremap 1
+	sleep 0.4
+	shown=$(( $(mapped_count 'Desk Remap') - before ))
+	[ "$shown" -eq 2 ] ||
+		{ echo "FAIL an X window hidden and shown again was mapped $shown times, not 2"; fail=1; }
+	./test-xremap 25
+	sleep 0.5
+	shown=$(( $(mapped_count 'Desk Remap') - before ))
+	if [ "$shown" -eq 52 ] && kill -0 "$(cat "$ROOT/comp.pid")" 2>/dev/null; then
+		echo "an X window hidden, shown again and destroyed, 26 times: shown each time, compositor still up"
+	else
+		echo "FAIL after 26 rounds of hide, show and destroy: mapped $shown times of 52, or the compositor is gone"
+		fail=1
+	fi
+else
+	echo "FAIL test-xremap did not build"
+	fail=1
+fi
+
+# 10. A program started without DISPLAY in its environment. That is what the
+# session's startup script and everything it starts have when the session
+# began before Xwayland was ready. The launch finds the display the
+# compositor wrote down and opens its window.
+grep -qx "$DISPLAY" "$XDG_RUNTIME_DIR/olympium-xdisplay" 2>/dev/null ||
+	{ echo "FAIL the compositor did not write down its X display"; fail=1; }
 before=$(mapped_count 'Desk Win')
-(unset DISPLAY; ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
+(unset DISPLAY; ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1) &
+npid=$!
+if wait_mapped 'Desk Win' "$before" >/dev/null; then
+	echo "launch without DISPLAY in its environment: found the session's X display, window opened"
+else
+	echo "FAIL launch without DISPLAY opened no window"
+	cat "$ROOT/nodisplay.log"
+	fail=1
+fi
+wait "$npid"
+# The session says it has no X display: refused at once, Wine not started.
+mkdir -p "$ROOT/run-none" "$ROOT/run-empty"
+echo none > "$ROOT/run-none/olympium-xdisplay"
+before=$(mapped_count 'Desk Win')
+t0=$(now_ms)
+(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run-none ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
 rc=$?
+t1=$(now_ms)
+if [ "$rc" -ne 3 ] || [ $((t1 - t0)) -gt 900 ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
+	echo "FAIL launch in a session with no X display: exit $rc after $((t1 - t0)) ms"
+	fail=1
+fi
+# Nothing written down at all: it waits as long as it was told to, then refuses.
+t0=$(now_ms)
+(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run-empty OLYMPIUM_XWAIT=1 ./dev-install launch "$id" --once >"$ROOT/nodisplay.log" 2>&1)
+rc=$?
+t1=$(now_ms)
 sleep 1
-if [ "$rc" -ne 3 ] || [ "$(mapped_count 'Desk Win')" -ne "$before" ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
-	echo "FAIL launch without an X display: exit $rc"
+if [ "$rc" -ne 3 ] || [ $((t1 - t0)) -lt 900 ] || [ $((t1 - t0)) -gt 3000 ] ||
+		[ "$(mapped_count 'Desk Win')" -ne "$before" ] || ! grep -q 'no X display' "$ROOT/nodisplay.log"; then
+	echo "FAIL launch with no X display to be found: exit $rc after $((t1 - t0)) ms"
 	fail=1
 else
-	echo "launch without an X display: refused"
+	echo "launch with no X display: refused, at once when the session says so, after the wait otherwise"
 fi
 
 # 11. The compositor built without Xwayland still starts a session.
@@ -447,8 +533,9 @@ if [ -x "$ROOT/comp-nox" ]; then
 	chmod 755 "$ROOT/nox.sh"
 	(unset DISPLAY; XDG_RUNTIME_DIR=$ROOT/run2 WLR_BACKENDS=headless WLR_RENDERER=pixman \
 		DEV_DESK_HEADLESS=1 timeout 6 "$ROOT/comp-nox" -s "$ROOT/nox.sh" >"$ROOT/nox.log" 2>&1)
-	if [ "$(cat "$ROOT/nox.env" 2>/dev/null)" = "display=[]" ]; then
-		echo "compositor without Xwayland: session started, no DISPLAY"
+	if [ "$(cat "$ROOT/nox.env" 2>/dev/null)" = "display=[]" ] &&
+			[ "$(cat "$ROOT/run2/olympium-xdisplay" 2>/dev/null)" = none ]; then
+		echo "compositor without Xwayland: session started, no DISPLAY, and it says so"
 	else
 		echo "FAIL compositor without Xwayland did not start a session"
 		tail -n 5 "$ROOT/nox.log"

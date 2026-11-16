@@ -115,3 +115,7 @@ That is a Mac program going the whole way: disk image or package, confined unpac
 - No package with a bzip2 payload; the decoder does not read one and says so.
 - The fallback confinement on a kernel that really lacks Landlock. It was forced on a kernel that has it.
 - Darling on arm64, where it would run arm64 Mac programs. The i386 image cannot have it: Darling needs a 64-bit system.
+
+## On a booted image
+
+The amd64 install image, built with `OLYMPIUM_DARLING=1` and booted under QEMU emulation (no KVM), installed `DeskMac.dmg` and `DeskMac.pkg` under Landlock, listed them in Launchpad with their icon, and started `Desk Echo`, a real Mach-O program wrapped in a disk image, through Darling. It printed its line 12 s after the request (emulated time). A live system's home folder is an overlay, and Darling cannot put its prefix on one, so `olympium-mac-run` puts the prefix on a memory file system there. Still no graphical Mac application has been run.

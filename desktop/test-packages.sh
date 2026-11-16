@@ -100,6 +100,35 @@ else
 	echo "rpm, rpm2cpio or rpmbuild is not installed; the .rpm was not tested"
 fi
 
+# 2b. An image built without the Olympium runtime. The desktop reads both
+# formats itself, and an .rpm installs and runs the same way.
+if [ ! -x /usr/bin/olympium ]; then
+	norun=$ROOT/desk-norun
+	mkdir -p "$norun"
+	chmod 755 "$norun"
+	out=$(OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun ./dev-install inspect "$DEB")
+	[ "$(echo "$out" | field action)" = install ] || bad "without the runtime, inspect of the .deb: $out"
+	if [ -n "${RPM:-}" ] && [ -f "$RPM" ]; then
+		out=$(OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun ./dev-install inspect "$RPM")
+		[ "$(echo "$out" | field action)" = rpm ] || bad "without the runtime, inspect of the .rpm: $out"
+		OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun ./dev-install import --consent "$RPM" >"$ROOT/norun-rpm.log" 2>&1
+		code=$?
+		nrid=$(awk -F '\t' '$6=="linux_rpm" {print $1; exit}' "$norun/library.tsv" 2>/dev/null)
+		OLYMPIUM_BIN=/nonexistent OLYMPIUM_DESK_HOME=$norun ./dev-install launch "$nrid" >"$ROOT/norun-rpm-launch.log" 2>&1
+		if [ "$code" -eq 0 ] && [ -n "$nrid" ] &&
+				[ "$(tr -d '\n' < "$norun/exchange/desk-rpm.txt" 2>/dev/null)" = desk-rpm-ready ]; then
+			ok "without the Olympium runtime, the .deb and the .rpm are recognized and the .rpm runs"
+		else
+			bad "without the runtime, .rpm install (exit $code, id $nrid)"
+			tail -n 6 "$ROOT/norun-rpm.log" "$ROOT/norun-rpm-launch.log"
+		fi
+	else
+		ok "without the Olympium runtime, the .deb is recognized"
+	fi
+else
+	echo "without the Olympium runtime: /usr/bin/olympium is installed here; not tested"
+fi
+
 # 3. Packages built to misbehave. A .deb is an ar archive of three files, and
 # the third is a tar archive, so both are written here by hand.
 python3 - "$ROOT" <<'PYEOF'
