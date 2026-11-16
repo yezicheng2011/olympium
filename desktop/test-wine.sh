@@ -261,6 +261,78 @@ else
 fi
 wineserver_wait
 
+# 7c. Launchpad. A Windows installer puts a shortcut in the Start Menu, Wine
+# writes a desktop entry for it under the user's applications, and Launchpad
+# has to list that entry and start it with its whole command line.
+ctl() {
+	python3 - "$1" <<'PYEOF'
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect("/run/dev-desktop/control")
+s.sendall(sys.argv[1].encode())
+s.close()
+PYEOF
+}
+x86_64-w64-mingw32-gcc -O2 -o "$ROOT/desk-lnk.exe" desk-lnk.c -lole32 -luuid -lshell32 || exit 1
+WINEPREFIX=$OLYMPIUM_DESK_HOME/wine WINEDLLOVERRIDES="mscoree,mshtml=" \
+	wine "$ROOT/desk-lnk.exe" "Z:$(printf '%s' "$ROOT/desk-win.exe" | tr '/' '\\')" "Desk Win Shortcut" --once \
+	>"$ROOT/lnk.log" 2>&1
+WINEPREFIX=$OLYMPIUM_DESK_HOME/wine wineserver -w
+entry="$HOME/.local/share/applications/wine/Programs/Desk Win Shortcut.desktop"
+if [ ! -s "$entry" ]; then
+	echo "FAIL Wine wrote no desktop entry for the shortcut"
+	cat "$ROOT/lnk.log"
+	fail=1
+else
+	ctl "launchpad list"
+	sleep 0.5
+	if grep -q 'launchpad has: Desk Win Shortcut ' "$LOG"; then
+		echo "launchpad lists the windows shortcut: ok"
+	else
+		echo "FAIL launchpad does not list the Windows shortcut"
+		fail=1
+	fi
+	before=$(mapped_count 'Desk Win')
+	ctl "launchpad start Desk Win Shortcut"
+	if wait_mapped 'Desk Win' "$before" >/dev/null; then
+		echo "launchpad starts the windows shortcut: ok"
+	else
+		echo "FAIL launchpad did not start the Windows shortcut"
+		fail=1
+	fi
+fi
+# An entry whose command has arguments keeps them, and one whose program is
+# missing is left out.
+mkdir -p "$HOME/.local/share/applications/sub/deeper"
+cat > "$HOME/.local/share/applications/sub/deeper/args.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=Args Kept
+Exec=/bin/sh -c "echo args-kept > $ROOT/args.out" %U
+
+[Desktop Action other]
+Name=Wrong Name
+Exec=/bin/false
+EOF2
+cat > "$HOME/.local/share/applications/missing.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=Not Installed
+Exec=/nonexistent/program --flag
+EOF2
+ctl "launchpad start Args Kept"
+sleep 1
+ctl "launchpad list"
+sleep 0.5
+if [ "$(cat "$ROOT/args.out" 2>/dev/null)" = "args-kept" ] && ! grep -q 'launchpad has: Not Installed ' "$LOG" &&
+		! grep -q 'launchpad has: Wrong Name ' "$LOG"; then
+	echo "launchpad keeps arguments and skips missing programs: ok"
+else
+	echo "FAIL launchpad arguments: got '$(cat "$ROOT/args.out" 2>/dev/null)'"
+	fail=1
+fi
+wineserver_wait
+
 # 8. A 32-bit Windows program. It needs the 32-bit half of Wine.
 if command -v i686-w64-mingw32-gcc >/dev/null 2>&1; then
 	i686-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/desk-win32.exe" desk-win.c || exit 1
@@ -329,7 +401,7 @@ fi
 
 # 11. The compositor built without Xwayland still starts a session.
 cc -O2 -DDEV_DESK_NO_XWAYLAND -o "$ROOT/comp-nox" compositor.c blur.c \
-	$(pkg-config --cflags --libs wlroots wayland-server cairo pango pangocairo xkbcommon libdrm pixman-1) \
+	$(pkg-config --cflags --libs wlroots wayland-server cairo pango pangocairo gdk-pixbuf-2.0 xkbcommon libdrm pixman-1) \
 	-DWLR_USE_UNSTABLE -Iprotocol -lm 2>/dev/null || { echo "FAIL build without Xwayland"; fail=1; }
 if [ -x "$ROOT/comp-nox" ]; then
 	mkdir -p "$ROOT/run2"

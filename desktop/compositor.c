@@ -19,7 +19,9 @@
 #include <linux/input-event-codes.h>
 #include <math.h>
 #include <pango/pangocairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <pixman.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,11 +90,16 @@ static const struct app_entry APPS[] = {
 
 enum { APP_COUNT = sizeof APPS / sizeof APPS[0] };
 
+enum { PAD_MAX = 256 };
+
 struct pad_app {
-	char name[48];
-	char cmd[240];
+	char name[96];
+	char cmd[768];
 	char icon[16];
 	char group[24];
+	char icon_file[512];
+	cairo_surface_t *image;
+	int image_tried;
 	int is_folder;
 };
 
@@ -243,7 +250,7 @@ struct server {
 	int nag_demo_dismiss;
 	unsigned dock_running;
 	char pad_filter[64];
-	struct pad_app pad[48];
+	struct pad_app pad[PAD_MAX];
 	struct pinned_app {
 		char name[48];
 		char path[192];
@@ -2358,8 +2365,8 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 					}
 					handled = 1;
 				} else if (syms[i] == XKB_KEY_Return) {
-					int ids[48];
-					int n = pad_list(server, ids, 48);
+					int ids[PAD_MAX];
+					int n = pad_list(server, ids, PAD_MAX);
 					int at = server->pad_page * PAD_PER + server->pad_cursor;
 					if (server->pad_cursor >= 0 && at < n) {
 						pad_activate(server, ids[at]);
@@ -3065,17 +3072,19 @@ static void menu_activate(struct server *server, int menu, int item) {
 	}
 }
 
-static void pad_add(struct server *server, const char *name, const char *cmd,
+static struct pad_app *pad_add(struct server *server, const char *name, const char *cmd,
 		const char *icon, const char *group, int folder) {
-	if (server->pad_count >= 48 || name == NULL || name[0] == '\0') {
-		return;
+	if (server->pad_count >= PAD_MAX || name == NULL || name[0] == '\0') {
+		return NULL;
 	}
 	struct pad_app *app = &server->pad[server->pad_count++];
+	memset(app, 0, sizeof(*app));
 	snprintf(app->name, sizeof app->name, "%s", name);
 	snprintf(app->cmd, sizeof app->cmd, "%s", cmd != NULL ? cmd : "");
 	snprintf(app->icon, sizeof app->icon, "%s", icon != NULL ? icon : "generic");
 	snprintf(app->group, sizeof app->group, "%s", group != NULL ? group : "");
 	app->is_folder = folder;
+	return app;
 }
 
 /* Add an entry only when the program it starts is really on this system. */
@@ -3087,47 +3096,262 @@ static void pad_tool(struct server *server, const char *name, const char *progra
 	pad_add(server, name, cmd, icon, group, 0);
 }
 
-static void pad_scan_desktops(struct server *server, const char *dirpath) {
+/* Finds a program the way a shell would. */
+static int program_exists(const char *program) {
+	if (program[0] == '\0') {
+		return 0;
+	}
+	if (strchr(program, '/') != NULL) {
+		return access(program, X_OK) == 0;
+	}
+	const char *path = getenv("PATH");
+	if (path == NULL || path[0] == '\0') {
+		path = "/usr/local/bin:/usr/bin:/bin:/usr/games";
+	}
+	char full[600];
+	while (*path != '\0') {
+		size_t len = strcspn(path, ":");
+		if (len > 0 && len < 400) {
+			snprintf(full, sizeof full, "%.*s/%s", (int)len, path, program);
+			if (access(full, X_OK) == 0) {
+				return 1;
+			}
+		}
+		path += len;
+		if (*path == ':') {
+			path++;
+		}
+	}
+	return 0;
+}
+
+/* Turns the Exec line of a desktop entry into a shell command. The value is
+ * a desktop-entry string first (\\ is a backslash, \s a space) and field
+ * codes such as %U stand for files the launcher was not given. What is left
+ * is the command with all its arguments: an entry such as "libreoffice
+ * --writer" or Wine's "env WINEPREFIX=... wine C:\\...\\Name.lnk" is not the
+ * same program without them. Returns 0 when the program is not installed. */
+static int exec_to_command(const char *exec, char *out, size_t n) {
+	size_t k = 0;
+	for (const char *p = exec; *p != '\0' && k + 2 < n; p++) {
+		if (*p == '\\' && p[1] != '\0') {
+			p++;
+			char c = *p == 's' ? ' ' : *p == 'n' ? '\n' : *p == 't' ? '\t' : *p == 'r' ? '\r' : *p;
+			out[k++] = c;
+		} else if (*p == '%' && p[1] != '\0') {
+			p++;
+			if (*p == '%') {
+				out[k++] = '%';
+			}
+		} else {
+			out[k++] = *p;
+		}
+	}
+	while (k > 0 && (out[k - 1] == ' ' || out[k - 1] == '\t')) {
+		k--;
+	}
+	out[k] = '\0';
+	/* The program is the first word that is not "env" or NAME=value. */
+	const char *p = out;
+	char word[400];
+	for (;;) {
+		while (*p == ' ' || *p == '\t') {
+			p++;
+		}
+		if (*p == '\0') {
+			return 0;
+		}
+		size_t w = 0;
+		char quote = 0;
+		while (*p != '\0' && (quote != 0 || (*p != ' ' && *p != '\t'))) {
+			if (quote == 0 && (*p == '"' || *p == '\'')) {
+				quote = *p;
+			} else if (quote != 0 && *p == quote) {
+				quote = 0;
+			} else if (*p == '\\' && quote != '\'' && p[1] != '\0') {
+				p++;
+				if (w + 1 < sizeof word) {
+					word[w++] = *p;
+				}
+			} else if (w + 1 < sizeof word) {
+				word[w++] = *p;
+			}
+			p++;
+		}
+		word[w] = '\0';
+		if (strcmp(word, "env") == 0) {
+			continue;
+		}
+		const char *eq = strchr(word, '=');
+		if (eq != NULL && eq != word && strchr(word, '/') > eq) {
+			continue;
+		}
+		if (eq != NULL && eq != word && strchr(word, '/') == NULL) {
+			continue;
+		}
+		return program_exists(word);
+	}
+}
+
+/* Where an icon named in a desktop entry is on disk. Bigger sizes first:
+ * the tile is drawn at 72 pixels and scaled down cleanly. */
+static int find_icon_file(const char *icon, char *out, size_t n) {
+	if (icon[0] == '\0') {
+		return 0;
+	}
+	if (icon[0] == '/') {
+		snprintf(out, n, "%s", icon);
+		return access(out, R_OK) == 0;
+	}
+	char roots[4][400];
+	int root_count = 0;
+	const char *data = getenv("XDG_DATA_HOME");
+	const char *home = getenv("HOME");
+	const char *desk = getenv("OLYMPIUM_DESK_HOME");
+	if (data != NULL && data[0] != '\0') {
+		snprintf(roots[root_count++], sizeof roots[0], "%s/icons", data);
+	} else if (home != NULL && home[0] != '\0') {
+		snprintf(roots[root_count++], sizeof roots[0], "%s/.local/share/icons", home);
+	}
+	if (desk != NULL && desk[0] != '\0') {
+		snprintf(roots[root_count++], sizeof roots[0], "%s/icons", desk);
+	}
+	snprintf(roots[root_count++], sizeof roots[0], "/usr/share/icons");
+	static const char *const themes[] = {"hicolor", "Adwaita", "Papirus", "breeze", "gnome"};
+	static const char *const sizes[] = {
+		"256x256", "128x128", "96x96", "72x72", "64x64", "scalable", "512x512", "48x48", "32x32",
+	};
+	static const char *const exts[] = {"png", "svg"};
+	for (int r = 0; r < root_count; r++) {
+		for (size_t t = 0; t < sizeof themes / sizeof themes[0]; t++) {
+			for (size_t z = 0; z < sizeof sizes / sizeof sizes[0]; z++) {
+				for (size_t e = 0; e < 2; e++) {
+					snprintf(out, n, "%s/%s/%s/apps/%s.%s", roots[r], themes[t], sizes[z], icon, exts[e]);
+					if (access(out, R_OK) == 0) {
+						return 1;
+					}
+				}
+			}
+		}
+	}
+	static const char *const flat[] = {"png", "svg", "xpm"};
+	for (size_t e = 0; e < 3; e++) {
+		snprintf(out, n, "/usr/share/pixmaps/%s.%s", icon, flat[e]);
+		if (access(out, R_OK) == 0) {
+			return 1;
+		}
+	}
+	/* Some entries name the file with its extension. */
+	snprintf(out, n, "/usr/share/pixmaps/%s", icon);
+	return strchr(icon, '.') != NULL && access(out, R_OK) == 0;
+}
+
+/* Loads a program's own icon at 72 pixels: PNG, SVG, XPM, or a Mac .icns.
+ * Tried once per entry. NULL leaves the drawn stand-in tile. */
+static cairo_surface_t *pad_icon_image(struct pad_app *app) {
+	if (app->image != NULL || app->image_tried || app->icon_file[0] == '\0') {
+		return app->image;
+	}
+	app->image_tried = 1;
+	GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(app->icon_file, 72, 72, TRUE, NULL);
+	if (pixbuf == NULL) {
+		return NULL;
+	}
+	int w = gdk_pixbuf_get_width(pixbuf);
+	int h = gdk_pixbuf_get_height(pixbuf);
+	int channels = gdk_pixbuf_get_n_channels(pixbuf);
+	int stride = gdk_pixbuf_get_rowstride(pixbuf);
+	const guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
+	cairo_surface_t *image = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 72, 72);
+	unsigned char *dst = cairo_image_surface_get_data(image);
+	int dst_stride = cairo_image_surface_get_stride(image);
+	int off_x = (72 - w) / 2;
+	int off_y = (72 - h) / 2;
+	for (int y = 0; y < h && y + off_y < 72; y++) {
+		uint32_t *row = (uint32_t *)(void *)(dst + (size_t)(y + off_y) * dst_stride);
+		for (int x = 0; x < w && x + off_x < 72; x++) {
+			const guchar *px = pixels + (size_t)y * stride + (size_t)x * channels;
+			uint32_t alpha = channels == 4 ? px[3] : 255;
+			/* Cairo wants colour multiplied by alpha. */
+			uint32_t r = px[0] * alpha / 255;
+			uint32_t g = px[1] * alpha / 255;
+			uint32_t b = px[2] * alpha / 255;
+			row[x + off_x] = (alpha << 24) | (r << 16) | (g << 8) | b;
+		}
+	}
+	cairo_surface_mark_dirty(image);
+	g_object_unref(pixbuf);
+	app->image = image;
+	return image;
+}
+
+static void pad_scan_desktops(struct server *server, const char *dirpath, int depth) {
 	DIR *dir = opendir(dirpath);
 	if (dir == NULL) {
 		return;
 	}
 	struct dirent *ent;
 	while ((ent = readdir(dir)) != NULL) {
-		if (!strstr(ent->d_name, ".desktop")) {
+		if (ent->d_name[0] == '.') {
 			continue;
 		}
-		char path[512];
+		char path[768];
 		snprintf(path, sizeof path, "%s/%s", dirpath, ent->d_name);
+		size_t namelen = strlen(ent->d_name);
+		if (namelen < 9 || strcmp(ent->d_name + namelen - 8, ".desktop") != 0) {
+			/* Menus are folders of entries. Wine writes one folder per
+			 * Windows program group, several levels down. */
+			struct stat st;
+			if (depth < 6 && stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+				pad_scan_desktops(server, path, depth + 1);
+			}
+			continue;
+		}
 		FILE *f = fopen(path, "r");
 		if (f == NULL) {
 			continue;
 		}
-		char name[48] = "";
-		char exec[240] = "";
+		char name[96] = "";
+		char exec[700] = "";
+		char icon[300] = "";
+		char try_exec[300] = "";
 		int hidden = 0;
 		int in_term = 0;
-		char line[256];
+		int is_app = 0;
+		int in_entry = 0;
+		char line[1024];
 		while (fgets(line, sizeof line, f) != NULL) {
 			line[strcspn(line, "\r\n")] = '\0';
-			if (strcmp(line, "NoDisplay=true") == 0) {
+			if (line[0] == '[') {
+				/* Only the entry itself. Later groups are extra actions
+				 * with names and commands of their own. */
+				in_entry = strcmp(line, "[Desktop Entry]") == 0;
+				continue;
+			}
+			if (!in_entry) {
+				continue;
+			}
+			if (strcmp(line, "NoDisplay=true") == 0 || strcmp(line, "Hidden=true") == 0) {
 				hidden = 1;
 			} else if (strcmp(line, "Terminal=true") == 0) {
 				in_term = 1;
+			} else if (strcmp(line, "Type=Application") == 0) {
+				is_app = 1;
 			} else if (strncmp(line, "Name=", 5) == 0 && name[0] == '\0') {
-				snprintf(name, sizeof name, "%.47s", line + 5);
+				snprintf(name, sizeof name, "%.95s", line + 5);
 			} else if (strncmp(line, "Exec=", 5) == 0 && exec[0] == '\0') {
-				char *token = line + 5;
-				token[strcspn(token, " \t%")] = '\0';
-				if (token[0] == '/') {
-					snprintf(exec, sizeof exec, "%s", token);
-				} else {
-					snprintf(exec, sizeof exec, "/usr/bin/%.140s", token);
-				}
+				snprintf(exec, sizeof exec, "%.690s", line + 5);
+			} else if (strncmp(line, "Icon=", 5) == 0 && icon[0] == '\0') {
+				snprintf(icon, sizeof icon, "%.290s", line + 5);
+			} else if (strncmp(line, "TryExec=", 8) == 0) {
+				snprintf(try_exec, sizeof try_exec, "%.290s", line + 8);
 			}
 		}
 		fclose(f);
-		if (hidden || name[0] == '\0' || exec[0] == '\0' || access(exec, X_OK) != 0) {
+		char command[700];
+		if (hidden || !is_app || name[0] == '\0' || exec[0] == '\0' ||
+				!exec_to_command(exec, command, sizeof command) ||
+				(try_exec[0] != '\0' && !program_exists(try_exec))) {
 			continue;
 		}
 		if (strncmp(name, "Foot", 4) == 0 || strncmp(name, "Python", 6) == 0) {
@@ -3143,18 +3367,31 @@ static void pad_scan_desktops(struct server *server, const char *dirpath) {
 		if (already) {
 			continue;
 		}
-		char cmd[240];
+		char cmd[768];
 		if (in_term) {
-			snprintf(cmd, sizeof cmd, "/usr/bin/foot -e %s", exec);
+			snprintf(cmd, sizeof cmd, "/usr/bin/foot -e %s", command);
 		} else {
-			snprintf(cmd, sizeof cmd, "%s", exec);
+			snprintf(cmd, sizeof cmd, "%s", command);
 		}
-		pad_add(server, name, cmd, "installed", "", 0);
+		struct pad_app *app = pad_add(server, name, cmd, "installed", "", 0);
+		if (app != NULL && !find_icon_file(icon, app->icon_file, sizeof app->icon_file)) {
+			app->icon_file[0] = '\0';
+		}
 	}
 	closedir(dir);
 }
 
+static int pad_by_name(const void *a, const void *b) {
+	return strcasecmp(((const struct pad_app *)a)->name, ((const struct pad_app *)b)->name);
+}
+
 static void pad_load(struct server *server) {
+	for (int i = 0; i < server->pad_count; i++) {
+		if (server->pad[i].image != NULL) {
+			cairo_surface_destroy(server->pad[i].image);
+			server->pad[i].image = NULL;
+		}
+	}
 	server->pad_count = 0;
 	for (int i = 0; i < APP_COUNT; i++) {
 		if (strcmp(APPS[i].id, "launchpad") == 0) {
@@ -3195,19 +3432,38 @@ static void pad_load(struct server *server) {
 	pad_tool(server, "Documents", "/usr/bin/dev-files", "/usr/bin/dev-files /usr/share/doc", "files", "Places");
 	pad_tool(server, "Applications", "/usr/bin/dev-files", "/usr/bin/dev-files /usr/bin", "files", "Places");
 	pad_tool(server, "Computer", "/usr/bin/dev-files", "/usr/bin/dev-files /", "disks", "Places");
-	/* Installed desktop entries. Terminal programs open inside the terminal. */
-	pad_scan_desktops(server, "/usr/share/applications");
+	/* Installed desktop entries, each with its whole command line and its
+	 * own icon. Terminal programs open inside the terminal. The user's
+	 * directories include wine/Programs, where Wine puts an entry for every
+	 * shortcut a Windows installer creates. */
+	int scanned = server->pad_count;
+	pad_scan_desktops(server, "/usr/share/applications", 0);
+	pad_scan_desktops(server, "/usr/local/share/applications", 0);
 	const char *home = getenv("HOME");
-	if (home != NULL && home[0] != '\0') {
-		char user_apps[512];
+	const char *data_home = getenv("XDG_DATA_HOME");
+	char user_apps[512] = "";
+	if (data_home != NULL && data_home[0] != '\0') {
+		snprintf(user_apps, sizeof user_apps, "%s/applications", data_home);
+	} else if (home != NULL && home[0] != '\0') {
 		snprintf(user_apps, sizeof user_apps, "%s/.local/share/applications", home);
-		pad_scan_desktops(server, user_apps);
+	} else {
+		struct passwd *pw = getpwuid(getuid());
+		if (pw != NULL && pw->pw_dir != NULL) {
+			snprintf(user_apps, sizeof user_apps, "%s/.local/share/applications", pw->pw_dir);
+		}
+	}
+	if (user_apps[0] != '\0') {
+		pad_scan_desktops(server, user_apps, 0);
 	}
 	const char *desk_home = getenv("OLYMPIUM_DESK_HOME");
 	if (desk_home != NULL && desk_home[0] != '\0') {
 		char desk_apps[512];
 		snprintf(desk_apps, sizeof desk_apps, "%s/applications", desk_home);
-		pad_scan_desktops(server, desk_apps);
+		pad_scan_desktops(server, desk_apps, 0);
+	}
+	if (server->pad_count > scanned) {
+		qsort(&server->pad[scanned], (size_t)(server->pad_count - scanned),
+			sizeof(server->pad[0]), pad_by_name);
 	}
 	const char *folders[] = {"Utilities", "Places"};
 	for (int k = 0; k < 2; k++) {
@@ -3217,7 +3473,7 @@ static void pad_load(struct server *server) {
 				count++;
 			}
 		}
-		if (count > 0 && server->pad_count < 48) {
+		if (count > 0 && server->pad_count < PAD_MAX) {
 			/* Folders sit right after the core applications, on the first page. */
 			pad_add(server, folders[k], "", "folder", folders[k], 1);
 			int last = server->pad_count - 1;
@@ -3258,10 +3514,35 @@ static int pad_list(struct server *server, int *out, int max) {
 	return n;
 }
 
+/* A centred label with a soft shadow. A name wider than max_w ends in an
+ * ellipsis instead of running into the next tile. */
+static void pad_label_fit(cairo_t *cr, const char *font, const char *text, double cx, double y,
+		double max_w) {
+	PangoLayout *layout = pango_cairo_create_layout(cr);
+	pango_layout_set_text(layout, text, -1);
+	PangoFontDescription *desc = pango_font_description_from_string(font);
+	pango_layout_set_font_description(layout, desc);
+	if (max_w > 0) {
+		pango_layout_set_width(layout, (int)(max_w * PANGO_SCALE));
+		pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
+		pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+	}
+	int w = 0;
+	int h = 0;
+	pango_layout_get_pixel_size(layout, &w, &h);
+	double x = max_w > 0 ? cx - max_w / 2.0 : cx - w / 2.0;
+	cairo_set_source_rgba(cr, 0.08, 0.10, 0.18, 1);
+	cairo_move_to(cr, x + 1, y + 1);
+	pango_cairo_show_layout(cr, layout);
+	cairo_set_source_rgba(cr, 1, 1, 1, 1);
+	cairo_move_to(cr, x, y);
+	pango_cairo_show_layout(cr, layout);
+	pango_font_description_free(desc);
+	g_object_unref(layout);
+}
+
 static void pad_label(cairo_t *cr, const char *font, const char *text, double cx, double y) {
-	int w = paint_text(cr, font, text, 0, -80, 0, 0, 0);
-	paint_text(cr, font, text, cx - w / 2.0 + 1, y + 1, 0.08, 0.10, 0.18);
-	paint_text(cr, font, text, cx - w / 2.0, y, 1, 1, 1);
+	pad_label_fit(cr, font, text, cx, y, 0);
 }
 
 static void draw_pad(struct server *server, cairo_t *cr) {
@@ -3288,8 +3569,8 @@ static void draw_pad(struct server *server, cairo_t *cr) {
 		pad_label(cr, "Ubuntu Bold 20", server->pad[server->pad_folder].name,
 			server->screen_w / 2.0, 84);
 	}
-	int ids[48];
-	int n = pad_list(server, ids, 48);
+	int ids[PAD_MAX];
+	int n = pad_list(server, ids, PAD_MAX);
 	int pages = n == 0 ? 1 : (n + PAD_PER - 1) / PAD_PER;
 	if (server->pad_page >= pages) {
 		server->pad_page = pages - 1;
@@ -3329,6 +3610,13 @@ static void draw_pad(struct server *server, cairo_t *cr) {
 				cairo_restore(cr);
 				shown++;
 			}
+		} else if (pad_icon_image(&server->pad[ids[start + i]]) != NULL) {
+			/* The program's own icon, on a soft shadow so it sits on the
+			 * blurred backdrop the way the drawn tiles do. */
+			cairo_set_source_rgba(cr, 0.05, 0.07, 0.16, 0.16);
+			cairo_mask_surface(cr, app->image, ix, y + 2);
+			cairo_set_source_surface(cr, app->image, ix, y);
+			cairo_paint(cr);
 		} else {
 			cairo_save(cr);
 			cairo_translate(cr, ix, y);
@@ -3336,7 +3624,8 @@ static void draw_pad(struct server *server, cairo_t *cr) {
 			draw_icon(cr, app->icon, 0, 0);
 			cairo_restore(cr);
 		}
-		pad_label(cr, "Ubuntu Medium 12", app->name, x + PAD_CELL_W / 2.0, y + 84);
+		pad_label_fit(cr, "Ubuntu Medium 12", app->name, x + PAD_CELL_W / 2.0, y + 84,
+			PAD_CELL_W - 16);
 	}
 	double dots_y = server->screen_h - DOCK_H - DOCK_MARGIN - 22;
 	for (int p = 0; p < pages && p < 8; p++) {
@@ -3347,8 +3636,8 @@ static void draw_pad(struct server *server, cairo_t *cr) {
 }
 
 static int pad_hit(struct server *server, double x, double y, int *index) {
-	int ids[48];
-	int n = pad_list(server, ids, 48);
+	int ids[PAD_MAX];
+	int n = pad_list(server, ids, PAD_MAX);
 	int origin_x = (server->screen_w - PAD_COLS * PAD_CELL_W) / 2;
 	int start = server->pad_page * PAD_PER;
 	for (int i = 0; i < PAD_PER && start + i < n; i++) {
@@ -3365,8 +3654,8 @@ static int pad_hit(struct server *server, double x, double y, int *index) {
 
 /* A click on a page dot. Returns 1 when the page changed or the dot row was hit. */
 static int pad_dot_hit(struct server *server, double x, double y) {
-	int ids[48];
-	int n = pad_list(server, ids, 48);
+	int ids[PAD_MAX];
+	int n = pad_list(server, ids, PAD_MAX);
 	int pages = n == 0 ? 1 : (n + PAD_PER - 1) / PAD_PER;
 	double dots_y = server->screen_h - DOCK_H - DOCK_MARGIN - 22;
 	if (y < dots_y - 12 || y > dots_y + 12) {
@@ -4038,7 +4327,7 @@ static int on_control(int fd, uint32_t mask, void *data) {
 	if (client < 0) {
 		return 0;
 	}
-	char buf[128];
+	char buf[256];
 	ssize_t n = read(client, buf, sizeof buf - 1);
 	if (n > 0) {
 		buf[n] = '\0';
@@ -4048,6 +4337,34 @@ static int on_control(int fd, uint32_t mask, void *data) {
 			server->contrast = 1;
 		} else if (strncmp(buf, "contrast 0", 10) == 0) {
 			server->contrast = 0;
+		} else if (strncmp(buf, "launchpad list", 14) == 0) {
+			/* What Launchpad would show now, without opening it. */
+			pad_load(server);
+			for (int i = 0; i < server->pad_count; i++) {
+				if (!server->pad[i].is_folder) {
+					wlr_log(WLR_INFO, "launchpad has: %s [%s] icon %s", server->pad[i].name,
+						server->pad[i].icon,
+						server->pad[i].icon_file[0] != '\0' ? server->pad[i].icon_file : "drawn");
+				}
+			}
+			wlr_log(WLR_INFO, "launchpad list done: %d entries", server->pad_count);
+		} else if (strncmp(buf, "launchpad start ", 16) == 0) {
+			/* Start an entry by name, exactly as a click on its tile does. */
+			char *name = buf + 16;
+			name[strcspn(name, "\r\n")] = '\0';
+			pad_load(server);
+			int found = 0;
+			for (int i = 0; i < server->pad_count; i++) {
+				if (!server->pad[i].is_folder && strcmp(server->pad[i].name, name) == 0) {
+					wlr_log(WLR_INFO, "launchpad start: %s", name);
+					pad_activate(server, i);
+					found = 1;
+					break;
+				}
+			}
+			if (!found) {
+				wlr_log(WLR_INFO, "launchpad start: no entry named %s", name);
+			}
 		}
 		write_status(server);
 	}

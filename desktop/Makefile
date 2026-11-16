@@ -2,6 +2,8 @@ CFLAGS ?= -O2 -Wall -Wextra -Wno-unused-parameter
 WLROOTS_FLAGS := $(shell pkg-config --cflags --libs wlroots) -DWLR_USE_UNSTABLE -Iprotocol
 WAYLAND_FLAGS := $(shell pkg-config --cflags --libs wayland-server)
 CAIRO_FLAGS := $(shell pkg-config --cflags --libs cairo pango pangocairo)
+# Launchpad shows each program's own icon: PNG, SVG, XPM, or a Mac .icns.
+PIXBUF_FLAGS := $(shell pkg-config --cflags --libs gdk-pixbuf-2.0)
 XKB_FLAGS := $(shell pkg-config --cflags --libs xkbcommon)
 DRM_FLAGS := $(shell pkg-config --cflags --libs libdrm pixman-1)
 GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
@@ -19,7 +21,7 @@ splash.png: splash.c
 	./splash-gen splash.png
 
 dev-compositor: compositor.c blur.c blur.h xwayland-compat.h
-	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
+	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(PIXBUF_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
 
 # Builds the helper where it can be built and does nothing elsewhere.
 clip-helper: $(CLIP_HELPER)
