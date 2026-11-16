@@ -10,6 +10,7 @@ after it. The bundle cannot run anywhere. It is there so the desktop's
 unpacking, naming, icon, and architecture checks have something real to read.
 
   mac-fixtures.py OUTDIR
+  mac-fixtures.py --wrap PROGRAM NAME OUT.dmg
 
   DeskMac.dmg        zlib UDIF, HFS+ volume, one x86_64+arm64 application
   DeskMacApm.dmg     the same volume behind an Apple partition map
@@ -118,9 +119,10 @@ def macho_fat(cputypes):
 
 # -------------------------------------------------------------- the bundle
 
-def bundle_files(name, cputypes, binary_plist=False, version="1.2"):
+def bundle_files(name, cputypes, binary_plist=False, version="1.2", program=None):
     """The files of NAME.app as {relative path: (bytes, mode)}."""
-    program = macho_fat(cputypes) if len(cputypes) > 1 else macho_thin(cputypes[0])
+    if program is None:
+        program = macho_fat(cputypes) if len(cputypes) > 1 else macho_thin(cputypes[0])
     info = {
         "CFBundleName": name,
         "CFBundleDisplayName": name,
@@ -539,7 +541,28 @@ def write(path, data):
         handle.write(data)
 
 
+def wrap(program_path, name, out_path):
+    """A disk image around a program that already exists.
+
+    Used where a Mac runtime is installed, to carry one of that runtime's own
+    command-line programs through the whole path: disk image, Install,
+    Launchpad entry, launch. The program is copied as it is.
+    """
+    with open(program_path, "rb") as handle:
+        program = handle.read()
+    files = bundle_files(name, [CPU_X86_64], program=program)
+    blocks = max(1024, (sum(len(d) for d, _ in files.values()) // BLOCK) * 3 // 2 + 256)
+    volume = Hfs(name, total_blocks=blocks)
+    for path, (data, mode) in files.items():
+        volume.add_file(path, data, mode)
+    write(out_path, udif([("whole disk (Apple_HFS : 0)", volume.build())]))
+    print("wrapped", program_path, "as", out_path)
+
+
 def main():
+    if len(sys.argv) == 5 and sys.argv[1] == "--wrap":
+        wrap(sys.argv[2], sys.argv[3], sys.argv[4])
+        return
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
     out = os.path.abspath(sys.argv[1])

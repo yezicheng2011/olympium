@@ -167,6 +167,20 @@ else
 	bad "disk image install: id=$id icon=$icon"
 	cat "$ROOT/import.log"
 fi
+# The picture the desktop keeps is one it drew itself: 256 by 256, from the
+# pixels a confined child handed back. It is not the application's own bytes.
+if python3 - "$icon" "$APPS/Desk Mac.app/Contents/Resources/DeskMac.icns" <<'PYEOF'
+import struct, sys
+kept = open(sys.argv[1], "rb").read()
+original = open(sys.argv[2], "rb").read()
+width, height = struct.unpack(">II", kept[16:24])
+sys.exit(0 if (width, height) == (256, 256) and kept[8:] not in original and kept not in original else 1)
+PYEOF
+then
+	ok "the kept icon is a 256 by 256 picture drawn here, not bytes from the application"
+else
+	bad "the kept icon"
+fi
 [ ! -e "$OLYMPIUM_DESK_HOME/pinned" ] || bad "a Mac application was pinned to the dock"
 [ -z "$(find "$OLYMPIUM_DESK_HOME/mac" -maxdepth 1 -name '.stage-*' -o -maxdepth 1 -name '.old-*')" ] ||
 	bad "a staging folder was left behind"
@@ -287,6 +301,27 @@ rm -f "$ROOT/runtime.args"
 OLYMPIUM_MAC_RUNTIME=$ROOT/runtime ./dev-install launch "$id" >"$ROOT/launch.log" 2>&1
 [ $? -eq 4 ] && [ ! -e "$ROOT/runtime.args" ] &&
 	ok "a program changed after install is not opened" || bad "launch of a changed program"
+
+# 7a. An application whose icon file is damaged still installs, without a picture.
+rm -rf "$ROOT/damaged"
+mkdir -p "$ROOT/damaged"
+cp -a "$FX/plain/Desk Mac.app" "$ROOT/damaged/Bad Icon.app"
+python3 - "$ROOT/damaged/Bad Icon.app/Contents/Resources/DeskMac.icns" <<'PYEOF'
+import sys
+data = bytearray(open(sys.argv[1], "rb").read())
+for at in range(40, len(data), 7):
+    data[at] ^= 0xA5
+open(sys.argv[1], "wb").write(data)
+PYEOF
+reset_desk
+./dev-install import --consent "$ROOT/damaged/Bad Icon.app" >"$ROOT/badicon.log" 2>&1
+if [ $? -eq 0 ] && grep -q '^icon=none$' "$ROOT/badicon.log" && [ -d "$APPS/Bad Icon.app" ] &&
+		! grep -q '^Icon=' "$OLYMPIUM_DESK_HOME"/applications/olympium-mac-*.desktop; then
+	ok "an application with a damaged icon installs without a picture"
+else
+	bad "damaged icon"
+	tail -n 4 "$ROOT/badicon.log"
+fi
 
 # 7b. A double-click on an application that is already installed opens it.
 reset_desk

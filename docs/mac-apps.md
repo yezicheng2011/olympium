@@ -26,7 +26,7 @@ A package's `preinstall` and `postinstall` scripts are not run, ever. An applica
 3. Makes each application safe to keep. A link that points out of the application is removed. Anything that is not a file, a folder, or a link is removed. Set-user-ID and set-group-ID bits are cleared. Everything is made the property of the user who installed it.
 4. Reads `Info.plist`, in either its XML or its binary form, for the name, version, program, and icon. A program name with a slash in it is not followed.
 5. Moves the application to `$OLYMPIUM_DESK_HOME/mac/Applications/Name.app`. If one is already there it is set aside first and put back if the move fails, so an update never leaves half of each.
-6. Writes a library row, a wrapper, and a Launchpad entry whose icon is the PNG taken out of the application's `.icns`. Nothing is added to the dock.
+6. Writes a library row, a wrapper, and a Launchpad entry with the application's icon. Nothing is added to the dock.
 7. Deletes the staging folder. A staging folder left by an install that was killed is deleted the next time anything is installed.
 
 Up to eight applications are installed from one file.
@@ -42,6 +42,8 @@ A disk image or a package is whatever its author made it. 7-Zip and cpio run as 
 - An ordinary user on a kernel without Landlock gets no extra confinement: the unpacker can do what that user can do.
 
 `dev-install confinement` prints which of the three applies: `landlock`, `nobody`, or `none`.
+
+The icon gets the same treatment. An `.icns` is the application's own file, and decoding a picture is done by image libraries that have had memory-safety bugs. The programs that show icons here are the installer, Files, and, for Launchpad, the compositor. None of them decodes it. A child process that can open no file and no connection decodes it and hands back 256 by 256 pixels, a block of bytes of a known length that is treated as colours and nothing else. The picture file the desktop keeps is then written from those pixels. An icon that will not decode leaves the application installed with the stand-in tile.
 
 ## Opening an installed application
 
@@ -83,6 +85,7 @@ The files it opens are written by `desktop/mac-fixtures.py`, byte by byte: an HF
 - A package with no application was not installed.
 - A disk image whose volume holds a link pointing outside, a file filed under that link, and a link to `/etc/hostname` inside the application: the application was installed without those links and nothing was written outside. A package with a link pointing outside, a file to be written through it, a path of `../`, and an absolute path: refused, and nothing was written outside.
 - A disk image with 300 bytes changed, and a package cut short: refused, and the copy already installed was untouched.
+- The icon kept for an installed application was 256 by 256 and shared no stretch of bytes with the application's `.icns`. An application whose `.icns` was damaged installed without a picture.
 - Opening with no runtime exited 3 and said Darling is not installed. With a stand-in script for the runtime, the script received the application folder, the program, and the arguments. An application with no code for this CPU was not handed over. A program changed after install was not handed over.
 - A double-click on an application already in Applications started it instead of offering to install it.
 - An application named 计算器, in a volume named 计算器, in a file named `计算器 安装.dmg`, in a folder named `下载 文件`, installed under its own name.

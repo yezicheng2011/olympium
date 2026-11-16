@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 
 #include "macbundle.h"
+#include "macicon.h"
 
 enum { STACK_MAX = 32 };
 
@@ -179,30 +180,26 @@ static GdkPixbuf *app_bundle_picture(const char *path) {
 	if (mac_bundle_read(path, &b) != 0 || b.icon_path[0] == '\0') {
 		return NULL;
 	}
-	gchar *data = NULL;
-	gsize length = 0;
-	if (!g_file_get_contents(b.icon_path, &data, &length, NULL) || length > 64 * 1024 * 1024) {
-		g_free(data);
+	/* The icon is the application's own file. It is decoded by a confined
+	 * child and kept as a picture this program drew, named after the icon's
+	 * place, size and date so a changed icon is drawn again. */
+	struct stat st;
+	if (stat(b.icon_path, &st) != 0) {
 		return NULL;
 	}
+	gchar *key = g_strdup_printf("%s:%lld:%lld", b.icon_path, (long long)st.st_size, (long long)st.st_mtime);
+	gchar *sum = g_compute_checksum_for_string(G_CHECKSUM_SHA256, key, -1);
+	gchar *dir = g_build_filename(g_get_user_cache_dir(), "olympium-desk", "icons", NULL);
+	gchar *file = g_strdup_printf("%s/%.24s.png", dir, sum);
+	g_mkdir_with_parents(dir, 0700);
 	GdkPixbuf *picture = NULL;
-	size_t at = 0;
-	size_t png = 0;
-	GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
-	gdk_pixbuf_loader_set_size(loader, 52, 52);
-	/* The PNG inside the .icns when there is one, otherwise the .icns as it
-	 * is, which the loader reads in its older forms. */
-	gboolean fed = mac_icns_png((const unsigned char *)data, length, &at, &png) == 0
-		? gdk_pixbuf_loader_write(loader, (const guchar *)data + at, png, NULL)
-		: gdk_pixbuf_loader_write(loader, (const guchar *)data, length, NULL);
-	if (gdk_pixbuf_loader_close(loader, NULL) && fed) {
-		picture = gdk_pixbuf_loader_get_pixbuf(loader);
-		if (picture != NULL) {
-			g_object_ref(picture);
-		}
+	if (g_file_test(file, G_FILE_TEST_EXISTS) || mac_icon_render(b.icon_path, file) == 0) {
+		picture = gdk_pixbuf_new_from_file_at_scale(file, 52, 52, TRUE, NULL);
 	}
-	g_object_unref(loader);
-	g_free(data);
+	g_free(file);
+	g_free(dir);
+	g_free(sum);
+	g_free(key);
 	return picture;
 }
 

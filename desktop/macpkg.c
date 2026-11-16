@@ -6,6 +6,7 @@
 #include "macpkg.h"
 
 #include "macbundle.h"
+#include "macicon.h"
 #include "sandbox.h"
 
 #include <dirent.h>
@@ -1048,12 +1049,9 @@ static void review_dmg(const char *path, const char *cache_dir, struct mac_revie
 		app->program[0] = '\0';
 		if (b.icon_path[0] != '\0') {
 			char png[PATH_ROOM];
-			char icns[PATH_ROOM];
 			snprintf(png, sizeof png, "%s/icon-%d.png", cache_dir, i);
-			snprintf(icns, sizeof icns, "%s/icon-%d.icns", cache_dir, i);
-			int made = mac_icon_export(b.icon_path, png, icns);
-			if (made != 0) {
-				snprintf(app->icon, sizeof app->icon, "%s", made == 1 ? png : icns);
+			if (mac_icon_render(b.icon_path, png) == 0) {
+				snprintf(app->icon, sizeof app->icon, "%s", png);
 			}
 		}
 		out->app_count++;
@@ -1208,12 +1206,9 @@ static void review_app(const char *path, const char *cache_dir, struct mac_revie
 	app->program[0] = '\0';
 	if (b.icon_path[0] != '\0') {
 		char png[PATH_ROOM];
-		char icns[PATH_ROOM];
 		snprintf(png, sizeof png, "%s/icon-0.png", cache_dir);
-		snprintf(icns, sizeof icns, "%s/icon-0.icns", cache_dir);
-		int made = mac_icon_export(b.icon_path, png, icns);
-		if (made != 0) {
-			snprintf(app->icon, sizeof app->icon, "%s", made == 1 ? png : icns);
+		if (mac_icon_render(b.icon_path, png) == 0) {
+			snprintf(app->icon, sizeof app->icon, "%s", png);
 		}
 	}
 	out->app_count = 1;
@@ -1529,16 +1524,13 @@ int mac_install_file(const char *path, const char *desk_root, struct mac_app_inf
 			struct mac_app_info *app = &apps[installed];
 			fill_app(app, &b, dest);
 			if (b.icon_path[0] != '\0') {
+				/* Decoded by a confined child, written here from plain
+				 * pixels: Launchpad never reads the application's own bytes. */
 				char png[PATH_ROOM];
-				char icns[PATH_ROOM];
-				unsigned long key = text_hash(dest);
-				snprintf(png, sizeof png, "%s/mac-%08lx.png", icons_dir, key);
-				snprintf(icns, sizeof icns, "%s/mac-%08lx.icns", icons_dir, key);
+				snprintf(png, sizeof png, "%s/mac-%08lx.png", icons_dir, text_hash(dest));
 				unlink(png);
-				unlink(icns);
-				int made = mac_icon_export(b.icon_path, png, icns);
-				if (made != 0) {
-					snprintf(app->icon, sizeof app->icon, "%s", made == 1 ? png : icns);
+				if (mac_icon_render(b.icon_path, png) == 0) {
+					snprintf(app->icon, sizeof app->icon, "%s", png);
 				}
 			}
 			if (links_removed > 0) {

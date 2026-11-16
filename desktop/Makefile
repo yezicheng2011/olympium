@@ -29,8 +29,8 @@ clip-helper: $(CLIP_HELPER)
 dev-clip-helper: clip-helper.c
 	$(CC) $(CFLAGS) -o $@ clip-helper.c $(shell pkg-config --cflags --libs xcb xcb-xfixes)
 
-dev-files: files.c macbundle.c macho.c macbundle.h macho.h
-	$(CC) $(CFLAGS) $(LARGE_FILES) -o $@ files.c macbundle.c macho.c $(GTK_FLAGS)
+dev-files: files.c macbundle.c macicon.c macho.c sandbox.c macbundle.h macicon.h macho.h sandbox.h
+	$(CC) $(CFLAGS) $(LARGE_FILES) -o $@ files.c macbundle.c macicon.c macho.c sandbox.c $(GTK_FLAGS)
 
 dev-settings: settings.c
 	$(CC) $(CFLAGS) -o $@ settings.c $(GTK_FLAGS)
@@ -49,8 +49,8 @@ olympium-testapp: testapp.c
 
 # Mac disk images and packages are unpacked by 7-Zip and cpio in a confined
 # child. The payload decoder needs liblzma and zlib.
-MAC_SOURCES := macpkg.c macbundle.c macho.c sandbox.c
-MAC_HEADERS := macpkg.h macbundle.h macho.h sandbox.h
+MAC_SOURCES := macpkg.c macbundle.c macicon.c macho.c sandbox.c
+MAC_HEADERS := macpkg.h macbundle.h macicon.h macho.h sandbox.h
 
 # A disk image is often larger than 2 GB. On a 32-bit system the file
 # calls only see a file that size when they are built for large files.

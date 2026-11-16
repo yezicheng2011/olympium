@@ -52,13 +52,6 @@ int mac_bundle_read(const char *bundle_dir, struct mac_bundle *out);
  */
 int mac_icns_png(const unsigned char *data, size_t length, size_t *offset, size_t *png_length);
 
-/*
- * Writes an icon a launcher can show. A PNG taken out of the .icns goes to
- * png_out. An .icns with no PNG inside is copied to icns_out as it is.
- * Returns 1 for the PNG, 2 for the copy, 0 when there is no usable icon.
- */
-int mac_icon_export(const char *icns_path, const char *png_out, const char *icns_out);
-
 /* "x86_64, arm64" */
 void mac_archs_text(const uint32_t *archs, int count, char *out, size_t n);
 

@@ -398,53 +398,6 @@ int mac_icns_png(const unsigned char *data, size_t length, size_t *offset, size_
 	return 0;
 }
 
-static int write_file(const char *path, const unsigned char *data, size_t length) {
-	char tmp[1100];
-	snprintf(tmp, sizeof tmp, "%s.tmp%ld", path, (long)getpid());
-	int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
-	if (fd < 0) {
-		return -1;
-	}
-	size_t done = 0;
-	while (done < length) {
-		ssize_t n = write(fd, data + done, length - done);
-		if (n <= 0) {
-			close(fd);
-			unlink(tmp);
-			return -1;
-		}
-		done += (size_t)n;
-	}
-	close(fd);
-	if (rename(tmp, path) != 0) {
-		unlink(tmp);
-		return -1;
-	}
-	return 0;
-}
-
-int mac_icon_export(const char *icns_path, const char *png_out, const char *icns_out) {
-	size_t length = 0;
-	unsigned char *data = read_file(icns_path, ICNS_MAX, &length);
-	if (data == NULL) {
-		return 0;
-	}
-	size_t at = 0;
-	size_t png_length = 0;
-	int result = 0;
-	if (mac_icns_png(data, length, &at, &png_length) == 0) {
-		if (write_file(png_out, data + at, png_length) == 0) {
-			result = 1;
-		}
-	} else if (length >= 8 && memcmp(data, "icns", 4) == 0 && icns_out != NULL) {
-		if (write_file(icns_out, data, length) == 0) {
-			result = 2;
-		}
-	}
-	free(data);
-	return result;
-}
-
 /* ---- the bundle ---- */
 
 static int safe_leaf(const char *name) {
