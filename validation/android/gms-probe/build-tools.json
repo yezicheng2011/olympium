@@ -1,0 +1,23 @@
+{
+  "metadata_url": "https://dl.google.com/android/repository/repository2-3.xml",
+  "artifacts": [
+    {
+      "path": "platforms;android-37.0",
+      "url": "https://dl.google.com/android/repository/platform-37.0_r02.zip",
+      "size": 67281901,
+      "algorithm": "sha1",
+      "checksum": "ed8ebf7f8822a4de5686d427f237d2fa30ff7410",
+      "destination": "platforms/android-37.0",
+      "strip": 1
+    },
+    {
+      "path": "build-tools;37.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r37_linux.zip",
+      "size": 66135704,
+      "algorithm": "sha1",
+      "checksum": "70954e99f4c3d9d46ee70fa32624672fe7cd6ebe",
+      "destination": "build-tools/37.0.0",
+      "strip": 1
+    }
+  ]
+}

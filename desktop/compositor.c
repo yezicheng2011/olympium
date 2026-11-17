@@ -4299,12 +4299,31 @@ static void view_map(struct wl_listener *listener, void *data) {
 		struct server *server = view->server;
 		struct wlr_box geo;
 		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo);
+		/* A portrait app can be taller than the space above the Dock.
+		 * Fit its initial requested geometry before placing it, keeping
+		 * its aspect ratio. Later user resizes are left to the client. */
+		int available_w = server->screen_w - 16;
+		int available_h = server->screen_h - PANEL_H - TITLE_H - DOCK_H - DOCK_MARGIN - 16;
+		if (available_w > 0 && available_h > 0 && geo.width > 0 && geo.height > 0 &&
+				(geo.width > available_w || geo.height > available_h)) {
+			double scale = fmin((double)available_w / geo.width, (double)available_h / geo.height);
+			geo.width = (int)fmax(1, floor(geo.width * scale));
+			geo.height = (int)fmax(1, floor(geo.height * scale));
+			wlr_xdg_toplevel_set_size(view->xdg_toplevel, geo.width, geo.height);
+		}
 		int step = (wl_list_length(&server->views) - 1) * 26;
 		int free_h = server->screen_h - PANEL_H - DOCK_H - DOCK_MARGIN - TITLE_H - geo.height;
 		int x = (server->screen_w - geo.width) / 2 + step;
 		int y = PANEL_H + TITLE_H + (free_h > 24 ? free_h / 3 : 8) + step;
 		if (x < 8) {
 			x = 8;
+		}
+		if (available_w >= geo.width && x + geo.width > server->screen_w - 8) {
+			x = server->screen_w - geo.width - 8;
+		}
+		int bottom = server->screen_h - DOCK_H - DOCK_MARGIN - 8;
+		if (available_h >= geo.height && y + geo.height > bottom) {
+			y = bottom - geo.height;
 		}
 		wlr_scene_node_set_position(&view->scene_tree->node, x, y);
 		view->placed = 1;
@@ -4372,6 +4391,13 @@ static void view_commit(struct wl_listener *listener, void *data) {
 				WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
 		}
 		wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
+		if (wl_resource_get_version(view->xdg_toplevel->resource) >= 4) {
+			int width = view->server->screen_w - 16;
+			int height = view->server->screen_h - PANEL_H - TITLE_H - DOCK_H - DOCK_MARGIN - 16;
+			if (width > 0 && height > 0) {
+				wlr_xdg_toplevel_set_bounds(view->xdg_toplevel, width, height);
+			}
+		}
 	}
 }
 

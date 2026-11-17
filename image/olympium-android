@@ -204,7 +204,8 @@ def prepare_services(serial, root):
         records.append(dict(package=package, sha256=artifact['checksum']))
     permissions = adb(serial, 'shell', 'pm', 'list', 'permissions', '-f')
     state = dict(packages=records, installed=True,
-                 signature_spoofing_supported='android.permission.FAKE_PACKAGE_SIGNATURE' in permissions,
+                 signature_permission_declared='android.permission.FAKE_PACKAGE_SIGNATURE' in permissions,
+                 signature_compatibility_verified=False,
                  gms_api_compatibility_verified=False)
     (services / 'installed.json').write_text(json.dumps(state, indent=2) + '\n')
     return state

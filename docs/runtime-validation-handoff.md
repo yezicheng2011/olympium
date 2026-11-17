@@ -5,9 +5,10 @@
 ## 最新续接状态
 
 - **Cocoa GUI 冒烟通过**：正式 `.app` 导入、桌面搜索启动、真实 Mach-O/Cocoa 窗口、普通桌面指针触发 NSButton 回调，窗口标题变为 `Olympium Mac GUI - verified`。随后经桌面指针关闭、确认窗口不可见，用当前安装器在 Landlock 下重新导入并从搜索打开，第二个窗口再次响应按钮；生命周期记录在 `cocoa-lifecycle.log`。使用原始官方 Darling 二进制、Mesa softpipe 和关闭 MIT-SHM 的 Xwayland；没有应用二进制补丁或关闭 Landlock。证据在 `validation/macos/evidence/`。截帧中标签文字未更新，文字重绘不计通过；第三方 GUI 应用和近原生性能未验证。
-- **APK 正式安装链路已实现**：包名/名称/自适应图标读取、Android 包管理器安装、已安装 APK 字节核验、统一库记录和桌面启动器、独立窗口启动及卸载。旧 API 29 设备实际安装 Fossify Calculator 成功；这不能代替 Android 17 的完整验收。
-- **目标升级为 Android 17 / API 37**：固定官方 AOSP x86_64 镜像和工具下载、校验、稀疏解包、受管 AVD；正式自动启动要求当前用户可访问 KVM，并在下载前检查。纯软件 TCG 仅限显式 `OLYMPIUM_ANDROID_ALLOW_TCG=1` 的开发实验，尚未通过启动验收；Google APIs 镜像已有 Google 签名 GMS，不能直接替换为 microG，因此选择 AOSP 镜像。
-- **microG 正在集成，尚未验收**：固定并校验 Services 和 Companion；拒绝覆盖不同签名/字节的已装 GMS，记录签名兼容能力及 `gms_api_compatibility_verified=false`。TCG 中 Android 17 的 system_server / WebView zygote 反复退出；安装时出现 StorageManager 空指针，未生成成功记录。新增存储就绪检查，仍需解决运行时稳定性并实际验证 microG 自检和 GMS API。
+- **Android 17 正式 APK 链路已实跑通过**：在官方 AOSP API 37.0 rev6 x86_64 上，经正式安装器安装并核验 Fossify Calculator 字节；桌面搜索打开独立 Wayland 窗口，普通桌面指针计算 **2+3=5**；关闭后从 Launchpad 原始 APK 图标重开，再次计算通过。截图、两份新 UI 树及结果在 `validation/android/evidence/api37-*`。
+- **修复首次窗口尺寸和 SVG 图标依赖**：竖屏客户端初始尺寸适配面板与 Dock 之间的空间，底部按键可点；补装 `librsvg2-common` 后，自适应 APK 图标正确显示。构建、渲染和启动回归通过，四秒空闲 0 帧；受控延迟下原生映射 0.222 秒、兼容路径 1.887 秒。
+- **Android 验收配置有明确限制**：云机没有 KVM。本轮用单线程 TCG 和诊断 `-icount shift=0,align=off,sleep=off` 避免正常时钟下的 system_server/WebView 启动崩溃；未修改发布者系统镜像。功能通过不代表正常时钟/KVM 冷启动可靠或近原生性能。正式自动启动在下载前检查 KVM，TCG 仅显式开发启用。
+- **microG 基础 RPC 已验证，签名兼容仍失败**：Services 与 Companion 已安装且已核对实际 base APK 的 SHA256。新增独立普通 UID 的 Android 验证应用：Common 服务 broker、getService 请求、成功回调和返回服务 Binder 均通过；旧/新 PackageManager 证书查询仍返回 microG 证书，未达到 Google 签名兼容。见 `api37-microg-probe.json`。完整 GMS API、FCM、账号、地图和认证均未验收。限定签名兼容原型正在单独测试，不属于已完成的运行时功能。
 - **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 仍仅有此前的两个 `nobody` 回退隔离断言失败，不能称整套通过。
 - **OpenHarmony 尚未解锁**：恢复 QEMU 从 S3 挂起后屏幕电源状态恢复。SystemUI 返回解锁成功约需 1.5 秒，但官方 AbilityManager 仅等 500 毫秒，可能导致超时；仅为源码和日志支持的诊断，尚未验证修复。保留安全锁屏判断，未绕过认证。仅在一次性 `-snapshot` VM 中尝试延长等待常量进行诊断，但没有取得成功启动结果；未分发该二进制实验。VM 已停止并丢弃临时快照，原始镜像保持不变。
 
@@ -55,7 +56,7 @@ Ubuntu 24.04 开发容器中：
 - `validation/android/open-window.py` 已在 API 29 重新启动验证显示就绪和任务归位；再次经桌面指针计算通过。通过桌面 File → Close Window 关闭后 scrcpy 正常退出，脚本记录 `closed`。位置就绪状态本身不自动等于输入通过。
 - 续接后在停止其他实验 compositor 的隔离条件下重跑 `test`、`test-render`、`test-startup` 通过：四秒空闲 1 帧，渲染/生命周期通过；受控延迟下原生窗口 0.286 秒、兼容路径 1.951 秒。额外验证正式二进制不暴露测试虚拟指针协议。
 
-下一步：把已验证的单应用窗口实验接入正式 APK 安装器、桌面图标和运行时管理，再验证重复冷启动、ARM 应用、剪贴板与文件共享。API 29 的单个 x86 APK 通过不能代表所有 APK。Waydroid 的原生 Binder 方案仍未安装/运行。
+下一步：完成 microG 的限定签名兼容，验证正常时钟/KVM 重复冷启动、ARM 应用、剪贴板与文件共享。Android 17 的正式安装、图标、桌面鼠标和关闭重开结果见本页最新状态。API 29 的单个 x86 APK 通过不能代表所有 APK。Waydroid 的原生 Binder 方案仍未安装/运行。
 
 ### OpenHarmony
 
@@ -79,11 +80,11 @@ Ubuntu 24.04 开发容器中：
 - 初版测试 Mach-O 的 ld64 SDK 元数据默认为 10.6，触发 Objective-C raw-isa 断言。新增 `validation/macos/build-smoke.sh` 明确设定目标/SDK 版本后断言不再出现。
 - 当前程序能进入 `main`、创建非空 `NSApplication`，但在窗口初始化期间退出，尚未进入事件循环。软件渲染测试也未得到持续显示的窗口；窗口搜索曾找到短暂对象，随后已失效。**窗口和按钮仍未通过验证。**
 
-下一步：定位官方 Darling GUI 在此 headless/Xwayland 软件图形环境中的窗口初始化退出；得到持续渲染后核对按钮回调，再测试真实第三方 Mac GUI 应用。构建成功、导入成功和退出码 0 均不能代替 GUI 验证。
+下一步：测试真实第三方 Mac GUI 应用、标签重绘及重复冷启动。独立 Cocoa 窗口、按钮和关闭重开结果见本页最新状态。构建成功、导入成功和退出码 0 均不能代替 GUI 验证。
 
 ### 共用桌面集成与其他遗留项
 
-- Android 已有独立窗口及指针交互实验；正式 APK/HAP 统一安装记录、图标、启动器、退出管理、剪贴板和共享目录仍未完成。
+- Android 17 的正式 APK 安装记录、图标、启动器、窗口关闭重开和指针计算已在诊断配置验证。HAP 统一安装和窗口管理、跨平台剪贴板与共享目录仍未完成。
 - 未验证 Android/OpenHarmony/macOS 同时运行，未验证近原生性能。
 - 32 位 Wine、原始 heap corruption 的确定性复现、隔离测试的两个失败仍待处理。
 - 新 ISO 的构建、真实冷启动、物理 GPU 和硬件加速均未验证。

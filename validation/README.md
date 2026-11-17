@@ -6,7 +6,7 @@ The production desktop changes and existing Linux/64-bit Wine checks are describ
 
 `macos/hello-gui.c` is an independent Cocoa/Objective-C runtime smoke program written without Apple SDK headers or assets. It was compiled to x86_64 Mach-O using Darling's Darwin linker and runtime libraries. Its window and button callback were verified through desktop search, the installed launcher, Xwayland and a normal compositor pointer event; see `macos/evidence/`. This covers one independent probe. It is not included in the ISO or enabled as an application.
 
-`android/` contains an actual Fossify Calculator execution record, the subsequent API 28 cold-start failure, and API 29 independent Wayland window/pointer evidence. The shared window backend is now used by `image/olympium-android` and the desktop APK installer. Android 17 end-to-end validation remains blocked by system-service failures under TCG.
+`android/` contains an actual Fossify Calculator execution record, the subsequent API 28 cold-start failure, and API 29 independent Wayland window/pointer evidence. The shared window backend is now used by `image/olympium-android` and the desktop APK installer. Android 17 formal APK installation, original icon, desktop pointer calculation and icon relaunch were verified with a diagnostic TCG instruction clock. Normal-clock/KVM startup reliability remains unverified.
 
 `macos/build-smoke.sh` builds the `.app` against Darling and explicitly supplies SDK metadata. The full Ubuntu VM rendered the app and delivered its button callback with Mesa softpipe and MIT-SHM disabled in Xwayland. The callback changed the window title; text-field repaint and third-party GUI compatibility remain unverified.
 
