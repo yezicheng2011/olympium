@@ -21,6 +21,7 @@ from android_framework import owned_runtime, process_identity, prepare_framework
 
 PACKAGE = r'[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+'
 RUNTIME = Path('/opt/olympium/android')
+MANAGED_PROCESS = None
 
 
 def tool(name):
@@ -32,10 +33,30 @@ def tool(name):
     return path
 
 
-def command(argv, timeout=60, check=True):
+def command(argv, timeout=60, check=True, monitor=None):
     # A file-backed bounded read prevents untrusted metadata filling memory.
     with tempfile.TemporaryFile() as output:
-        result = subprocess.run(argv, stdout=output, stderr=subprocess.STDOUT, timeout=timeout)
+        if monitor is None:
+            result = subprocess.run(argv, stdout=output, stderr=subprocess.STDOUT, timeout=timeout)
+        else:
+            monitor()
+            result = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT)
+            deadline = time.monotonic() + timeout
+            try:
+                while True:
+                    monitor()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(argv, timeout)
+                    try:
+                        result.wait(timeout=min(1, remaining))
+                        break
+                    except subprocess.TimeoutExpired:
+                        pass
+            except BaseException:
+                result.kill()
+                result.wait()
+                raise
         if output.tell() > 16 * 1024 * 1024:
             raise RuntimeError('Android tool output exceeded the metadata limit')
         output.seek(0)
@@ -91,10 +112,23 @@ def adb(serial, *args, timeout=None, check=True):
         timeout = int(os.environ.get('OLYMPIUM_ANDROID_TOOL_TIMEOUT', '60'))
         if not 15 <= timeout <= 600:
             raise RuntimeError('Android tool timeout must be between 15 and 600 seconds')
-    return command([tool('adb'), '-s', serial, *args], timeout, check)
+    monitor = managed_process_running if serial == 'emulator-5560' and MANAGED_PROCESS else None
+    return command([tool('adb'), '-s', serial, *args], timeout, check, monitor)
+
+
+def managed_process_running():
+    try:
+        current = process_identity(MANAGED_PROCESS['pid'])
+        stat = (Path('/proc') / str(current['pid']) / 'stat').read_text()
+        if current == MANAGED_PROCESS and stat[stat.rfind(')') + 2:].split()[0] != 'Z':
+            return
+    except (OSError, RuntimeError):
+        pass
+    raise RuntimeError('Android emulator exited during this operation; see android/avd/emulator.log')
 
 
 def device(root, selected=None):
+    global MANAGED_PROCESS
     serial = selected or os.environ.get('OLYMPIUM_ANDROID_SERIAL', 'emulator-5560')
     if not re.fullmatch(r'[A-Za-z0-9_.:\[\]-]+', serial):
         raise RuntimeError('Invalid configured Android device')
@@ -103,20 +137,23 @@ def device(root, selected=None):
         if serial != 'emulator-5560':
             raise RuntimeError('The configured Android runtime is not running: ' + serial)
         start_runtime(root)
+    if serial == 'emulator-5560' and not os.environ.get('OLYMPIUM_ANDROID_SERIAL'):
+        MANAGED_PROCESS = owned_runtime(root, RUNTIME, serial)
     deadline = time.monotonic() + ready_timeout()
     while time.monotonic() < deadline:
         try:
-            if adb(serial, 'shell', 'getprop', 'sys.boot_completed', timeout=15).strip() == '1':
-                service = adb(serial, 'shell', 'service', 'check', 'package', timeout=30)
+            if adb(serial, 'shell', 'getprop', 'sys.boot_completed').strip() == '1':
+                service = adb(serial, 'shell', 'service', 'check', 'package')
                 if 'found' in service and 'not found' not in service:
                     # sys.boot_completed can survive a system_server restart.
                     # Do not offer installation while its storage service is
                     # absent or still blocked during initialization.
-                    volumes = adb(serial, 'shell', 'sm', 'list-volumes', 'private', timeout=30)
+                    volumes = adb(serial, 'shell', 'sm', 'list-volumes', 'private')
                     if re.search(r'^private\s+mounted\b', volumes, re.M):
                         return serial
         except (RuntimeError, subprocess.TimeoutExpired):
-            pass
+            if serial == 'emulator-5560' and MANAGED_PROCESS:
+                managed_process_running()
         time.sleep(2)
     raise RuntimeError('Android did not become ready before the configured deadline')
 
@@ -126,6 +163,29 @@ def ready_timeout():
     if not 60 <= value <= 3600:
         raise RuntimeError('Android readiness timeout must be between 60 and 3600 seconds')
     return value
+
+
+def clean_stale_avd_lock(avd):
+    """Crash recovery: emulator kill(pid,0) mistakes unreaped zombies for VMs."""
+    lock = avd / 'hardware-qemu.ini.lock'
+    if not lock.exists():
+        return
+    if lock.stat().st_uid != os.getuid():
+        raise RuntimeError('Android AVD lock belongs to another user')
+    # The upstream emulator writes a NUL-terminated decimal PID.
+    text = lock.read_text().rstrip('\0').strip()
+    if not text.isdecimal() or not 1 <= int(text) <= 2 ** 31 - 1:
+        raise RuntimeError('Invalid Android AVD lock; refusing to overwrite it')
+    proc = Path('/proc') / text
+    try:
+        if proc.stat().st_uid != os.getuid():
+            return
+        stat = (proc / 'stat').read_text()
+        if stat[stat.rfind(')') + 2:].split()[0] != 'Z':
+            return
+    except FileNotFoundError:
+        pass
+    lock.unlink()
 
 
 def start_runtime(root):
@@ -145,6 +205,7 @@ def start_runtime(root):
             ensure_runtime(RUNTIME)
         avd = avd_home / 'olympium-android17.avd'
         avd.mkdir(exist_ok=True)
+        clean_stale_avd_lock(avd)
         image = RUNTIME / 'system-images/android-37.0/default/x86_64'
         if not (image / 'system.img').is_file():
             raise RuntimeError('The Android system image is not installed')
@@ -167,8 +228,12 @@ showDeviceFrame=no
         env = dict(os.environ, ANDROID_AVD_HOME=str(avd_home), ANDROID_SDK_ROOT=str(RUNTIME))
         with (avd_home / 'emulator.log').open('a') as log:
             argv = [str(RUNTIME / 'emulator/emulator'), '-avd', 'olympium-android17',
-                '-port', '5560', '-no-window', '-no-audio', '-no-snapshot', '-no-boot-anim',
+                '-port', '5560', '-no-window', '-no-audio', '-no-snapshot', '-no-boot-anim', '-no-metrics',
                 '-gpu', 'swiftshader_indirect', '-feature', '-Vulkan', '-accel', acceleration]
+            if os.environ.get('OLYMPIUM_ANDROID_LEGACY_WIFI') == '1':
+                # Diagnostic fallback for the pinned emulator's netsim gRPC
+                # abort. Keep VirtioWifi and use QEMU's earlier WiFi backend.
+                argv += ['-feature', '-WiFiPacketStream']
             if acceleration == 'off' and os.environ.get('OLYMPIUM_ANDROID_TCG_ICOUNT') == '1':
                 argv += ['-cores', '1', '-memory', '4096', '-qemu', '-icount', 'shift=0,align=off,sleep=off']
             process = subprocess.Popen(argv,

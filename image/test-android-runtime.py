@@ -8,8 +8,11 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
+import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from unittest import mock
 import zipfile
@@ -59,6 +62,51 @@ class RuntimeFiles(unittest.TestCase):
         for serial in ('emulator-5558', 'physical-test-device', '127.0.0.1:5555'):
             with self.assertRaisesRegex(RuntimeError, 'managed Android runtime'):
                 owned_runtime(self.root, self.root, serial)
+
+    def test_unowned_managed_port_is_rejected_before_package_changes(self):
+        with mock.patch.dict(installer.os.environ, {'OLYMPIUM_ANDROID_SERIAL': ''}), \
+                mock.patch.object(installer, 'owned_runtime', side_effect=RuntimeError('not owned')), \
+                mock.patch.object(installer, 'adb') as bridge:
+            with self.assertRaisesRegex(RuntimeError, 'not owned'):
+                installer.prepare_services('emulator-5560', self.root)
+            bridge.assert_not_called()
+
+    def test_avd_crash_recovery_keeps_live_process_lock(self):
+        lock = self.root / 'hardware-qemu.ini.lock'
+        contents = str(os.getpid()).encode() + b'\0'
+        lock.write_bytes(contents)
+        installer.clean_stale_avd_lock(self.root)
+        self.assertEqual(lock.read_bytes(), contents)
+
+    def test_managed_tool_is_reaped_when_emulator_monitor_fails(self):
+        # Let the tool start, then simulate the owning VM disappearing. The
+        # operation must terminate its child rather than wait its full deadline.
+        monitor = mock.Mock(side_effect=[None, RuntimeError('emulator exited')])
+        with self.assertRaisesRegex(RuntimeError, 'emulator exited'):
+            installer.command([sys.executable, '-c', 'import time; time.sleep(30)'], monitor=monitor)
+        self.assertEqual(monitor.call_count, 2)
+
+    def test_avd_crash_recovery_removes_only_unreaped_process_lock(self):
+        child = subprocess.Popen([sys.executable, '-c', 'pass'])
+        try:
+            deadline = time.monotonic() + 5
+            stat_file = Path('/proc') / str(child.pid) / 'stat'
+            while time.monotonic() < deadline:
+                text = stat_file.read_text()
+                if text[text.rfind(')') + 2:].split()[0] == 'Z':
+                    break
+                time.sleep(.01)
+            else:
+                self.fail('Test child did not become an unreaped zombie')
+            lock = self.root / 'hardware-qemu.ini.lock'
+            lock.write_bytes(str(child.pid).encode() + b'\0')
+            other = self.root / 'userdata.img'
+            other.write_bytes(b'keep user data')
+            installer.clean_stale_avd_lock(self.root)
+            self.assertFalse(lock.exists())
+            self.assertEqual(other.read_bytes(), b'keep user data')
+        finally:
+            child.wait(timeout=5)
 
     def test_framework_rejects_reused_pid_and_unrelated_process(self):
         avd = self.root / 'android/avd'

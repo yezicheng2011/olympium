@@ -107,6 +107,12 @@ def owned_runtime(root, runtime, serial):
 def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeout=600):
     """Install/recheck a bounded framework overlay only in our owned SDK VM."""
     identity = owned_runtime(root, runtime, serial)
+
+    def same_runtime():
+        try:
+            return owned_runtime(root, runtime, serial) == identity
+        except (OSError, RuntimeError):
+            return False
     assets = Path(os.environ.get('OLYMPIUM_ANDROID_COMPAT_ASSETS', '/usr/libexec/dev-desktop/android-compat'))
     manifest = json.loads((assets / 'assets.json').read_text())
     for name in ('helper.dex', 'mount-helper', 'health.apk', 'profile.json'):
@@ -161,7 +167,8 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
     rooted = False
     try:
         # Check ownership again immediately before any privileged guest action.
-        owned_runtime(root, runtime, serial)
+        if not same_runtime():
+            raise RuntimeError('Managed Android emulator exited or changed before setup')
         adb(serial, 'root', timeout=120)
         rooted = True
         adb(serial, 'wait-for-device', timeout=120)
@@ -190,15 +197,20 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
                 try:
                     new_pid = server()
                     if new_pid and new_pid != pid and shell('getprop', 'sys.boot_completed').strip() == '1' \
-                            and 'private mounted' in shell('sm', 'list-volumes', 'private', timeout=60):
+                            and 'private mounted' in shell('sm', 'list-volumes', 'private'):
                         break
                 except (RuntimeError, subprocess.TimeoutExpired):
-                    pass
+                    if not same_runtime():
+                        raise RuntimeError('Managed Android emulator exited or changed during setup')
                 time.sleep(2)
             else:
                 raise RuntimeError('Android Services restart did not complete')
         if shell('getenforce').strip() != 'Enforcing':
             raise RuntimeError('Managed Android SELinux enforcement changed')
+        mounts = [line.split() for line in shell('cat', '/proc/1/mountinfo').splitlines()]
+        overlays = [row for row in mounts if len(row) > 6 and row[4] == '/system/framework/services.jar']
+        if len(overlays) != 1 or not {'ro', 'nosuid', 'nodev'}.issubset(set(overlays[0][5].split(','))):
+            raise RuntimeError('Android Services framework mount is not read-only and restricted')
         health = 'org.olympium.android.health'
         previous = json.loads(state_file.read_text()) if state_file.exists() else {}
         present = shell('pm', 'path', health, check=False)
@@ -241,7 +253,7 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
         temporary.replace(state_file)
         return state
     except Exception as error:
-        if mounted:
+        if mounted and same_runtime():
             try:
                 shell(remote + '/mount-helper', 'restore')
                 restored = shell('sha256sum', '/proc/1/root/system/framework/services.jar', timeout=240).split()[0]
@@ -252,6 +264,6 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
                 raise RuntimeError('Android Services setup failed; restoring the original framework also failed: ' + str(rollback)) from error
         raise
     finally:
-        if rooted:
+        if rooted and same_runtime():
             adb(serial, 'unroot', timeout=120, check=False)
             adb(serial, 'wait-for-device', timeout=120, check=False)

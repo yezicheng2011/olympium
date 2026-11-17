@@ -31,11 +31,13 @@ class FrameworkSetup(unittest.TestCase):
         self.identity = dict(pid=123, start_ticks='456')
         self.addCleanup(mock.patch.stopall)
         mock.patch.dict('os.environ', {'OLYMPIUM_ANDROID_COMPAT_ASSETS': str(self.assets)}).start()
-        mock.patch('android_framework.owned_runtime', return_value=self.identity).start()
+        self.ownership = mock.patch('android_framework.owned_runtime', return_value=self.identity).start()
         self.calls = []
         self.server = '100'
         self.mounted = False
         self.compatible = True
+        self.readonly = True
+        self.vanish_on_result = False
         self.original = self.profile['original_services_jar_sha256']
 
     def adb(self, serial, *args, **kwargs):
@@ -66,6 +68,9 @@ class FrameworkSetup(unittest.TestCase):
             return 'private mounted null'
         if words == ('getenforce',):
             return 'Enforcing'
+        if words == ('cat', '/proc/1/mountinfo'):
+            mode = 'ro' if self.readonly else 'rw'
+            return '42 40 0:8 /services.jar /system/framework/services.jar ' + mode + ',nosuid,nodev - ext4 /dev/block/vdb rw'
         if words[:2] == ('pm', 'path'):
             return ''
         if words[:2] == ('pm', 'clear'):
@@ -73,6 +78,9 @@ class FrameworkSetup(unittest.TestCase):
         if words[:1] == ('am',):
             return ''
         if words[:1] == ('run-as',):
+            if self.vanish_on_result:
+                self.ownership.side_effect = RuntimeError('emulator exited')
+                raise RuntimeError('emulator exited')
             return json.dumps(dict(caller_package='org.olympium.android.health', caller_uid=10101,
                                   android_api=37, probe_completed=True,
                                   signature_compatibility_verified=self.compatible,
@@ -99,6 +107,19 @@ class FrameworkSetup(unittest.TestCase):
             self.run_setup()
         self.assertFalse(any(args[0] == 'push' for args in self.calls))
         self.assertFalse(self.mounted)
+
+    def test_dead_or_replaced_vm_never_receives_cleanup_commands(self):
+        self.vanish_on_result = True
+        with self.assertRaisesRegex(RuntimeError, 'emulator exited'):
+            self.run_setup()
+        self.assertFalse(any(args[0] == 'unroot' or args[-1] == 'restore' for args in self.calls))
+
+    def test_writable_mount_is_rejected_and_restored(self):
+        self.readonly = False
+        with self.assertRaisesRegex(RuntimeError, 'not read-only'):
+            self.run_setup()
+        self.assertFalse(self.mounted)
+        self.assertFalse(any(args[:3] == ('shell', 'pm', 'clear') for args in self.calls))
 
     def test_warm_start_does_not_restart_or_reinstall(self):
         result = self.run_setup()
