@@ -96,6 +96,31 @@ if command -v rpmbuild >/dev/null 2>&1 && command -v rpm2cpio >/dev/null 2>&1; t
 		bad ".rpm install (exit $code, id $rid)"
 		tail -n 6 "$ROOT/rpm.log" "$ROOT/rpm-launch.log"
 	fi
+	# Exercise the generated shell wrapper and the desktop-entry parser, not
+	# just a textual Exec match. Percent codes and shell quotes have different
+	# escaping rules and both must preserve the exact desktop data path.
+	if command -v gio >/dev/null 2>&1; then
+		old_desk=$OLYMPIUM_DESK_HOME
+		export OLYMPIUM_DESK_HOME="$ROOT/desk with 'quotes' and % field"' $cash `tick` \slash "double"'
+		mkdir -p "$OLYMPIUM_DESK_HOME"
+		./dev-install import --consent "$RPM" >"$ROOT/quoted-import.log" 2>&1
+		qid=$(awk -F '\t' '$6=="linux_rpm" {print $1; exit}' "$OLYMPIUM_DESK_HOME/library.tsv" 2>/dev/null)
+		gio launch "$OLYMPIUM_DESK_HOME/applications/olympium-$qid.desktop" >"$ROOT/quoted-launch.log" 2>&1
+		qcode=$?
+		for attempt in {1..20}; do
+			[ ! -s "$OLYMPIUM_DESK_HOME/exchange/desk-rpm.txt" ] || break
+			sleep .1
+		done
+		if [ "$qcode" -eq 0 ] && [ "$(cat "$OLYMPIUM_DESK_HOME/exchange/desk-rpm.txt" 2>/dev/null)" = desk-rpm-ready ]; then
+			ok "desktop launcher preserves spaces, quotes, percent signs and shell metacharacters"
+		else
+			bad "desktop launcher with special characters"
+			tail -n 6 "$ROOT/quoted-import.log" "$ROOT/quoted-launch.log"
+		fi
+		export OLYMPIUM_DESK_HOME=$old_desk
+	else
+		echo "gio is not installed; desktop Exec parsing was not tested"
+	fi
 else
 	echo "rpm, rpm2cpio or rpmbuild is not installed; the .rpm was not tested"
 fi

@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Checks for runtime integrity, archive confinement and bounded APK icons."""
+import hashlib
+import io
+from pathlib import Path
+import stat
+import tarfile
+import tempfile
+import unittest
+import zipfile
+
+from android_icon import apk_icon
+from android_runtime import download, extract, sparse_copy
+from android_window import app_root_task
+
+
+class RuntimeFiles(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.stage = self.root / 'stage'
+        self.stage.mkdir()
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_download_rejects_changed_publisher_bytes(self):
+        source = self.root / 'publisher'
+        source.write_bytes(b'verified bytes')
+        cache = self.root / 'cache'
+        cache.mkdir()
+        record = dict(path='fixture', url=source.as_uri(), size=14,
+                      algorithm='sha256', checksum=hashlib.sha256(source.read_bytes()).hexdigest())
+        target = download(record, cache)
+        self.assertEqual(target.read_bytes(), source.read_bytes())
+        target.write_bytes(b'untrusted data')
+        with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+            download(record, cache)
+
+    def test_zip_cannot_write_outside_stage(self):
+        archive = self.root / 'payload.zip'
+        with zipfile.ZipFile(archive, 'w') as bundle:
+            bundle.writestr('../escaped', 'bad')
+        with self.assertRaises(RuntimeError):
+            extract(archive, dict(destination='.', strip=0), self.stage)
+        self.assertFalse((self.root / 'escaped').exists())
+
+    def test_tar_link_cannot_escape_stage(self):
+        archive = self.root / 'payload.tar'
+        with tarfile.open(archive, 'w') as bundle:
+            entry = tarfile.TarInfo('outside')
+            entry.type = tarfile.SYMTYPE
+            entry.linkname = '../escaped'
+            bundle.addfile(entry)
+        with self.assertRaises(RuntimeError):
+            extract(archive, dict(destination='.', strip=0), self.stage)
+        self.assertFalse((self.stage / 'outside').exists())
+
+    def test_safe_sdk_link_and_executable(self):
+        archive = self.root / 'sdk.zip'
+        with zipfile.ZipFile(archive, 'w') as bundle:
+            entry = zipfile.ZipInfo('sdk/bin/tool')
+            entry.external_attr = (stat.S_IFREG | 0o755) << 16
+            bundle.writestr(entry, b'program')
+            entry = zipfile.ZipInfo('sdk/bin/alias')
+            entry.create_system = 3
+            entry.external_attr = (stat.S_IFLNK | 0o777) << 16
+            bundle.writestr(entry, b'tool')
+        extract(archive, dict(destination='.', strip=1), self.stage)
+        self.assertEqual((self.stage / 'bin/alias').read_bytes(), b'program')
+        self.assertTrue((self.stage / 'bin/tool').stat().st_mode & 0o111)
+
+    def test_sparse_system_image_preserves_bytes_and_length(self):
+        payload = b'header' + b'\0' * (3 * 1024 * 1024) + b'trailer' + b'\0' * 100
+        out = self.stage / 'system.img'
+        with out.open('wb') as stream:
+            sparse_copy(io.BytesIO(payload), stream)
+        self.assertEqual(out.stat().st_size, len(payload))
+        self.assertEqual(hashlib.sha256(out.read_bytes()).digest(), hashlib.sha256(payload).digest())
+
+    def test_external_svg_content_is_not_accepted(self):
+        apk = self.root / 'app.apk'
+        with zipfile.ZipFile(apk, 'w') as bundle:
+            bundle.writestr('res/icon.xml', b'compiled XML fixture')
+        text = '''  E: vector (line=1)
+    E: path (line=2)
+      A: android:fillColor(0x0)="url(https://example.invalid/track)"
+      A: android:pathData(0x0)="M0,0 L2,2 Z"
+'''
+        icon = apk_icon(apk, "application-icon-160:'res/icon.xml'", lambda *args: text, self.stage / 'icon')
+        self.assertIsNone(icon)
+        self.assertFalse((self.stage / 'icon.svg').exists())
+
+    def test_root_task_does_not_move_a_shared_task_group(self):
+        dump = '''RootTask id=9 bounds=[0,0][360,640] displayId=0 userId=0
+  taskId=9: org.fossify.math/.Main bounds=[0,0][360,640] visible=true topActivity=ComponentInfo{org.fossify.math/.Main}
+  taskId=10: another.app/.Main visible=true topActivity=ComponentInfo{another.app/.Main}
+'''
+        with self.assertRaisesRegex(RuntimeError, 'other tasks'):
+            app_root_task(dump, 'org.fossify.math')
+
+    def test_root_task_rejects_duplicate_and_similar_package(self):
+        dump = '''RootTask id=9 bounds=[0,0][360,640] displayId=0 userId=0
+  taskId=9: org.fossify.math/.Main visible=true topActivity=ComponentInfo{org.fossify.math/.Main}
+'''
+        self.assertEqual(app_root_task(dump, 'org.fossify.math'), (0, 9))
+        with self.assertRaisesRegex(RuntimeError, 'Ambiguous'):
+            app_root_task(dump + dump.replace('id=9', 'id=11'), 'org.fossify.math')
+        self.assertIsNone(app_root_task(dump.replace('org.fossify.math', 'org.fossify.math.fake'),
+                                       'org.fossify.math'))
+
+
+if __name__ == '__main__':
+    unittest.main()

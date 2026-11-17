@@ -1,0 +1,20 @@
+{
+  "status": "failed",
+  "android_version": "17",
+  "android_api": 37,
+  "system_image": "AOSP default x86_64 revision 6",
+  "boot_completed_observed": true,
+  "formal_apk_install_verified": false,
+  "desktop_window_verified": false,
+  "microg_installed_verified": false,
+  "gms_api_compatibility_verified": false,
+  "error": "PackageInstallerService.createSession -> InstallLocationUtils.resolveInstallVolume: StorageManager null",
+  "runtime_error": "system_server repeatedly dies; WebViewZygote socket read failed, followed by getZygoteProcessAsManaged NullPointerException",
+  "readiness_change": "Wait for mounted private storage in addition to boot_completed and package service",
+  "notes": [
+    "No success record was created for the failed Android 17 installation.",
+    "The earlier Android API 29 installation/window evidence does not establish Android 17 compatibility.",
+    "A software-emulation restart experiment with more RAM/cores and a timeout multiplier has not established a stable boot.",
+    "microG signature support and GMS APIs remain unverified."
+  ]
+}

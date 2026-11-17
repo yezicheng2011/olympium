@@ -51,7 +51,7 @@ id=$(awk -F '\t' -v p="$ROOT/true-copy" '$3==p {print $1}' "$OLYMPIUM_DESK_HOME/
 test -n "$id"
 test -x "$OLYMPIUM_DESK_HOME/launch/$id"
 test -s "$OLYMPIUM_DESK_HOME/applications/olympium-$id.desktop"
-grep -q "Exec=$OLYMPIUM_DESK_HOME/launch/$id" "$OLYMPIUM_DESK_HOME/applications/olympium-$id.desktop"
+grep -Fq "Exec=/bin/sh \"$OLYMPIUM_DESK_HOME/launch/$id\"" "$OLYMPIUM_DESK_HOME/applications/olympium-$id.desktop"
 "$OLYMPIUM_BIN" --json list | grep -q "$ROOT/true-copy"
 echo "launch true-copy"
 "$BIN" launch "$id"

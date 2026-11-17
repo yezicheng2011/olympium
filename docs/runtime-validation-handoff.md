@@ -1,6 +1,17 @@
-# 运行验证交接（2026-11-16）
+# 运行验证交接（2026-11-17）
 
 目标是 Linux 底座、Mac 风格桌面，像用户举例的 AeroAndroid 体验一样：下载应用包后安装、生成启动图标、以独立窗口打开，并支持输入、剪贴板和文件互通。该目标应覆盖 Linux、Windows、Android、OpenHarmony 和 macOS。**本 PR 没有完成五平台应用全兼容，也没有证明接近原生性能。**
+
+## 最新续接状态
+
+- **Cocoa GUI 冒烟通过**：正式 `.app` 导入、桌面搜索启动、真实 Mach-O/Cocoa 窗口、普通桌面指针触发 NSButton 回调，窗口标题变为 `Olympium Mac GUI - verified`。使用原始官方 Darling 二进制、Mesa softpipe 和关闭 MIT-SHM 的 Xwayland；没有应用二进制补丁或关闭 Landlock。证据在 `validation/macos/evidence/`。截帧中标签文字未更新，文字重绘不计通过；第三方 GUI 应用和近原生性能未验证。
+- **APK 正式安装链路已实现**：包名/名称/自适应图标读取、Android 包管理器安装、已安装 APK 字节核验、统一库记录和桌面启动器、独立窗口启动及卸载。旧 API 29 设备实际安装 Fossify Calculator 成功；这不能代替 Android 17 的完整验收。
+- **目标升级为 Android 17 / API 37**：固定官方 AOSP x86_64 镜像和工具下载、校验、稀疏解包、受管 AVD；Google APIs 镜像已有 Google 签名 GMS，不能直接替换为 microG，因此选择 AOSP 镜像。
+- **microG 正在集成，尚未验收**：固定并校验 Services 和 Companion；拒绝覆盖不同签名/字节的已装 GMS，记录签名兼容能力及 `gms_api_compatibility_verified=false`。TCG 中 Android 17 的 system_server / WebView zygote 反复退出；安装时出现 StorageManager 空指针，未生成成功记录。新增存储就绪检查，仍需解决运行时稳定性并实际验证 microG 自检和 GMS API。
+- **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 仍仅有此前的两个 `nobody` 回退隔离断言失败，不能称整套通过。
+- **OpenHarmony 尚未解锁**：恢复 QEMU 从 S3 挂起后屏幕电源状态恢复。SystemUI 返回解锁成功约需 1.5 秒，但官方 AbilityManager 仅等 500 毫秒，可能导致超时；仅为源码和日志支持的诊断，尚未验证修复。保留安全锁屏判断，未绕过认证。
+
+下方包含此前检查点，冲突处以本节为准。尚未重建 ISO、验证所有平台同时运行或任意商业应用。
 
 ## 本次可交付部分
 
@@ -9,7 +20,7 @@
 - 原生 Wayland 会话可以不等 Xwayland；Wine 通过现有显示连接文件等待 Xwayland。移除首次设置窗口的三秒固定等待，将网络/驱动报告移出首帧阻塞链路，不再依赖全局 udev settle。驱动模块目录只索引一次。
 - 新增渲染、启动顺序和驱动索引回归测试；新增固定提交的上游源码下载入口。
 - 保存实验所用下载地址和校验值：`validation/runtime-artifacts.json`。它是完整性证据，不是应用执行通过证书。
-- `validation/macos/hello-gui.c` 已交叉编译为真实 x86_64 Mach-O，链接 Darling 的 Cocoa/AppKit。**尚未验证其窗口实际打开。**
+- `validation/macos/hello-gui.c` 已交叉编译为真实 x86_64 Mach-O，链接 Darling 的 Cocoa/AppKit。独立窗口和按钮回调已在完整 VM 中通过；见下方更新。
 
 ## 已执行的检查
 

@@ -1,0 +1,63 @@
+{
+  "android_version": "17",
+  "sdk": "37.0",
+  "host": "Linux x86_64",
+  "artifacts": [
+    {
+      "path": "emulator",
+      "url": "https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip",
+      "size": 349658551,
+      "checksum": "f41f9e31eb5ca64926603c03265c50bbc0ff4172",
+      "algorithm": "sha1",
+      "destination": ".",
+      "strip": 0
+    },
+    {
+      "path": "platform-tools",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip",
+      "size": 9054187,
+      "checksum": "477254aa5f903c15cf51001717bdf347fb6b53e0",
+      "algorithm": "sha1",
+      "destination": ".",
+      "strip": 0
+    },
+    {
+      "path": "system-images;android-37.0;default;x86_64",
+      "url": "https://dl.google.com/android/repository/sys-img/android/x86_64-37.0_r06.zip",
+      "size": 907680404,
+      "algorithm": "sha1",
+      "checksum": "8842a57a6b146423debb46c1496a9c0986aa1b9e",
+      "metadata_url": "https://dl.google.com/android/repository/sys-img/android/sys-img2-5.xml",
+      "destination": "system-images/android-37.0/default/x86_64",
+      "strip": 1
+    },
+    {
+      "path": "scrcpy",
+      "url": "https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-linux-x86_64-v5.0.1.tar.gz",
+      "size": 17883742,
+      "algorithm": "sha256",
+      "checksum": "9f969d30cc574816077edecda65719c1c70b0aee1df1ba5fa00779ac07b8fd6e",
+      "destination": "scrcpy",
+      "strip": 1
+    },
+    {
+      "path": "microG Services 0.3.18.252432",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.18.252432/com.google.android.gms-252432036.apk",
+      "size": 108520063,
+      "algorithm": "sha256",
+      "checksum": "1094fa60ace2367ac52bd08d1bd4f33fa8144ba930e355121b28234b8ebbf382",
+      "format": "apk",
+      "destination": "microg/com.google.android.gms.apk"
+    },
+    {
+      "path": "microG Companion 84022636",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.18.252432/com.android.vending-84022636.apk",
+      "size": 4212484,
+      "algorithm": "sha256",
+      "checksum": "3f1bde2f72bca746fbb53b61a32c2a85fcb026f886ee96d6fe9a05de9a6c6d5b",
+      "format": "apk",
+      "destination": "microg/com.android.vending.apk"
+    }
+  ],
+  "profile": "AOSP Android 17 with microG"
+}

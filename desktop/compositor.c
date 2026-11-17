@@ -40,6 +40,7 @@
 #include <wlr/backend/headless.h>
 #include <wlr/backend/multi.h>
 #include <wlr/render/allocator.h>
+#include <wlr/render/pixman.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
@@ -4974,6 +4975,16 @@ int main(int argc, char *argv[]) {
 			wl_display_get_event_loop(server.wl_display), clip_settled, &server);
 		server.selection_changed.notify = seat_selection_changed;
 		wl_signal_add(&server.seat->events.set_selection, &server.selection_changed);
+	}
+	if (wlr_renderer_is_pixman(server.renderer)) {
+		setenv("OLYMPIUM_MAC_SOFTWARE", "1", 0);
+		/* X11 shared-memory IDs do not cross Darling's IPC namespace. Keep
+		 * software rendering on the normal X11 socket transport instead. */
+		const char *helper = getenv("OLYMPIUM_XWAYLAND_SOFTWARE");
+		if (helper == NULL) helper = "/usr/libexec/dev-desktop/Xwayland-software";
+		if (getenv("WLR_XWAYLAND") == NULL && access(helper, X_OK) == 0) {
+			setenv("WLR_XWAYLAND", helper, 1);
+		}
 	}
 	server.xwayland = wlr_xwayland_create(server.wl_display, server.compositor, false);
 	if (server.xwayland != NULL) {

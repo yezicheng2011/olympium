@@ -225,7 +225,7 @@ stage_desktop() {
 	mount_chroot
 	# install-to-disk needs sfdisk (fdisk) and grub-install (grub2-common).
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
-		parted dosfstools kmod fdisk grub2-common
+		parted dosfstools kmod fdisk grub2-common python3 aapt adb desktop-file-utils shared-mime-info
 	# The shell, Files, and Settings are set in the Ubuntu typeface. Without it
 	# Pango falls back to another face and every label changes width.
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends fonts-ubuntu
@@ -251,6 +251,13 @@ stage_desktop() {
 		"$REPO/image/driver-report" "$REPO/image/driver-install" \
 		"$REPO/image/install-sample.sh" \
 		"$ROOT/usr/libexec/dev-desktop/"
+	install -m 755 "$REPO/image/olympium-android" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 755 "$REPO/image/Xwayland-software" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 644 "$REPO/image/android_window.py" "$REPO/image/android_icon.py" \
+		"$REPO/image/android_runtime.py" "$REPO/image/android-runtime-pins.json" \
+		"$ROOT/usr/libexec/dev-desktop/"
+	install -D -m 644 "$REPO/image/dev-install.desktop" "$ROOT/usr/share/applications/dev-install.desktop"
+	chroot "$ROOT" update-desktop-database /usr/share/applications
 	# A Mac runtime, when one was staged by image/build-darling.sh and asked for.
 	if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
 		bash "$REPO/image/install-darling.sh" "$ROOT"

@@ -25,7 +25,7 @@ The initial emulator session showed a System UI ANR, acknowledged with Wait befo
 
 On API 29, the same installed APK rendered in the desktop's native Wayland window. Pointer clicks through the compositor and scrcpy produced **2+3=5**, checked against fresh Android UI fields: [desktop screenshot](evidence/api29-desktop-calculator.png), [UI hierarchy](evidence/api29-desktop-calculator-ui.xml), [input/result record](evidence/api29-desktop-calculator-result.json). The initial launch returned to display 0; moving its app-only stack to scrcpy's actual display ID restored the app window. Clipboard support was unavailable in this experiment.
 
-`open-window.py` makes that display ordering/relocation repeatable on the tested Android 10 backend. It runs in the same environment as ADB and scrcpy, with a valid Wayland session; install and verify the APK separately first:
+`open-window.py` delegates to the shared `image/android_window.py` backend. The API 29 result above is historical; Android 17 (API 37) is the current target, with separate root-task parsing and end-to-end verification still pending. It runs in the same environment as ADB and scrcpy, with a valid Wayland session; install and verify the APK separately first:
 
 ```sh
 SDL_VIDEODRIVER=wayland python3 validation/android/open-window.py \
