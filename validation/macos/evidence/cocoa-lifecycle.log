@@ -1,0 +1,27 @@
+Host pointer clicked the desktop close control. Visible-window query returned no Cocoa window.
+COCOA_CLOSE_VERIFIED
+
+Reimport through current dev-install:
+confinement=landlock
+progress 1/5 read
+progress 2/5 copy
+progress 3/5 check
+progress 4/5 install
+progress 5/5 done
+id=mac-002ff0ca
+app=Olympium Cocoa Test
+version=1.0
+installed=/var/tmp/olympium-mac-validation/desk-final/mac/Applications/OlympiumCocoaFinal.app
+archs=x86_64
+runs_on_this_cpu=yes
+icon=none
+launch=mac
+desktop=/var/tmp/olympium-mac-validation/desk-final/applications/olympium-mac-002ff0ca.desktop
+wrapper=/var/tmp/olympium-mac-validation/desk-final/launch/mac-002ff0ca
+installed_count=1
+scripts_run=0
+download: none
+
+Visible window before and after normal Wayland pointer click (initial title then verified title):
+8388614
+8388614

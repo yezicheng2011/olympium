@@ -4,12 +4,12 @@
 
 ## 最新续接状态
 
-- **Cocoa GUI 冒烟通过**：正式 `.app` 导入、桌面搜索启动、真实 Mach-O/Cocoa 窗口、普通桌面指针触发 NSButton 回调，窗口标题变为 `Olympium Mac GUI - verified`。使用原始官方 Darling 二进制、Mesa softpipe 和关闭 MIT-SHM 的 Xwayland；没有应用二进制补丁或关闭 Landlock。证据在 `validation/macos/evidence/`。截帧中标签文字未更新，文字重绘不计通过；第三方 GUI 应用和近原生性能未验证。
+- **Cocoa GUI 冒烟通过**：正式 `.app` 导入、桌面搜索启动、真实 Mach-O/Cocoa 窗口、普通桌面指针触发 NSButton 回调，窗口标题变为 `Olympium Mac GUI - verified`。随后经桌面指针关闭、确认窗口不可见，用当前安装器在 Landlock 下重新导入并从搜索打开，第二个窗口再次响应按钮；生命周期记录在 `cocoa-lifecycle.log`。使用原始官方 Darling 二进制、Mesa softpipe 和关闭 MIT-SHM 的 Xwayland；没有应用二进制补丁或关闭 Landlock。证据在 `validation/macos/evidence/`。截帧中标签文字未更新，文字重绘不计通过；第三方 GUI 应用和近原生性能未验证。
 - **APK 正式安装链路已实现**：包名/名称/自适应图标读取、Android 包管理器安装、已安装 APK 字节核验、统一库记录和桌面启动器、独立窗口启动及卸载。旧 API 29 设备实际安装 Fossify Calculator 成功；这不能代替 Android 17 的完整验收。
 - **目标升级为 Android 17 / API 37**：固定官方 AOSP x86_64 镜像和工具下载、校验、稀疏解包、受管 AVD；Google APIs 镜像已有 Google 签名 GMS，不能直接替换为 microG，因此选择 AOSP 镜像。
 - **microG 正在集成，尚未验收**：固定并校验 Services 和 Companion；拒绝覆盖不同签名/字节的已装 GMS，记录签名兼容能力及 `gms_api_compatibility_verified=false`。TCG 中 Android 17 的 system_server / WebView zygote 反复退出；安装时出现 StorageManager 空指针，未生成成功记录。新增存储就绪检查，仍需解决运行时稳定性并实际验证 microG 自检和 GMS API。
 - **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 仍仅有此前的两个 `nobody` 回退隔离断言失败，不能称整套通过。
-- **OpenHarmony 尚未解锁**：恢复 QEMU 从 S3 挂起后屏幕电源状态恢复。SystemUI 返回解锁成功约需 1.5 秒，但官方 AbilityManager 仅等 500 毫秒，可能导致超时；仅为源码和日志支持的诊断，尚未验证修复。保留安全锁屏判断，未绕过认证。
+- **OpenHarmony 尚未解锁**：恢复 QEMU 从 S3 挂起后屏幕电源状态恢复。SystemUI 返回解锁成功约需 1.5 秒，但官方 AbilityManager 仅等 500 毫秒，可能导致超时；仅为源码和日志支持的诊断，尚未验证修复。保留安全锁屏判断，未绕过认证。仅在一次性 `-snapshot` VM 中尝试延长等待常量进行诊断，但没有取得成功启动结果；未分发该二进制实验。VM 已停止并丢弃临时快照，原始镜像保持不变。
 
 下方包含此前检查点，冲突处以本节为准。尚未重建 ISO、验证所有平台同时运行或任意商业应用。
 

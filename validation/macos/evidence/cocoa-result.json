@@ -20,5 +20,10 @@
     "The button callback changed the window title. The text-field repaint did not appear in the captured frame and is not claimed as verified.",
     "No binary patches, credential bypass or disabled import confinement were used for this result.",
     "This is software-rendered TCG validation, not near-native performance or hardware-GPU validation."
-  ]
+  ],
+  "desktop_close_verified": true,
+  "desktop_reopen_verified": true,
+  "reopened_button_verified": true,
+  "reopened_window_id": "8388614",
+  "reopen_installation": "Current dev-install, Landlock enabled; regenerated /bin/sh desktop launcher; desktop search launch"
 }
