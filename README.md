@@ -32,7 +32,7 @@ Pinned upstream source roots can be downloaded with `python3 image/fetch-compat-
 
 ## Build
 
-The build needs root, `debootstrap`, `mksquashfs`, `grub-mkrescue`, and a network path to the Ubuntu 24.04 archive. On x86_64:
+The build needs root, `debootstrap`, `mksquashfs`, `grub-mkrescue`, and a network path to the Ubuntu 24.04 archive. The x86_64 build also requires a host JDK (`javac`, `jar`, `keytool`) and `musl-tools`. It downloads checksum-pinned Android build tools to build the small microG support assets; the SDK/JDK and guest images stay outside the ISO. On x86_64:
 
 ```sh
 ./image/build-iso.sh amd64

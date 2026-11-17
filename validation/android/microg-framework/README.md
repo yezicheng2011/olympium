@@ -12,7 +12,7 @@ with INSTALL_FAILED_UPDATE_INCOMPATIBLE; the installed Companion SHA256 stayed
 unchanged. This is not verification of Maps, FCM, accounts, attestation or all GMS
 APIs. The full-GMS result deliberately remains false.
 
-The policy follows LineageOS's limited microG support, pinned in `profile.json`:
+The policy follows LineageOS's limited microG support, pinned in `../../../image/android-compat/profile.json`:
 only com.google.android.gms and com.android.vending, the real microG certificate,
 the exact expected fake-signature manifest metadata, and a debuggable Android 17
 build qualify. Other package identities return unchanged. It rewrites the new
@@ -38,15 +38,16 @@ SDK binaries, APKs or disposable signing keys.
 The passing experiment used a rooted disposable AVD, a read-only bind of the
 result over services.jar in init's mount namespace, and a userspace zygote restart.
 SELinux stayed Enforcing and the verity setting stayed enforcing. No adb remount,
-disable-verity or package-signature-verification bypass was used. `remount-ro.c`
+disable-verity or package-signature-verification bypass was used. `../../../image/android-compat/remount-ro.c`
 is an already-root-only validation helper for the fixed framework path; it also
 supports restoring the original mount. It is not a setuid tool.
 
-This experiment has not yet become an automatic, persistent managed-runtime boot
-profile or a new ISO. First boot, subsequent cold starts and deployment are
-separate acceptance requirements. Never apply the experiment to a physical phone
+The shared policy sources now live in `image/android-compat/`. The managed-runtime
+controller and build-time support assets are under active first-boot and cold-start
+validation; this evidence alone does not certify their automatic deployment or a
+new ISO. These remain separate acceptance requirements. Never apply the experiment to a physical phone
 or another person's environment. The wrong-signer fixture intentionally uses the
 Companion package name and belongs only in a disposable AVD.
 
 The certificate constants and limited-policy adaptation retain LineageOS's
-Apache-2.0 notices; see LICENSE and the immutable upstream link in profile.json.
+Apache-2.0 notices; see `../../../image/android-compat/LICENSE` and the immutable upstream link in its profile.json.

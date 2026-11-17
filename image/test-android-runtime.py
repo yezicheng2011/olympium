@@ -4,6 +4,8 @@ import hashlib
 import importlib.machinery
 import importlib.util
 import io
+import json
+import os
 from pathlib import Path
 import stat
 import tarfile
@@ -15,6 +17,7 @@ import zipfile
 from android_icon import apk_icon
 from android_runtime import download, extract, sparse_copy
 from android_window import app_root_task
+from android_framework import owned_runtime, process_identity
 
 loader = importlib.machinery.SourceFileLoader('android_installer', str(Path(__file__).with_name('olympium-android')))
 installer = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
@@ -51,6 +54,22 @@ class RuntimeFiles(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'hardware virtualization'):
                 installer.start_runtime(self.root / 'desktop')
             provision.assert_not_called()
+
+    def test_framework_never_targets_an_external_device(self):
+        for serial in ('emulator-5558', 'physical-test-device', '127.0.0.1:5555'):
+            with self.assertRaisesRegex(RuntimeError, 'managed Android runtime'):
+                owned_runtime(self.root, self.root, serial)
+
+    def test_framework_rejects_reused_pid_and_unrelated_process(self):
+        avd = self.root / 'android/avd'
+        avd.mkdir(parents=True)
+        record = process_identity(os.getpid())
+        (avd / 'process.json').write_text(json.dumps(dict(record, start_ticks='0')))
+        with self.assertRaisesRegex(RuntimeError, 'process identity changed'):
+            owned_runtime(self.root, self.root, 'emulator-5560')
+        (avd / 'process.json').write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError, 'managed SDK'):
+            owned_runtime(self.root, self.root, 'emulator-5560')
         self.assertFalse((self.root / 'desktop').exists())
 
     def test_zip_cannot_write_outside_stage(self):
