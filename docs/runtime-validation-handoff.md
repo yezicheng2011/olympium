@@ -36,11 +36,15 @@ Ubuntu 24.04 开发容器中：
 - 官方 AOSP API 30 x86_64 首次启动不稳定，包管理请求出现 Broken pipe，未通过。
 - 改用官方 API 28 x86 镜像，`sys.boot_completed` 返回 `1`。
 - 下载并核验 Fossify Calculator 1.4.0 APK，ADB 安装返回 `Success`。
-- 实际包名是 **`org.fossify.math`**。先前使用 `org.fossify.calculator/.activities.MainActivity` 的启动命令错误，返回 Activity 不存在。这不是兼容性失败的证明，也不是启动通过。
-- 曾观察到 `com.android.systemui` 无响应对话框。尚无可确认的计算器前台界面、运算输入或独立桌面窗口结果。
-- scrcpy 5.0.1 官方 Linux 包已下载、校验，并运行过 `--help`；尚未将 Android 应用接入桌面独立窗口。
+- 实际包名是 **`org.fossify.math`**。续接验证已通过包管理器解析出启动别名 `.activities.SplashActivity.Green`，实际前台为 `.activities.MainActivity`。已安装 base APK 的 SHA256 与下载记录一致。
+- 首次开机曾观察到 `com.android.systemui` 无响应对话框，选择 Wait 后恢复。之后自动验证已核对前台窗口、UI 树、实际渲染截图，并按资源 ID 定位按钮输入 **2+3=5**，检查独立的 formula/result 字段。结果与截图见 `validation/android/evidence/`；这不证明任意 APK 或近原生性能。
+- 后续严格冷启动复测失败：黑屏、UiAutomator 连续三次取不到根节点，已保存失败记录；先前成功不能代表稳定冷启动。
+- scrcpy 5.0.1 已实测拒绝 Android 9 的 `--new-display`。改用官方 API 29 x86 后，已核对同一 APK 字节，并在桌面的独立 Wayland 窗口显示真实计算器。应用的启动页会把主界面放回 display 0；将该应用独占的任务栈移到 scrcpy 显示后出图。
+- 使用明确单独编译的 `dev-compositor-input-test`，经标准 Wayland 虚拟指针、桌面普通 cursor/seat 处理和 scrcpy 输入，点击 C、2、+、3、=。实际桌面截图和新导出的 Android UI 树均为 **2+3=5**，见 `validation/android/evidence/api29-desktop-calculator-*`。正式 compositor 不提供该测试输入协议。
+- `validation/android/open-window.py` 已在 API 29 重新启动验证显示就绪和任务归位；再次经桌面指针计算通过。通过桌面 File → Close Window 关闭后 scrcpy 正常退出，脚本记录 `closed`。位置就绪状态本身不自动等于输入通过。
+- 续接后在停止其他实验 compositor 的隔离条件下重跑 `test`、`test-render`、`test-startup` 通过：四秒空闲 1 帧，渲染/生命周期通过；受控延迟下原生窗口 0.286 秒、兼容路径 1.951 秒。额外验证正式二进制不暴露测试虚拟指针协议。
 
-下一步：用 `cmd package resolve-activity` 或 `monkey -p org.fossify.math` 解析正确入口，确认真实界面并执行 2+3=5、保存截图/UI 树；然后验证 scrcpy 的应用独立窗口方案及版本要求。API 28 的通过不能代表现代 Android API 或所有 APK。Waydroid 的原生 Binder 方案仍未安装/运行。
+下一步：把已验证的单应用窗口实验接入正式 APK 安装器、桌面图标和运行时管理，再验证重复冷启动、ARM 应用、剪贴板与文件共享。API 29 的单个 x86 APK 通过不能代表所有 APK。Waydroid 的原生 Binder 方案仍未安装/运行。
 
 ### OpenHarmony
 
@@ -59,13 +63,16 @@ Ubuntu 24.04 开发容器中：
 - 现有源码 pin 的 CLI+GUI 构建仅部分完成；取得官方 GUI 包后暂停了可选完整构建，保留其输出。不能将其算作构建通过。
 - 用已生成的 Darwin 链接器和官方运行库，把独立 Cocoa 测试源码编译成真正 Mach-O。没有使用 GTK 假装成 Mac 应用。
 - 当前容器不能创建 mount namespace，所以另外启动了 Ubuntu 24.04 完整 VM，SSH 和只读 9p 源码挂载已经工作。
-- **该 VM 的 Darling/桌面依赖安装未成功**：嵌套网络不能直接连接会话代理；尝试的 loopback TCP 转发也尚未验证成功。没有打开真实 Cocoa 窗口。
+- 续接已修复嵌套代理转发，TLS 和 Ubuntu 包签名校验保持开启；官方 Darling GUI 包、桌面依赖已安装并配置，`darling shell true` 返回成功。
+- `.app` 从只读 9p 导入时受访问限制而失败；把同一测试文件校验并复制到 VM 本地 ext4 后，`dev-install import --consent` 在 Landlock 隔离下成功生成安装记录和桌面文件。没有禁用隔离。
+- 初版测试 Mach-O 的 ld64 SDK 元数据默认为 10.6，触发 Objective-C raw-isa 断言。新增 `validation/macos/build-smoke.sh` 明确设定目标/SDK 版本后断言不再出现。
+- 当前程序能进入 `main`、创建非空 `NSApplication`，但在窗口初始化期间退出，尚未进入事件循环。软件渲染测试也未得到持续显示的窗口；窗口搜索曾找到短暂对象，随后已失效。**窗口和按钮仍未通过验证。**
 
-下一步：修复 VM 的代理路由，保持 TLS 和包签名验证；安装官方 Darling GUI 包和桌面依赖；把 smoke Mach-O 包装为 `.app`，通过 `dev-install` 与 `olympium-mac-run` 安装、启动，在桌面核对窗口与按钮回调。然后测试真实第三方 Mac GUI 应用。
+下一步：定位官方 Darling GUI 在此 headless/Xwayland 软件图形环境中的窗口初始化退出；得到持续渲染后核对按钮回调，再测试真实第三方 Mac GUI 应用。构建成功、导入成功和退出码 0 均不能代替 GUI 验证。
 
 ### 共用桌面集成与其他遗留项
 
-- Android/HAP 的统一安装记录、图标、启动器、独立窗口、退出处理、剪贴板和共享目录都没有完成。
+- Android 已有独立窗口及指针交互实验；正式 APK/HAP 统一安装记录、图标、启动器、退出管理、剪贴板和共享目录仍未完成。
 - 未验证 Android/OpenHarmony/macOS 同时运行，未验证近原生性能。
 - 32 位 Wine、原始 heap corruption 的确定性复现、隔离测试的两个失败仍待处理。
 - 新 ISO 的构建、真实冷启动、物理 GPU 和硬件加速均未验证。
@@ -74,7 +81,7 @@ Ubuntu 24.04 开发容器中：
 
 实验缓存位于 `/workspace/bbb/build/runtime-validation/`（被 Git 忽略，**不会随 PR 分发**）：
 
-- `android-sdk/`：已校验的 emulator、ADB、API 28/30 镜像；`android-avd/`：测试 AVD。
+- `android-sdk/`：已校验的 emulator、ADB、API 28/29/30 镜像；`android-avd/`：测试 AVD。
 - `android-calculator.apk`、`scrcpy/`：已校验的真实 APK 和显示工具。
 - `oniro/images/`：已校验的官方 OH 镜像；`oh-sdk/sdk/toolchains/hdc`：HDC。
 - `darling-release/`、`darling-stage/`：官方 GUI 包及解包结果；`darling-build/`：部分源码构建；`hello-gui`：已编译 Mach-O。
