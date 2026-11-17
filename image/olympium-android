@@ -117,6 +117,11 @@ def device(root, selected=None):
 
 
 def start_runtime(root):
+    # Do this before downloading images. TCG has not passed Android 17 boot
+    # validation and must not silently become the normal desktop experience.
+    acceleration = 'on' if os.access('/dev/kvm', os.R_OK | os.W_OK) else 'off'
+    if acceleration == 'off' and os.environ.get('OLYMPIUM_ANDROID_ALLOW_TCG') != '1':
+        raise RuntimeError('Android 17 needs hardware virtualization. Enable it and allow this user to access KVM before installing Android support.')
     avd_home = root / 'android/avd'
     avd_home.mkdir(parents=True, exist_ok=True)
     with (avd_home / 'boot.lock').open('w') as lock:
@@ -148,7 +153,6 @@ disk.dataPartition.size=6442450944
 showDeviceFrame=no
 ''')
         env = dict(os.environ, ANDROID_AVD_HOME=str(avd_home), ANDROID_SDK_ROOT=str(RUNTIME))
-        acceleration = 'on' if os.access('/dev/kvm', os.R_OK | os.W_OK) else 'off'
         with (avd_home / 'emulator.log').open('a') as log:
             subprocess.Popen([str(RUNTIME / 'emulator/emulator'), '-avd', 'olympium-android17',
                 '-port', '5560', '-no-window', '-no-audio', '-no-snapshot', '-no-boot-anim',

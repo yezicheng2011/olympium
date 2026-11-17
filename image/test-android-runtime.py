@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """Checks for runtime integrity, archive confinement and bounded APK icons."""
 import hashlib
+import importlib.machinery
+import importlib.util
 import io
 from pathlib import Path
 import stat
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 from android_icon import apk_icon
 from android_runtime import download, extract, sparse_copy
 from android_window import app_root_task
+
+loader = importlib.machinery.SourceFileLoader('android_installer', str(Path(__file__).with_name('olympium-android')))
+installer = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+loader.exec_module(installer)
 
 
 class RuntimeFiles(unittest.TestCase):
@@ -36,6 +43,15 @@ class RuntimeFiles(unittest.TestCase):
         target.write_bytes(b'untrusted data')
         with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
             download(record, cache)
+
+    def test_unaccelerated_host_is_rejected_before_download(self):
+        with mock.patch.dict(installer.os.environ, {'OLYMPIUM_ANDROID_ALLOW_TCG': '0'}), \
+                mock.patch.object(installer.os, 'access', return_value=False), \
+                mock.patch.object(installer, 'ensure_runtime') as provision:
+            with self.assertRaisesRegex(RuntimeError, 'hardware virtualization'):
+                installer.start_runtime(self.root / 'desktop')
+            provision.assert_not_called()
+        self.assertFalse((self.root / 'desktop').exists())
 
     def test_zip_cannot_write_outside_stage(self):
         archive = self.root / 'payload.zip'
