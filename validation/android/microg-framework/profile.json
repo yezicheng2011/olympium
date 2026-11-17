@@ -1,0 +1,11 @@
+{
+  "android_release": "17",
+  "system_image": "AOSP default x86_64 API 37.0 revision 6",
+  "original_services_jar_sha256": "968faa3ef4f71559729b9a4496da02edc79d0da1b21304b8a8194fe1fc8b77b8",
+  "target_dex": "classes2.dex",
+  "lineage_revision": "48b4df3c577586ef05a3cd7205fa1c0e71504cbd",
+  "lineage_source_url": "https://raw.githubusercontent.com/LineageOS/android_frameworks_base/48b4df3c577586ef05a3cd7205fa1c0e71504cbd/core/java/com/android/internal/content/MicrogUtils.java",
+  "lineage_source_sha256": "eae771c7003c1c6498f099a4a23b961b2d31a097a6e37972b2df89d5c473c0f9",
+  "google_certificate_sha1": "38918a453d07199354f8b19af05ec6562ced5788",
+  "microg_certificate_sha1": "10321bd893f69af97f7573aafe9de1dc0901f3a1"
+}

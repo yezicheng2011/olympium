@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "package": "com.android.vending",
+  "disposable_avd": "bbb-aosp17",
+  "before_sha256": "3f1bde2f72bca746fbb53b61a32c2a85fcb026f886ee96d6fe9a05de9a6c6d5b",
+  "negative_install_exit_code": 1,
+  "negative_install_output": "Performing Push Install\nFailure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.android.vending signatures do not match newer version; ignoring!]\n/workspace/bbb/build/runtime-validation/microg-wrong-signer/wrong-signer.apk: 1 file pushed, 0 skipped. 12.0 MB/s (8538 bytes in 0.001s)\n",
+  "wrong_apk_sha256": "01c7da045f5cd4b30f8848315b4bb5ca258f9693b2b64d8ad81828dff19b9c8b",
+  "same_signer_update_output": "/workspace/bbb/build/runtime-validation/android-sdk/microg/com.android.vending.apk: 1 file pushed, 0 skipped. 40.9 MB/s (4212484 bytes in 0.098s)\nPerforming Push Install\nSuccess\n",
+  "after_sha256": "3f1bde2f72bca746fbb53b61a32c2a85fcb026f886ee96d6fe9a05de9a6c6d5b"
+}

@@ -40,3 +40,5 @@ Darling source is not copied into this tree. When the image is built with `OLYMP
 The image also uses Ubuntu's `7zip` and `cpio` packages to unpack Mac disk images and packages. They are Ubuntu packages like the rest.
 
 No Apple artwork, font, or closed framework is included. iOS is not part of this system.
+
+The experimental limited microG framework source in `validation/android/microg-framework/` adapts LineageOS MicrogUtils policy and public certificate constants at revision `48b4df3c577586ef05a3cd7205fa1c0e71504cbd`. Those files retain Apache-2.0 notices and their LICENSE. The generated framework is not committed or staged in the ISO; the immutable source URL and source digest are in profile.json.

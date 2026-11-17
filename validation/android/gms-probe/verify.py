@@ -18,14 +18,19 @@ parser.add_argument('--apk', type=Path, required=True,
 parser.add_argument('--apk-sha256', required=True)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--timeout', type=int, default=240)
+parser.add_argument('--tool-timeout', type=int, default=60,
+                    help='Per-tool deadline; increase explicitly for diagnostic software emulation')
 args = parser.parse_args()
+if not 1 <= args.tool_timeout <= 600:
+    parser.error('--tool-timeout must be between 1 and 600 seconds')
 args.output.mkdir(parents=True, exist_ok=True)
 record = dict(status='failed', android17_verified=False, gms_api_compatibility_verified=False)
 adb = (['docker', 'exec', args.container] if args.container else []) + [args.adb, '-s', args.serial]
 
 
-def run(*words, timeout=60, check=True):
-    result = subprocess.run(adb + list(words), capture_output=True, timeout=timeout)
+def run(*words, timeout=None, check=True):
+    result = subprocess.run(adb + list(words), capture_output=True,
+                            timeout=args.tool_timeout if timeout is None else timeout)
     text = result.stdout.decode(errors='replace')
     if len(result.stdout) + len(result.stderr) > 32 * 1024 * 1024:
         raise RuntimeError('ADB output exceeded the validation limit')
