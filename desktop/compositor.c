@@ -59,6 +59,9 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
+#ifdef OLYMPIUM_TEST_INPUT
+#include <wlr/types/wlr_virtual_pointer_v1.h>
+#endif
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -193,6 +196,9 @@ struct server {
 	struct wl_listener cursor_frame;
 	struct wlr_seat *seat;
 	struct wl_listener new_input;
+#ifdef OLYMPIUM_TEST_INPUT
+	struct wl_listener new_virtual_pointer;
+#endif
 	struct wl_listener request_cursor;
 	struct wl_listener request_set_selection;
 	struct wl_listener selection_changed;
@@ -2540,6 +2546,16 @@ static void server_new_keyboard(struct server *server, struct wlr_input_device *
 static void server_new_pointer(struct server *server, struct wlr_input_device *device) {
 	wlr_cursor_attach_input_device(server->cursor, device);
 }
+
+#ifdef OLYMPIUM_TEST_INPUT
+/* Only the separately compiled input-validation compositor exposes this
+ * protocol. Normal desktop binaries do not expose this protocol. */
+static void server_new_virtual_pointer(struct wl_listener *listener, void *data) {
+	struct server *server = wl_container_of(listener, server, new_virtual_pointer);
+	struct wlr_virtual_pointer_v1_new_pointer_event *event = data;
+	server_new_pointer(server, &event->new_pointer->pointer.base);
+}
+#endif
 
 static void server_new_input(struct wl_listener *listener, void *data) {
 	struct server *server = wl_container_of(listener, server, new_input);
@@ -4938,6 +4954,14 @@ int main(int argc, char *argv[]) {
 	server.new_input.notify = server_new_input;
 	wl_signal_add(&server.backend->events.new_input, &server.new_input);
 	server.seat = wlr_seat_create(server.wl_display, "seat0");
+#ifdef OLYMPIUM_TEST_INPUT
+	if (getenv("DEV_DESK_HEADLESS") != NULL) {
+		struct wlr_virtual_pointer_manager_v1 *manager =
+			wlr_virtual_pointer_manager_v1_create(server.wl_display);
+		server.new_virtual_pointer.notify = server_new_virtual_pointer;
+		wl_signal_add(&manager->events.new_virtual_pointer, &server.new_virtual_pointer);
+	}
+#endif
 	server.request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server.seat->events.request_set_cursor, &server.request_cursor);
 	server.request_set_selection.notify = seat_request_set_selection;

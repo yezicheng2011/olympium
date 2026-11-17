@@ -28,6 +28,11 @@ ICON_HEADERS := macicon.h macbundle.h macho.h sandbox.h
 dev-compositor: compositor.c blur.c blur.h dragon.h xwayland-compat.h $(ICON_SOURCES) $(ICON_HEADERS)
 	$(CC) $(CFLAGS) -o $@ compositor.c blur.c $(ICON_SOURCES) $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(PIXBUF_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
 
+# Explicit opt-in binary for real pointer-path validation in a headless seat.
+# The normal desktop never exposes the virtual-pointer protocol.
+dev-compositor-input-test: compositor.c blur.c blur.h dragon.h xwayland-compat.h $(ICON_SOURCES) $(ICON_HEADERS)
+	$(CC) $(CFLAGS) -DOLYMPIUM_TEST_INPUT -o $@ compositor.c blur.c $(ICON_SOURCES) $(WLROOTS_FLAGS) $(WAYLAND_FLAGS) $(CAIRO_FLAGS) $(PIXBUF_FLAGS) $(XKB_FLAGS) $(DRM_FLAGS) -lm
+
 # Builds the helper where it can be built and does nothing elsewhere.
 clip-helper: $(CLIP_HELPER)
 
@@ -108,4 +113,4 @@ test-packages:
 	./test-packages.sh
 
 clean:
-	rm -f dev-clip-helper dev-compositor-nox dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho test-xremap splash-gen splash.png
+	rm -f dev-clip-helper dev-compositor-nox dev-compositor-input-test dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho test-xremap splash-gen splash.png

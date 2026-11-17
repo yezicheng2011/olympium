@@ -1,0 +1,13 @@
+{
+  "package": "org.fossify.math",
+  "serial": "emulator-5556",
+  "status": "failed",
+  "calculation_verified": false,
+  "desktop_window_verified": false,
+  "installed_apk_sha256": "7c5443c22d6d62c67dfe80df33ea9161ff0fa440f92590bcb45d7008b57613ed",
+  "android_api": "28",
+  "abi": "x86",
+  "component": "org.fossify.math/.activities.SplashActivity.Green",
+  "cold_start": true,
+  "error": "No fresh accessibility root after three attempts"
+}
