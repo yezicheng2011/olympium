@@ -1,0 +1,28 @@
+{
+  "status": "desktop-input-verified",
+  "application": "Fossify Calculator 1.4.0",
+  "package": "org.fossify.math",
+  "android_api": "29",
+  "abi": "x86",
+  "backend": "Official AOSP API 29 x86, Android emulator 37.2.13, TCG, scrcpy 5.0.1 Wayland virtual display",
+  "installed_apk_sha256": "7c5443c22d6d62c67dfe80df33ea9161ff0fa440f92590bcb45d7008b57613ed",
+  "desktop_window_verified": true,
+  "desktop_pointer_verified": true,
+  "calculation_verified": true,
+  "formula": "2+3",
+  "result": "5",
+  "input_method": "wlr virtual pointer -> compositor normal cursor/seat handlers -> scrcpy Wayland window -> Android input",
+  "input_command": "pointer-click 1280 720 232 548 156 480 310 480 232 480 310 548",
+  "screenshot": "api29-desktop-calculator.png",
+  "screenshot_sha256": "afa38f19f03a10f9909d52a1915b5849f2195a095e91c7052b84ee793bd0af94",
+  "limitations": [
+    "One x86 application on Android 10; arbitrary applications and ARM translation unverified.",
+    "The launcher redirects to display 0; open-window.py waited for display 3 and relocated the unique app task, then host-pointer calculation was verified again.",
+    "Clipboard, file integration, repeated cold-start reliability, and near-native performance remain unverified.",
+    "Headless compositor used the explicitly compiled OLYMPIUM_TEST_INPUT variant."
+  ],
+  "scripted_relaunch_verified": true,
+  "scripted_relaunch_display_id": 3,
+  "desktop_close_verified": true,
+  "close_method": "Host pointer: File menu > Close Window; scrcpy exited 0, open-window.py recorded closed"
+}

@@ -1,0 +1,27 @@
+{
+  "package": "org.fossify.math",
+  "serial": "emulator-5556",
+  "status": "app-window-verified",
+  "calculation_verified": true,
+  "desktop_window_verified": false,
+  "installed_apk_sha256": "7c5443c22d6d62c67dfe80df33ea9161ff0fa440f92590bcb45d7008b57613ed",
+  "android_api": "28",
+  "abi": "x86",
+  "component": "org.fossify.math/.activities.SplashActivity.Green",
+  "formula": "2+3",
+  "result": "5",
+  "foreground_verified": true,
+  "ui_hierarchy_verified": true,
+  "screenshot_sha256": "4cae0872289eec253d41f18075f7d8155951e7e81ab3f695d97d9dca8f295821",
+  "screenshot_size": [
+    360,
+    640
+  ],
+  "screenshot": "api28-calculator.png",
+  "application": "Fossify Calculator 1.4.0",
+  "backend": "Official AOSP API 28 x86 image, Android emulator 37.2.13, software emulation",
+  "limitations": [
+    "A System UI ANR occurred after boot and was acknowledged with Wait before the recorded successful repeat runs.",
+    "Independent desktop windows and near-native performance are not established by this result."
+  ]
+}

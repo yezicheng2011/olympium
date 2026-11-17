@@ -1,0 +1,5 @@
+Validation layer requested but not available. Ignoring...
+Cocoa validation: main entered
+Cocoa validation: NSApplication=0x722b82407fe0
+Failed to create /Users for shader cache (Permission denied)---disabling.
+exit=0

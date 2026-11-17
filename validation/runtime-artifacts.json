@@ -83,6 +83,14 @@
       "algorithm": "sha256",
       "checksum": "b833b75a64ee46bbd7880921abbb49b733ec5c8171b6684c9b524d57f624cee0",
       "note": "Concatenate verified .aa and .ab fragments in this order. Verify the assembled archive before extraction. SDK mirror: openharmony-rs/ohos-sdk; this is distinct from the Eclipse image publisher."
+    },
+    {
+      "path": "system-images;android-29;default;x86",
+      "url": "https://dl.google.com/android/repository/sys-img/android/x86-29_r08-linux.zip",
+      "size": 516543600,
+      "algorithm": "sha1",
+      "checksum": "cc4fa13e49cb2e93770d4f2e90ea1dd2a81e315b",
+      "note": "Official Google repository metadata; downloaded and verified for Android 10 virtual-display validation."
     }
   ]
 }

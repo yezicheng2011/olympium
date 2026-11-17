@@ -11,6 +11,8 @@ extern Class objc_allocateClassPair(Class, const char *, unsigned long);
 extern void objc_registerClassPair(Class);
 extern signed char class_addMethod(Class, SEL, void (*)(void), const char *);
 extern void objc_msgSend(void);
+extern int printf(const char *, ...);
+extern int fflush(void *);
 
 static id window, label;
 static id send0(id object, const char *name) {
@@ -36,13 +38,25 @@ static void clicked(id self, SEL command, id sender) {
     object_arg(window, "setTitle:", string("Olympium Mac GUI - verified"));
 }
 int main(void) {
+    printf("Cocoa validation: main entered\n");
+    fflush(0);
+    if (!objc_getClass("NSApplication") || !objc_getClass("NSWindow")) {
+        printf("Cocoa validation: required AppKit classes unavailable\n");
+        return 2;
+    }
     id pool = send0(send0(objc_getClass("NSAutoreleasePool"), "alloc"), "init");
     id app = send0(objc_getClass("NSApplication"), "sharedApplication");
+    printf("Cocoa validation: NSApplication=%p\n", app);
+    fflush(0);
     number_arg(app, "setActivationPolicy:", 0);
     Rect frame = {{100, 100}, {460, 220}};
     window = ((id (*)(id, SEL, Rect, unsigned long, unsigned long, signed char))objc_msgSend)(
         send0(objc_getClass("NSWindow"), "alloc"),
         sel_registerName("initWithContentRect:styleMask:backing:defer:"), frame, 15, 2, 0);
+    if (!app || !window) {
+        printf("Cocoa validation: application/window initialization failed\n");
+        return 3;
+    }
     object_arg(window, "setTitle:", string("Olympium Mac GUI"));
     label = control("NSTextField", (Rect){{30, 140}, {400, 30}});
     object_arg(label, "setStringValue:", string("Real Mach-O application using Cocoa"));
@@ -62,7 +76,10 @@ int main(void) {
     send0(window, "center");
     object_arg(window, "makeKeyAndOrderFront:", 0);
     number_arg(app, "activateIgnoringOtherApps:", 1);
+    printf("Cocoa validation: entering application event loop\n");
+    fflush(0);
     send0(app, "run");
+    printf("Cocoa validation: application event loop returned\n");
     send0(pool, "drain");
     return 0;
 }
