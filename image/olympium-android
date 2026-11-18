@@ -149,7 +149,8 @@ def device(root, selected=None):
                     # Do not offer installation while its storage service is
                     # absent or still blocked during initialization.
                     volumes = adb(serial, 'shell', 'sm', 'list-volumes', 'private')
-                    if re.search(r'^private\s+mounted\b', volumes, re.M):
+                    user = adb(serial, 'shell', 'am', 'get-started-user-state', '0').strip()
+                    if re.search(r'^private\s+mounted\b', volumes, re.M) and user == 'RUNNING_UNLOCKED':
                         return serial
         except (RuntimeError, subprocess.TimeoutExpired):
             if serial == 'emulator-5560' and MANAGED_PROCESS:

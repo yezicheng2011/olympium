@@ -197,7 +197,8 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
                 try:
                     new_pid = server()
                     if new_pid and new_pid != pid and shell('getprop', 'sys.boot_completed').strip() == '1' \
-                            and 'private mounted' in shell('sm', 'list-volumes', 'private'):
+                            and 'private mounted' in shell('sm', 'list-volumes', 'private') \
+                            and shell('am', 'get-started-user-state', '0').strip() == 'RUNNING_UNLOCKED':
                         break
                 except (RuntimeError, subprocess.TimeoutExpired):
                     if not same_runtime():
@@ -227,7 +228,18 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
             raise RuntimeError('Android Services health package checksum mismatch')
         if 'Success' not in shell('pm', 'clear', health):
             raise RuntimeError('Could not clear stale Android Services health data')
-        shell('am', 'start', '--display', '0', '-n', health + '/.Probe', timeout=180)
+        try:
+            shell('am', 'start', '--user', '0', '--display', '0', '-n', health + '/.Probe', timeout=180)
+        except RuntimeError:
+            diagnostic = dict(phase='health-launch')
+            try:
+                diagnostic.update(user_state=shell('am', 'get-started-user-state', '0', check=False),
+                                  current_user=shell('am', 'get-current-user', check=False),
+                                  package=shell('dumpsys', 'package', health, check=False))
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                diagnostic['diagnostic_error'] = str(error)
+            (services / 'framework-launch-failure.json').write_text(json.dumps(diagnostic, indent=2) + '\n')
+            raise
         deadline = time.monotonic() + 240
         while time.monotonic() < deadline:
             text = shell('run-as', health, 'cat', 'files/result.json', check=False)

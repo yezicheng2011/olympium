@@ -114,6 +114,9 @@ except Exception as error:
     raise
 finally:
     (output / 'result.json').write_text(json.dumps(record, indent=2) + '\n')
+    diagnostic = root / 'android/services/framework-launch-failure.json'
+    if diagnostic.exists():
+        shutil.copyfile(diagnostic, output / diagnostic.name)
     # Upload only reviewed reports, never AVD data, ADB keys, signing keys or dumps.
     log = root / 'android/avd/emulator.log'
     if log.exists():

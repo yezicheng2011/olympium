@@ -38,6 +38,8 @@ class FrameworkSetup(unittest.TestCase):
         self.compatible = True
         self.readonly = True
         self.vanish_on_result = False
+        self.user_states = ['RUNNING_UNLOCKED']
+        self.last_user_state = None
         self.original = self.profile['original_services_jar_sha256']
 
     def adb(self, serial, *args, **kwargs):
@@ -75,6 +77,12 @@ class FrameworkSetup(unittest.TestCase):
             return ''
         if words[:2] == ('pm', 'clear'):
             return 'Success'
+        if words == ('am', 'get-started-user-state', '0'):
+            self.last_user_state = self.user_states.pop(0) if len(self.user_states) > 1 else self.user_states[0]
+            return self.last_user_state
+        if words[:2] == ('am', 'start'):
+            self.assertEqual(self.last_user_state, 'RUNNING_UNLOCKED')
+            return ''
         if words[:1] == ('am',):
             return ''
         if words[:1] == ('run-as',):
@@ -107,6 +115,12 @@ class FrameworkSetup(unittest.TestCase):
             self.run_setup()
         self.assertFalse(any(args[0] == 'push' for args in self.calls))
         self.assertFalse(self.mounted)
+
+    def test_restart_waits_for_credential_storage_before_launching_health(self):
+        self.user_states = ['RUNNING_LOCKED', 'RUNNING_UNLOCKING', 'RUNNING_UNLOCKED']
+        with mock.patch('android_framework.time.sleep'):
+            self.assertTrue(self.run_setup()['basic_services_verified'])
+        self.assertEqual(self.last_user_state, 'RUNNING_UNLOCKED')
 
     def test_dead_or_replaced_vm_never_receives_cleanup_commands(self):
         self.vanish_on_result = True
