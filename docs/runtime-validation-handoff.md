@@ -12,11 +12,11 @@
 - **修复首次窗口尺寸和 SVG 图标依赖**：竖屏客户端初始尺寸适配面板与 Dock 之间的空间，底部按键可点；补装 `librsvg2-common` 后，自适应 APK 图标正确显示。构建、渲染和启动回归通过，四秒空闲 0 帧；受控延迟下原生映射 0.222 秒、兼容路径 1.887 秒。
 - **Android 已补充正常时钟 KVM 验收**：CI 44208210089 在两个独立模拟器进程中通过自动配置、microG 普通 UID 验证和真实计算器输入；没有启用 TCG 或 icount。首次受控安装用时 158.018 秒，第二轮冷启动安装链路 77.499 秒，均不是桌面首帧或整机开机成绩。原始 APK 图标、桌面指针和独立窗口仍对应前述诊断 TCG 记录，KVM 作业没有验收宿主桌面窗口。
 - **microG 限定签名兼容原型和基础 RPC 已验证**：Services 与 Companion 已安装且已核对实际 base APK 的 SHA256。新增独立普通 UID 的 Android 验证应用：Common 服务 broker、getService 请求、成功回调和返回服务 Binder 均通过；原始系统的证书查询失败保留在 `api37-microg-probe.json`；限定兼容层下同一普通 UID 客户端的旧/新 GMS、Companion 证书查询及 Common RPC 均通过，见 `api37-microg-compatible-probe.json`。原签名 Companion 更新成功，异签名 APK 被拒绝且已安装 APK 哈希不变，见 `api37-microg-update-signatures.json`。自动启动接入与两轮正常时钟 KVM 冷启动已通过，见 `api37-kvm-managed-roundtrip.json` 和 CI 44208210089；完整 GMS API、FCM、账号、地图和认证均未验收。
-- **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 仍仅有此前的两个 `nobody` 回退隔离断言失败，不能称整套通过。
+- **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 已在普通用户的 Ubuntu CI 上通过，包括 Landlock 14 项和 Launchpad 运行时交接。开发容器只能使用 `nobody` 回退，两项严格隔离断言仍失败。
 - **OpenHarmony SDK 计算器实测通过**。KVM 以正常时钟启动 OpenHarmony 6.1.0.31，使用正常锁屏 API 和来宾手势解锁，从系统图标打开计算器。点击得到 `2+3=5`，强制关闭后通过 Bundle Manager 重装原厂签名 HAP，重开并再次点击验证通过。另一个独立构建的普通权限 HAP 也通过了首次安装、打开和点击。实验性的宿主 Wayland 窗口也已通过实际指针输入、标题栏关闭、重开及再次计算验收。已接入配置好 SDK 会话时的桌面导入、签名包交接、原图标和启动入口。新链路也已通过 KVM 验收，普通权限测试 HAP 经正式安装器确认安装后，原图标、桌面指针、标题栏关闭、启动器重开及卸载都已核实。需要提前配置并启动 SDK 来宾，商业 HarmonyOS 和通用窗口仍未验证。见 `validation/openharmony/evidence/` 和 [本轮 KVM 报告](https://github.com/yezicheng2011/bbb/actions/runs/44289494449)。
 - **Android 更新和数据回退已有实际验证，后续更新开发暂停**：CI 44212303251 验证同签名 v1→v2 保留 UID 和私有数据、异签名 v3 被系统拒绝、原生 `pm rollback-app` 恢复 v1 APK 与更新前私有数据。正式桌面命令保留同一图标记录，新增 8 项事务检查及前端安装记录测试；不是所有软件的统一滚动更新。按用户要求，当前优先完善应用运行。
 
-- **Wine 窗口关闭专项回归通过**。Wine 9.0 中以真实桌面指针连续关闭 20 次 64 位 Windows 窗口，进程每次正常退出，合成器仍运行，未出现堆损坏诊断。原始故障没有复现。原生空闲渲染回归重复测得 4 秒 0 帧。
+- **Wine 窗口关闭专项回归通过**。Wine 9.0 中以真实桌面指针连续关闭 20 次 64 位 Windows 窗口，进程每次正常退出，合成器仍运行，未出现堆损坏诊断。原始故障没有复现。原生渲染回归四秒空闲测得 0 至 1 帧，启动回归再次通过。Ubuntu CI 的完整 Wine 回归通过，PE32 程序在已有前缀中 654 毫秒出窗，双向剪贴板、关闭后保留剪贴板和共享目录通过。[Wine 与 Mac 安装器 CI](https://github.com/yezicheng2011/bbb/actions/runs/44294891959)
 - **Android APK 架构提示**。安装前读取来宾报告的 ABI，ARM-only APK 在 x86-only 来宾上给出明确提示，存在共同 ABI 时继续使用系统安装器。通过 11 项 APK 事务、架构和连接恢复回归。ADB 转回普通权限后短暂离线的情况已处理，最新 KVM 测试再次通过两次独立冷启动、microG 基础调用、计算器输入、签名升级和私有数据回退。ARM-only 实际运行仍待验收。[本轮 KVM 报告](https://github.com/yezicheng2011/bbb/actions/runs/44289494539)
 
 下方包含此前检查点，冲突处以本节为准。尚未重建 ISO、验证所有平台同时运行或任意商业应用。
@@ -93,7 +93,7 @@ Ubuntu 24.04 开发容器中：
 
 - Android 17 的正式 APK 安装记录、图标、启动器、窗口关闭重开和指针计算已在诊断配置验证。HAP 统一安装和窗口管理、跨平台剪贴板与共享目录仍未完成。
 - 未验证 Android/OpenHarmony/macOS 同时运行，未验证近原生性能。
-- 32 位 Wine、原始 heap corruption 的确定性复现、隔离测试的两个失败仍待处理。
+- 原始 heap corruption 的确定性复现仍待处理。开发容器的 `nobody` 回退与正式 Ubuntu CI 的 Landlock 结果见本页最新状态。
 - 新 ISO 的构建、真实冷启动、物理 GPU 和硬件加速均未验证。
 
 ## 本工作区的续接资料
