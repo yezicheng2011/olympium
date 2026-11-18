@@ -33,6 +33,7 @@ adb = runtime / 'platform-tools/adb'
 record = dict(status='failed', kvm_access=os.access('/dev/kvm', os.R_OK | os.W_OK),
               automatic_microg_bootstrap_verified=False, cold_boot_recovery_verified=False,
               gms_api_compatibility_verified=False, desktop_window_verified=False, rounds=[])
+record['kvm_checks'] = []
 
 
 def run(label, command, timeout=300):
@@ -74,6 +75,13 @@ try:
     run('build-independent-client', ['sh', repo / 'validation/android/gms-probe/build.sh', sdk, probe_build])
     for number in (1, 2):
         label = 'round-' + str(number)
+        device = Path('/dev/kvm')
+        details = dict(round=number, access=os.access(device, os.R_OK | os.W_OK),
+                       process_gid=os.getgid(), groups=os.getgroups())
+        if device.exists():
+            stat = device.stat()
+            details.update(mode=oct(stat.st_mode & 0o777), owner=stat.st_uid, group=stat.st_gid)
+        record['kvm_checks'].append(details)
         started = time.monotonic()
         run(label + '-install', [sys.executable, repo / 'image/olympium-android',
             'install', apk, '--root', root], 1200)

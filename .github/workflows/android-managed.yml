@@ -41,6 +41,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends acl adb aapt default-jdk-headless libsmali-java musl-tools python3-pil
+          sudo usermod -aG kvm "$(id -un)"
           sudo setfacl -m "u:$(id -un):rw" /dev/kvm
       - name: Runtime boundary checks
         run: |
@@ -49,7 +50,7 @@ jobs:
       - name: Build pinned support assets
         run: /usr/bin/python3 image/build-android-support.py --output build/android-support-assets
       - name: Verify installation, services, calculator and cold-boot recovery
-        run: /usr/bin/python3 validation/android/managed-roundtrip.py --work "$RUNNER_TEMP/android-managed" --output build/android-managed-report
+        run: sudo -u "$(id -un)" -g kvm -- /usr/bin/python3 validation/android/managed-roundtrip.py --work "$RUNNER_TEMP/android-managed" --output build/android-managed-report
       - name: Save verification reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
