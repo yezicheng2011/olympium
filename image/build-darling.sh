@@ -6,7 +6,7 @@
 # tree was run against, and stages the result where the image build looks for
 # it. Darling is the open-source project that runs macOS programs on Linux. It
 # is a separate program under GPL-3.0, with parts under other licenses. Its
-# source is not in this tree and is not changed by it.
+# source is fetched separately and the compatibility patches live here.
 #
 #   image/build-darling.sh
 #
@@ -31,6 +31,7 @@ COMPONENTS=${DARLING_COMPONENTS:-cli}
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PATCH_DIR=$SCRIPT_DIR/darling-patches
 PATCHES=()
+DISPATCH_PATCH=libdispatch/0001-disable-internal-memory-pressure-observer.patch
 normalized_components=${COMPONENTS,,}
 normalized_components=${normalized_components//[[:space:]]/}
 normalized_components=${normalized_components//,/;}
@@ -73,12 +74,19 @@ fi
 git -C "$SRC" fetch -q --depth 1 origin "$PIN"
 git -C "$SRC" checkout -q FETCH_HEAD
 git -C "$SRC" submodule update --init --recursive --depth 1 --jobs 2
-if [ "${#PATCHES[@]}" -gt 0 ]; then
-	cocotron=$SRC/src/external/cocotron
-	if ! git -C "$cocotron" apply --reverse --check "${PATCHES[@]}" >/dev/null 2>&1; then
-		git -C "$cocotron" apply --check "${PATCHES[@]}"
-		git -C "$cocotron" apply "${PATCHES[@]}"
+
+apply_patches() {
+	local submodule=$1
+	shift
+	if ! git -C "$submodule" apply --reverse --check "$@" >/dev/null 2>&1; then
+		git -C "$submodule" apply --check "$@"
+		git -C "$submodule" apply "$@"
 	fi
+}
+
+apply_patches "$SRC/src/external/libdispatch" "$PATCH_DIR/$DISPATCH_PATCH"
+if [ "${#PATCHES[@]}" -gt 0 ]; then
+	apply_patches "$SRC/src/external/cocotron" "${PATCHES[@]}"
 fi
 
 mkdir -p "$SRC/build"
@@ -103,6 +111,8 @@ install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
 	echo "commit $PIN"
 	echo "components $COMPONENTS"
 	echo "built by image/build-darling.sh"
+	echo "libdispatch patch SHA256:"
+	(cd "$PATCH_DIR" && sha256sum -- "$DISPATCH_PATCH")
 	if [ "${#PATCHES[@]}" -gt 0 ]; then
 		echo "AppKit patch SHA256:"
 		(cd "$PATCH_DIR" && sha256sum -- ./*.patch)

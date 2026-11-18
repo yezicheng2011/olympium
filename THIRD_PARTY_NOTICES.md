@@ -35,7 +35,7 @@ Olympium source is not copied into this tree. When the image carries the Olympiu
 
 The i386 image also carries a small 64-bit guest used only to run 64-bit programs. That guest's kernel is the Ubuntu amd64 `vmlinuz` already built for the x86_64 image, plus Ubuntu's bash, libc, and libtinfo. Their copyright files are copied to `/usr/share/doc/olympium-amd64-guest/`. That kernel does not boot the 32-bit machine.
 
-When the image is built with `OLYMPIUM_DARLING=1` it carries Darling, built from commit `3fcd2e1aa85079789d19d82415695bdecc512241` by `image/build-darling.sh`. GUI builds apply the Cocotron patches in `image/darling-patches/`. Darling itself is GPL-3.0. Its submodules keep their own licenses, and the parts Apple published as open source are under the Apple Public Source License. The image places Darling's `LICENSE` and a `SOURCE` file with the commit, patch checksums, and installed program checksums at `/usr/share/doc/darling/`.
+When the image is built with `OLYMPIUM_DARLING=1` it carries Darling, built from commit `3fcd2e1aa85079789d19d82415695bdecc512241` by `image/build-darling.sh`. The build applies the libdispatch patch in `image/darling-patches/`. GUI builds also apply the Cocotron patches. Darling itself is GPL-3.0. Its submodules keep their own licenses, and the parts Apple published as open source are under the Apple Public Source License. The image places Darling's `LICENSE` and a `SOURCE` file with the commit, patch checksums, and installed program checksums at `/usr/share/doc/darling/`.
 
 The image also uses Ubuntu's `7zip` and `cpio` packages to unpack Mac disk images and packages. They are Ubuntu packages like the rest.
 
