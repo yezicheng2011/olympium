@@ -48,7 +48,9 @@ cc -Wall -Wextra -O2 -Ibuild/runtime-validation \
   -o build/runtime-validation/pointer-click $(pkg-config --cflags --libs wayland-client)
 ```
 
-`pointer-click WIDTH HEIGHT X Y [X Y ...]` sends host pointer events through the test compositor's normal cursor and seat handlers. Use the actual output dimensions and inspect the app's current position before choosing coordinates. The recorded run clicked clear, 2, +, 3 and =; no ADB tap generated that recorded calculation. The XML comes from [swaywm/wlr-protocols at b010a03](https://github.com/swaywm/wlr-protocols/blob/b010a03648b88d143236de193bddbfea0c08bc84/unstable/wlr-virtual-pointer-unstable-v1.xml) and retains its MIT license notice; the vendored bytes were compared with that commit.
+`pointer-click WIDTH HEIGHT X Y [X Y ...]` sends host pointer events through the test compositor's normal cursor and seat handlers. Use the actual output dimensions and inspect the app's current position before choosing coordinates.
+
+`pointer-click --drag WIDTH HEIGHT X1 Y1 X2 Y2 [...]` holds the left button from the first coordinate to the last. The recorded run clicked clear, 2, +, 3 and =; no ADB tap generated that recorded calculation. The XML comes from [swaywm/wlr-protocols at b010a03](https://github.com/swaywm/wlr-protocols/blob/b010a03648b88d143236de193bddbfea0c08bc84/unstable/wlr-virtual-pointer-unstable-v1.xml) and retains its MIT license notice; the vendored bytes were compared with that commit.
 
 These results verify one x86 application/input case; they do not establish stability, arbitrary APK or ARM compatibility, clipboard/files, repeated cold-start reliability, or near-native performance. Stop other test compositors before running desktop regression suites: they share `/run/dev-desktop/status` and would contaminate idle frame measurements.
 

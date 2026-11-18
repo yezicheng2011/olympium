@@ -78,11 +78,14 @@ git -C "$SRC" submodule update --init --recursive --depth 1 --jobs 2
 
 apply_patches() {
 	local submodule=$1
+	local patch
 	shift
-	if ! git -C "$submodule" apply --reverse --check "$@" >/dev/null 2>&1; then
-		git -C "$submodule" apply --check "$@"
-		git -C "$submodule" apply "$@"
-	fi
+	for patch in "$@"; do
+		if ! git -C "$submodule" apply --reverse --check "$patch" >/dev/null 2>&1; then
+			git -C "$submodule" apply --check "$patch"
+			git -C "$submodule" apply "$patch"
+		fi
+	done
 }
 
 apply_patches "$SRC/src/external/libdispatch" "$PATCH_DIR/$DISPATCH_PATCH"

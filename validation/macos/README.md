@@ -36,9 +36,7 @@ RPC invoked the Cocoa callback.
 
 The screenshot demonstrates the callback title change. Its text-field label
 did not visibly update, so label repaint is not claimed as verified. This is
-one independent Cocoa probe; third-party macOS GUI applications, repeatable
-cold starts, clipboard/files and near-native performance remain unverified.
-
+one independent Cocoa probe. Later third-party tests are recorded below.
 
 The launch controller now waits for the Mac runtime and reports a nonzero exit
 in a desktop dialog. `desktop/test-mac-launch-failure.py` verifies normal exit,
@@ -54,14 +52,13 @@ See `evidence/hexfiend-2.3.0-result.json`. The associated screenshot is the
 native desktop failure dialog, **not** a functioning Hex Fiend GUI. These
 framework gaps remain unresolved.
 
-The original x86_64 slice from the publisher PikoPixel 1.0 BETA10 DMG now
-reaches the New Image dialog after applying the two AppKit patches under
-`image/darling-patches/`. A host pointer click created a 64×64 document and
+The first test of the original x86_64 slice from the publisher PikoPixel
+1.0 BETA10 DMG reached the New Image dialog with the first two AppKit
+patches under `image/darling-patches/`. A host pointer click created a 64×64 document and
 changed the title to `Untitled 1 (64x64) (8x)`. The experiment used an
 isolated source-built framework path over the official Darling runtime.
 The canvas remained gray and the process later exited with an error.
-Drawing and stable relaunch remain open. See
-`evidence/pikopixel-beta10-source-runtime-result.json` for the source,
+See `evidence/pikopixel-beta10-source-runtime-result.json` for the source,
 binary, and patch hashes and the two screenshots.
 
 The complete x86_64 source runtime also builds and runs. The libdispatch patch
@@ -71,3 +68,20 @@ worker's thread state after a suspendable callback. In the full-runtime
 test, PikoPixel rendered its own Wayland dialog and still exited with 139
 after New Image. DarlingServer remained running and `darling shell true`
 returned zero afterward. See `evidence/full-darling-source-result.json`.
+
+With the current AppKit patches and the full source runtime, the original DMG
+installs through the desktop installer and opens a 64×64 transparent canvas
+over native Wayland. The patches handle an omitted button alternate title,
+route unhandled input through the window controller, copy bitmap storage
+independently, and support grayscale bitmap drawing contexts. The app's pencil
+now paints visible pixels after a real desktop pointer drag.
+
+The recorded run used the test-only pointer client on a 1280×720 output. Click
+**OK** in **New Image**, activate the canvas, and drag across an exposed area
+with `pointer-click --drag`. Click the document titlebar close button, verify
+the window disappears, and launch the same installed app ID again with
+`desktop/dev-install launch`. Create a new image and draw a second stroke.
+`evidence/pikopixel-full-runtime-drawing.json` records before/after screenshots,
+pixel counts in crops away from the cursor, and the source and binary hashes.
+The first process stayed alive after closing its window. Saving, clipboard,
+native process quit, and GPU acceleration still need validation.

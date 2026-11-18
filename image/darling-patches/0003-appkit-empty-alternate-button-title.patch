@@ -1,0 +1,15 @@
+diff --git a/AppKit/NSButtonCell.m b/AppKit/NSButtonCell.m
+index 1ab3cc5..f2212cc 100644
+--- a/AppKit/NSButtonCell.m
++++ b/AppKit/NSButtonCell.m
+@@ -565,7 +565,9 @@ static const CGFloat kImageMargin = 2.;
+         [attributes setObject: [NSColor disabledControlTextColor]
+                        forKey: NSForegroundColorAttributeName];
+
+-    return [[[NSAttributedString alloc] initWithString: [self alternateTitle]
++    // Archived image-only cells can omit the alternate title.
++    NSString *title = [self alternateTitle] ?: @"";
++    return [[[NSAttributedString alloc] initWithString: title
+                                             attributes: attributes]
+             autorelease];
+ }
