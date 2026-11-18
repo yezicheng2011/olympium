@@ -1,0 +1,81 @@
+diff --git a/AppKit/NSScroller.m b/AppKit/NSScroller.m
+index 829f24b..64af631 100644
+--- a/AppKit/NSScroller.m
++++ b/AppKit/NSScroller.m
+@@ -124,6 +124,10 @@ NS_EXTRA_DEALLOC(NSScroller)
+ }
+
+ // Cocotron draws one scroller size for every control size and style.
+++ (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize {
++    return [self scrollerWidthForControlSize: controlSize scrollerStyle: NSScrollerStyleLegacy];
++}
++
+ + (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize
+                           scrollerStyle: (NSScrollerStyle) scrollerStyle
+ {
+diff --git a/AppKit/NSTextView.subproj/NSLayoutManager.m b/AppKit/NSTextView.subproj/NSLayoutManager.m
+index 154bbf7..68673a2 100644
+--- a/AppKit/NSTextView.subproj/NSLayoutManager.m
++++ b/AppKit/NSTextView.subproj/NSLayoutManager.m
+@@ -412,6 +412,15 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
+
+ #define DEBUG_LM_LAYOUT 0
+
++- (NSGlyph) glyphAtIndex: (NSUInteger) glyphIndex isValidIndex: (BOOL *) valid {
++    NSGlyph glyph = NSNullGlyph;
++    BOOL exists = glyphIndex < [self numberOfGlyphs] &&
++            [self getGlyphs: &glyph range: NSMakeRange(glyphIndex, 1)] == 1;
++    if (valid != NULL)
++        *valid = exists;
++    return exists ? glyph : NSNullGlyph;
++}
++
+ - (NSUInteger) getGlyphs: (NSGlyph *) glyphs range: (NSRange) glyphRange {
+
+ #if DEBUG_LM_LAYOUT
+@@ -975,6 +984,13 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
+         *actualRange = charRange;
+ }
+
++- (void) invalidateLayoutForCharacterRange: (NSRange) charRange
++                      actualCharacterRange: (NSRangePointer) actualRange {
++    [self invalidateLayoutForCharacterRange: charRange isSoft: NO actualCharacterRange: NULL];
++    if (actualRange != NULL)
++        *actualRange = NSMakeRange(0, [[self textStorage] length]);
++}
++
+ - (void) invalidateLayoutForCharacterRange: (NSRange) charRange
+                                     isSoft: (BOOL) isSoft
+                       actualCharacterRange: (NSRangePointer) actualRangep
+diff --git a/AppKit/include/AppKit/NSLayoutManager.h b/AppKit/include/AppKit/NSLayoutManager.h
+index 6bd3cdc..0f6cdde 100644
+--- a/AppKit/include/AppKit/NSLayoutManager.h
++++ b/AppKit/include/AppKit/NSLayoutManager.h
+@@ -131,6 +131,7 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
+                      forGlyphAtIndex: (NSUInteger) glyphIndex;
+
+ - (NSUInteger) numberOfGlyphs;
++- (NSGlyph) glyphAtIndex: (NSUInteger) glyphIndex isValidIndex: (BOOL *) valid;
+ - (NSUInteger) getGlyphs: (NSGlyph *) glyphs range: (NSRange) glyphRange;
+
+ - (NSUInteger) getGlyphsInRange: (NSRange) range
+@@ -182,6 +183,8 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
+ - (void) invalidateGlyphsForCharacterRange: (NSRange) charRange
+                             changeInLength: (NSInteger) delta
+                       actualCharacterRange: (NSRangePointer) actualCharRange;
++- (void) invalidateLayoutForCharacterRange: (NSRange) charRange
++                      actualCharacterRange: (NSRangePointer) actualCharRange;
+ - (void) invalidateLayoutForCharacterRange: (NSRange) charRange
+                                     isSoft: (BOOL) isSoft
+                       actualCharacterRange: (NSRangePointer) actualCharRange;
+diff --git a/AppKit/include/AppKit/NSScroller.h b/AppKit/include/AppKit/NSScroller.h
+index 166b5f2..6e99638 100644
+--- a/AppKit/include/AppKit/NSScroller.h
++++ b/AppKit/include/AppKit/NSScroller.h
+@@ -88,5 +88,6 @@ typedef NS_ENUM(NSInteger, NSScrollerKnobStyle) {
+ }
+
+ + (CGFloat) scrollerWidth;
+++ (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize;
+ + (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize
+                           scrollerStyle: (NSScrollerStyle) scrollerStyle;

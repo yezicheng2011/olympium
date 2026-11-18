@@ -50,7 +50,7 @@ from WebKit. Diagnostic flat namespace loading progresses to a second missing
 symbol, `DARegisterDiskAppearedCallback`; that diagnostic flag is not shipped.
 See `evidence/hexfiend-2.3.0-result.json`. The associated screenshot is the
 native desktop failure dialog, **not** a functioning Hex Fiend GUI. These
-framework gaps remain unresolved.
+framework gaps applied to that official runtime test.
 
 The first test of the original x86_64 slice from the publisher PikoPixel
 1.0 BETA10 DMG reached the New Image dialog with the first two AppKit
@@ -113,3 +113,11 @@ in the GTK fixture and **Read host clipboard** in Cocoa with both windows
 still running. Cocoa read `Linux Wayland copy`. Text after the GTK owner
 closed did not pass in the isolated session without the Xwayland clipboard
 helper. See `evidence/cocoa-wayland-clipboard.json`.
+
+In the full source runtime, the same publisher Hex Fiend 2.3.0 now opens a
+known byte sequence using the default Mach-O two-level namespace. It shows
+the expected hex and text. Drag-selecting byte `4F` updates the inspector to
+`79`, and desktop keyboard input changes that byte to `41` in the editor.
+The attempted save reached a missing `NSRunningApplication.icon` selector
+and left the on-disk bytes unchanged. See
+`evidence/hexfiend-source-runtime-result.json`.

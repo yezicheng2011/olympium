@@ -1,0 +1,32 @@
+diff --git a/src/frameworks/WebKit/CMakeLists.txt b/src/frameworks/WebKit/CMakeLists.txt
+index e88b1fc7..2a009028 100644
+--- a/src/frameworks/WebKit/CMakeLists.txt
++++ b/src/frameworks/WebKit/CMakeLists.txt
+@@ -188,3 +188,12 @@ set_source_files_properties(
+     src/WKWebsiteDataStore.m
+     PROPERTIES COMPILE_FLAGS "-fobjc-arc"
+ )
++
++# Older Intel binaries can bind Objective-C runtime symbols through WebKit.
++# Re-export the actual runtime objects and entry points to preserve identity.
++if (BUILD_TARGET_64BIT AND APPLE_ARCH_64BIT STREQUAL "x86_64")
++    set(web_kit_reexports "${CMAKE_CURRENT_SOURCE_DIR}/reexport.exp")
++    set_property(TARGET WebKit APPEND_STRING PROPERTY
++        LINK_FLAGS " -Xarch_x86_64 -Wl,-reexported_symbols_list,${web_kit_reexports}")
++    set_property(TARGET WebKit APPEND PROPERTY LINK_DEPENDS "${web_kit_reexports}")
++endif()
+diff --git a/src/frameworks/WebKit/reexport.exp b/src/frameworks/WebKit/reexport.exp
+new file mode 100644
+index 00000000..e3103391
+--- /dev/null
++++ b/src/frameworks/WebKit/reexport.exp
+@@ -0,0 +1,9 @@
++_OBJC_EHTYPE_id
++___objc_personality_v0
++__objc_empty_cache
++__objc_empty_vtable
++_objc_begin_catch
++_objc_end_catch
++_objc_msgSendSuper2_fixup
++_objc_msgSend_fixup
++_objc_msgSend_stret_fixup

@@ -1,0 +1,32 @@
+{
+  "application": "Hex Fiend",
+  "version": "2.3.0",
+  "publisher_url": "https://github.com/HexFiend/HexFiend/releases/download/v2.3.0/Hex.Fiend.app.zip",
+  "archive_sha256": "0e0a683971c872ee734af2a3440f1f2abb8d442609077bd5c3e212ab3b5439f7",
+  "executable_sha256": "435b6d025868cc1e8bdc0e0b9551bf0aaef0a4b83c2f4a4616898a847f09ffd5",
+  "runtime": "Full source-built x86_64 Darling on Ubuntu 24.04 QEMU TCG",
+  "display_backend": "Native Wayland, software rendering",
+  "default_two_level_namespace": true,
+  "runtime_binary_sha256": {
+    "AppKit": "657f67ed108ba299391970543720f93a8410507ecdf3b38abb929f904b5ecae3",
+    "Foundation": "84788c1ee2056bf88df88b535a8aba08cf9c68f40098a0d5abb70b1feda57708",
+    "WebKit": "919b0e54c96f964018d466ce71e1147c071b24b2a5fc3e921b47486e3e155263"
+  },
+  "new_patch_sha256": {
+    "0007-appkit-layout-and-scroller-compatibility.patch": "bc7d9fd7bb1a36a96d2b1ccd10eeec8745bb8e8ff965533f24dab09f80b26e14",
+    "darling/0001-webkit-reexport-legacy-objc-runtime.patch": "fea01796c50609d06290c79d453d2c98aa91f3e517d830e517634c57abb44997",
+    "foundation/0002-legacy-non-gc-allocation.patch": "e1a6ddcd0378c91a905076325bb4701080e8060443a2e968acb8038e75aedc65"
+  },
+  "opened_file_ascii": "Olympium Hex 123!",
+  "opened_file_sha256": "9866d32472e7d7bcb8bb84f12c214fd060f6b7791b7ba368e68ad1566f801261",
+  "desktop_pointer_selected_byte": "4F",
+  "inspector_decimal_value": 79,
+  "keyboard_edit_changed_first_byte_in_buffer_to": "41",
+  "save_verified": false,
+  "save_attempt_error": "-[NSRunningApplication icon]: unrecognized selector",
+  "file_hash_stayed_unchanged_after_save_attempt": true,
+  "screenshots": [
+    "hexfiend-source-byte-selection.png",
+    "hexfiend-source-edited-buffer.png"
+  ]
+}
