@@ -118,6 +118,7 @@ In the full source runtime, the same publisher Hex Fiend 2.3.0 now opens a
 known byte sequence using the default Mach-O two-level namespace. It shows
 the expected hex and text. Drag-selecting byte `4F` updates the inspector to
 `79`, and desktop keyboard input changes that byte to `41` in the editor.
-The attempted save reached a missing `NSRunningApplication.icon` selector
-and left the on-disk bytes unchanged. See
+After providing the current application icon through AppKit, Command+S
+wrote `41` at byte zero and preserved every other byte. The titlebar closed
+the document, and reopening the same file displayed the saved value. See
 `evidence/hexfiend-source-runtime-result.json`.

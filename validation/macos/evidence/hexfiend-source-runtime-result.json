@@ -15,18 +15,29 @@
   "new_patch_sha256": {
     "0007-appkit-layout-and-scroller-compatibility.patch": "bc7d9fd7bb1a36a96d2b1ccd10eeec8745bb8e8ff965533f24dab09f80b26e14",
     "darling/0001-webkit-reexport-legacy-objc-runtime.patch": "fea01796c50609d06290c79d453d2c98aa91f3e517d830e517634c57abb44997",
-    "foundation/0002-legacy-non-gc-allocation.patch": "e1a6ddcd0378c91a905076325bb4701080e8060443a2e968acb8038e75aedc65"
+    "foundation/0002-legacy-non-gc-allocation.patch": "e1a6ddcd0378c91a905076325bb4701080e8060443a2e968acb8038e75aedc65",
+    "0008-appkit-current-running-app-icon.patch": "e6f1ad901c535c853179b047a54fcfd4e868d342ae7450091cd1e740c19b31cd"
   },
   "opened_file_ascii": "Olympium Hex 123!",
   "opened_file_sha256": "9866d32472e7d7bcb8bb84f12c214fd060f6b7791b7ba368e68ad1566f801261",
   "desktop_pointer_selected_byte": "4F",
   "inspector_decimal_value": 79,
   "keyboard_edit_changed_first_byte_in_buffer_to": "41",
-  "save_verified": false,
-  "save_attempt_error": "-[NSRunningApplication icon]: unrecognized selector",
-  "file_hash_stayed_unchanged_after_save_attempt": true,
+  "save_verified": true,
   "screenshots": [
     "hexfiend-source-byte-selection.png",
-    "hexfiend-source-edited-buffer.png"
-  ]
+    "hexfiend-source-edited-buffer.png",
+    "hexfiend-source-reopened.png"
+  ],
+  "earlier_save_attempt": {
+    "error": "-[NSRunningApplication icon]: unrecognized selector",
+    "file_hash_stayed_unchanged": true
+  },
+  "reopened_saved_file_verified": true,
+  "saved_file_ascii": "Alympium Hex 123!",
+  "saved_file_sha256": "6e578733a55f8738616870b0baf04866edcdbf33f5bb96190146909947405cd9",
+  "saved_file_bytes_changed_at_offsets": [
+    0
+  ],
+  "save_test_appkit_sha256": "f520deb4c2f0709efbddf6e7f9090218acb4c48c618483c8d33972fcb785f03d"
 }

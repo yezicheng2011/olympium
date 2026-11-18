@@ -6,7 +6,7 @@
 
 - **Cocoa GUI 冒烟通过**：正式 `.app` 导入、桌面搜索启动、真实 Mach-O/Cocoa 窗口、普通桌面指针触发 NSButton 回调，窗口标题变为 `Olympium Mac GUI - verified`。随后经桌面指针关闭、确认窗口不可见，用当前安装器在 Landlock 下重新导入并从搜索打开，第二个窗口再次响应按钮；生命周期记录在 `cocoa-lifecycle.log`。使用原始官方 Darling 二进制、Mesa softpipe 和关闭 MIT-SHM 的 Xwayland；没有应用二进制补丁或关闭 Landlock。证据在 `validation/macos/evidence/`。截帧中标签文字未更新，文字重绘不计通过；近原生性能未验证。
 - **Cocoa 与 Linux Wayland 的纯文本剪贴板双向通过**。通过实际桌面指针触发 Cocoa 和 GTK 的复制按钮，两个方向均读到预期字符串。GTK 发送端关闭后的保留在本轮隔离会话未通过，第三方应用、图片和文件剪贴板尚待验证。见 `validation/macos/evidence/cocoa-wayland-clipboard.json`。
-- **Hex Fiend 已启动并通过读取和界面编辑**。原版 2.3.0 Intel 包在完整源码 Darling 的默认链接模式运行，打开已知内容的二进制文件。指针选中 `4F` 后检查器显示 79，键盘编辑把首字节改为 `41`。保存仍卡在缺失的 `NSRunningApplication.icon`，磁盘文件保持原哈希。见 `validation/macos/evidence/hexfiend-source-runtime-result.json`。
+- **Hex Fiend 已通过读取、字节编辑、保存和重开**。原版 2.3.0 Intel 包在完整源码 Darling 的默认链接模式运行，打开已知内容的二进制文件。指针选中 `4F` 后检查器显示 79，键盘编辑把首字节改为 `41`。补齐当前应用图标接口后，保存只改变了磁盘文件的首字节。关闭并重新打开后，视图显示保存后的 `41`。见 `validation/macos/evidence/hexfiend-source-runtime-result.json`。
 - **PikoPixel 已通过绘制和窗口重开**。原版 Intel DMG 经正式安装器导入。完整源码版 Darling 在 Ubuntu 虚拟机上通过原生 Wayland 显示 64×64 画布，桌面指针实际绘出笔迹。标题栏关闭后，用同一应用 ID 重开并画出第二条笔迹。验证用软件渲染，关闭窗口后首个进程仍在运行。应用保存对话框写出原生 `.piko` 文件，关闭窗口后通过安装器重新打开该文件。文件内嵌 PNG 的 26 个墨色像素与重开画布逐点一致。修复了编辑后关闭窗口会直接丢弃改动的问题。未编辑直接关闭，编辑后可取消关闭或保存后关闭，新增的 6 个像素已核对写入。PikoPixel 的图片剪贴板和 GPU 性能尚待验证。证据在 `validation/macos/evidence/` 的绘制、保存重开和关闭确认报告。
 - **Android 17 正式 APK 链路已实跑通过**：在官方 AOSP API 37.0 rev6 x86_64 上，经正式安装器安装并核验 Fossify Calculator 字节；桌面搜索打开独立 Wayland 窗口，普通桌面指针计算 **2+3=5**；关闭后从 Launchpad 原始 APK 图标重开，再次计算通过。截图、两份新 UI 树及结果在 `validation/android/evidence/api37-*`。
 - **修复首次窗口尺寸和 SVG 图标依赖**：竖屏客户端初始尺寸适配面板与 Dock 之间的空间，底部按键可点；补装 `librsvg2-common` 后，自适应 APK 图标正确显示。构建、渲染和启动回归通过，四秒空闲 0 帧；受控延迟下原生映射 0.222 秒、兼容路径 1.887 秒。

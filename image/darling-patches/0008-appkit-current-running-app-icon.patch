@@ -1,0 +1,38 @@
+diff --git a/AppKit/NSRunningApplication.m b/AppKit/NSRunningApplication.m
+index 9564fc8..a7fb4a0 100644
+--- a/AppKit/NSRunningApplication.m
++++ b/AppKit/NSRunningApplication.m
+@@ -2,4 +2,5 @@
+ #import <AppKit/NSApplication.h>
+ #import <AppKit/NSDisplay.h>
++#import <AppKit/NSWorkspace.h>
+ #import <Foundation/NSBundle.h>
+ #import <Foundation/NSProcessInfo.h>
+@@ -99,4 +100,11 @@ static BOOL processExists(pid_t pid) {
+ }
+
++- (NSImage *) icon {
++    if (![self _isCurrent])
++        return nil;
++    return [NSApp applicationIconImage] ?:
++            [[NSWorkspace sharedWorkspace] iconForFile: [[NSBundle mainBundle] bundlePath]];
++}
++
+ - (BOOL) isTerminated {
+     return !processExists(_processIdentifier);
+diff --git a/AppKit/include/AppKit/NSRunningApplication.h b/AppKit/include/AppKit/NSRunningApplication.h
+index 3ca24d8..3c0417d 100644
+--- a/AppKit/include/AppKit/NSRunningApplication.h
++++ b/AppKit/include/AppKit/NSRunningApplication.h
+@@ -21,5 +21,5 @@
+ #include <sys/types.h>
+
+-@class NSString;
++@class NSImage, NSString;
+
+ typedef NS_ENUM(NSInteger, NSApplicationActivationPolicy) {
+@@ -45,3 +45,4 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
+ @property(readonly, copy) NSString *bundleIdentifier;
+ @property(readonly, copy) NSString *localizedName;
++@property(readonly, retain) NSImage *icon;
+ @property(readonly, getter=isTerminated) BOOL terminated;
