@@ -36,5 +36,9 @@
     "generic_image_request_returned_image": false
   },
   "pikopixel_copy_published_selection": false,
-  "linux_to_cocoa_image_verified": false
+  "gtk_to_cocoa_png": {
+    "source_method": "gtk_clipboard_set_image",
+    "receiver_method": "NSPasteboard dataForType: NSPasteboardTypePNG",
+    "pixel_match": true
+  }
 }
