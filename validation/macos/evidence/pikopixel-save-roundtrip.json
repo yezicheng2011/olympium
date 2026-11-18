@@ -1,0 +1,44 @@
+{
+  "application": "PikoPixel 1.0 BETA10",
+  "unmodified_macho_sha256": "74eadcc30176a9fddd811681e71eb2ef346eeac37858abc8c501d15ded756391",
+  "runtime": "Full source-built x86_64 Darling, Ubuntu 24.04 QEMU TCG guest, native Wayland with software rendering",
+  "appkit_sha256": "9afa5b78e5cc9f13256d9c8fe8208a422af89182b8c5a63df3e4f7f6fc0fd7f4",
+  "saved_with": "Command+S via the isolated Wayland test seat, then save panel name and Save button",
+  "saved_filename": "OlympiumSaveRoundTrip.piko",
+  "evidence_copy": "pikopixel-save-roundtrip.piko",
+  "saved_bytes": 18444,
+  "saved_sha256": "1c2657b97ae57f1835c4cae789197aa5862f4c5538710cb38c167a2ecb29d518",
+  "contains_keyed_archive": true,
+  "embedded_png_dimensions": [
+    64,
+    64
+  ],
+  "embedded_png_opaque_black_pixels": 26,
+  "closed_with": "Olympium titlebar close control",
+  "closed_screenshot": "pikopixel-save-roundtrip-closed.png",
+  "reopened_with": "desktop/dev-install launch mac-4c508555 /Volumes/SystemRoot/home/tester/OlympiumSaveRoundTrip.piko",
+  "application_reopened_document_title": "OlympiumSaveRoundTrip.piko (64x64) (9x)",
+  "canvas_comparison": [
+    {
+      "screenshot": "pikopixel-save-roundtrip-drawn.png",
+      "origin_xy": [
+        384,
+        91
+      ],
+      "zoom": 8,
+      "pixels_checked": 239,
+      "matching_ink_pixels": 26
+    },
+    {
+      "screenshot": "pikopixel-save-roundtrip-reopened.png",
+      "origin_xy": [
+        352,
+        52
+      ],
+      "zoom": 9,
+      "pixels_checked": 239,
+      "matching_ink_pixels": 26
+    }
+  ],
+  "canvas_comparison_rule": "Compare dark center (<32 in every RGB channel) with black opaque pixels in PNG for x in [3,18], y in [5,19]. (15,15) is omitted because the original screenshot cursor crosses its center."
+}

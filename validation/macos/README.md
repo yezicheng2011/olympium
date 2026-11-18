@@ -83,5 +83,13 @@ the window disappears, and launch the same installed app ID again with
 `desktop/dev-install launch`. Create a new image and draw a second stroke.
 `evidence/pikopixel-full-runtime-drawing.json` records before/after screenshots,
 pixel counts in crops away from the cursor, and the source and binary hashes.
-The first process stayed alive after closing its window. Saving, clipboard,
-native process quit, and GPU acceleration still need validation.
+The first process stayed alive after closing its window. Clipboard, native process quit, and GPU acceleration still need validation.
+
+The save round trip used the same AppKit binary and a separate headless test
+seat with virtual keyboard input. Command+S opened the application's save
+panel and clicking **Save** wrote a native `.piko` document. After closing
+its window, the installer launched a new process with the document's Darling
+path as an argument. The reopened canvas matched all 26 ink pixels in the
+saved document's embedded PNG, including their positions.
+`evidence/pikopixel-save-roundtrip.json` records the document SHA-256,
+the input path, and the screenshot comparison.
