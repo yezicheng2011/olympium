@@ -144,5 +144,24 @@ class Updates(unittest.TestCase):
         self.assertFalse(self.calls)
 
 
+class AdbTransport(unittest.TestCase):
+    def test_offline_identity_read_is_retried(self):
+        with mock.patch.object(backend, 'tool', return_value='/test/adb'), \
+                mock.patch.object(backend.time, 'sleep'), \
+                mock.patch.object(backend, 'command', side_effect=[
+                    RuntimeError('adb: device offline\n'), '37\n']) as run:
+            self.assertEqual(backend.adb('emulator-5560', 'shell', 'getprop',
+                                         'ro.build.version.sdk'), '37\n')
+            self.assertEqual(run.call_count, 2)
+
+    def test_offline_install_is_not_repeated(self):
+        with mock.patch.object(backend, 'tool', return_value='/test/adb'), \
+                mock.patch.object(backend, 'command',
+                                  side_effect=RuntimeError('adb: device offline\n')) as run:
+            with self.assertRaisesRegex(RuntimeError, 'device offline'):
+                backend.adb('emulator-5560', 'install', '/test/app.apk')
+            run.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

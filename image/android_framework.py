@@ -278,4 +278,13 @@ def prepare_framework(serial, root, runtime, adb, installed_digest, ready_timeou
     finally:
         if rooted and same_runtime():
             adb(serial, 'unroot', timeout=120, check=False)
-            adb(serial, 'wait-for-device', timeout=120, check=False)
+            adb(serial, 'wait-for-device', timeout=120)
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                if not same_runtime():
+                    raise RuntimeError('Managed Android changed while restoring its ADB shell')
+                if shell('id', '-u', timeout=15).strip() == '2000':
+                    break
+                time.sleep(1)
+            else:
+                raise RuntimeError('Managed Android did not return to its unprivileged ADB shell')

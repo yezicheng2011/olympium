@@ -117,7 +117,25 @@ def adb(serial, *args, timeout=None, check=True):
         if not 15 <= timeout <= 600:
             raise RuntimeError('Android tool timeout must be between 15 and 600 seconds')
     monitor = managed_process_running if serial == 'emulator-5560' and MANAGED_PROCESS else None
-    return command([tool('adb'), '-s', serial, *args], timeout, check, monitor)
+    argv = [tool('adb'), '-s', serial, *args]
+    read_only = (args[:2] in (('shell', 'getprop'), ('shell', 'sha256sum'), ('shell', 'pidof'))
+                 or args[:3] in (('shell', 'pm', 'path'), ('shell', 'id', '-u')))
+    if not read_only:
+        return command(argv, timeout, check, monitor)
+    # adbd can become transiently offline around a cold boot or root/unroot.
+    # Retry only the reads that establish runtime and package identity.
+    for attempt in range(6):
+        try:
+            result = command(argv, timeout, check, monitor)
+        except RuntimeError as error:
+            if str(error).strip() != 'adb: device offline':
+                raise
+            result = str(error)
+        if result.strip() != 'adb: device offline':
+            return result
+        if attempt < 5:
+            time.sleep(1)
+    raise RuntimeError(f"Android device offline while reading {' '.join(args[:3])}")
 
 
 def managed_process_running():

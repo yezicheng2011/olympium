@@ -35,6 +35,7 @@ class FrameworkSetup(unittest.TestCase):
         self.calls = []
         self.server = '100'
         self.mounted = False
+        self.rooted = False
         self.compatible = True
         self.readonly = True
         self.vanish_on_result = False
@@ -45,6 +46,8 @@ class FrameworkSetup(unittest.TestCase):
     def adb(self, serial, *args, **kwargs):
         self.assertEqual(serial, 'emulator-5560')
         self.calls.append(args)
+        if args[0] in ('root', 'unroot'):
+            self.rooted = args[0] == 'root'
         if args[0] in ('root', 'unroot', 'wait-for-device', 'push', 'install'):
             return 'Success'
         self.assertEqual(args[0], 'shell')
@@ -54,7 +57,7 @@ class FrameworkSetup(unittest.TestCase):
         if words[:1] == ('getprop',):
             return {'ro.build.version.sdk': '37', 'ro.build.type': 'userdebug', 'sys.boot_completed': '1'}[words[1]]
         if words == ('id', '-u'):
-            return '0'
+            return '0' if self.rooted else '2000'
         if words[:1] == ('sha256sum',):
             value = self.expected if self.mounted or words[1].startswith('/data/') else self.original
             return value + '  framework'
@@ -107,7 +110,7 @@ class FrameworkSetup(unittest.TestCase):
         self.assertFalse(self.mounted)
         self.assertIn(('shell', '/data/misc/olympium-framework/mount-helper', 'restore'), self.calls)
         self.assertFalse((self.root / 'android/services/framework.json').exists())
-        self.assertEqual(self.calls[-2:], [('unroot',), ('wait-for-device',)])
+        self.assertEqual(self.calls[-3:], [('unroot',), ('wait-for-device',), ('shell', 'id', '-u')])
 
     def test_changed_framework_is_never_overwritten(self):
         self.original = 'b' * 64
