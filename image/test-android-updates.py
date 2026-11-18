@@ -40,7 +40,7 @@ class Updates(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(backend, 'inspect', side_effect=lambda *args: dict(self.new)).start()
         mock.patch.object(backend, 'device', return_value='emulator-5560').start()
-        mock.patch.object(backend, 'prepare_services').start()
+        self.prepare_services = mock.patch.object(backend, 'prepare_services').start()
         mock.patch.object(backend, 'installed_digest', side_effect=lambda *args: self.actual).start()
         mock.patch.object(backend, 'adb', side_effect=self.adb).start()
 
@@ -48,6 +48,8 @@ class Updates(unittest.TestCase):
         self.calls.append(args)
         if args == ('shell', 'getprop', 'ro.build.version.sdk'):
             return '37'
+        if args == ('shell', 'getprop', 'ro.product.cpu.abilist'):
+            return 'x86_64,x86'
         if args[0] == 'install':
             if self.reject:
                 raise RuntimeError('INSTALL_FAILED_UPDATE_INCOMPATIBLE')
@@ -58,7 +60,15 @@ class Updates(unittest.TestCase):
             return 'Success'
         self.fail('Unexpected native operation: ' + repr(args))
 
+    def test_arm_only_apk_reports_the_selected_devices_abis(self):
+        self.new['native_abis'] = ['arm64-v8a']
+        with self.assertRaisesRegex(RuntimeError, 'requires arm64-v8a.*supports x86, x86_64'):
+            backend.install(self.apk, self.root)
+        self.prepare_services.assert_not_called()
+        self.assertFalse(any(call[0] == 'install' for call in self.calls))
+
     def test_upgrade_requests_native_data_rollback_and_keeps_previous_payload(self):
+        self.new['native_abis'] = ['arm64-v8a', 'x86_64']
         result = backend.install(self.apk, self.root, update_only=True)
         self.assertEqual(result['sha'], self.new['sha'])
         native = next(call for call in self.calls if call[0] == 'install')

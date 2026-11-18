@@ -76,6 +76,8 @@ def inspect(apk, root):
     if not apk.is_file() or apk.stat().st_size > 1024 * 1024 * 1024:
         raise RuntimeError('Not a supported standalone APK')
     with zipfile.ZipFile(apk) as archive:
+        native_abis = sorted({match[1] for name in archive.namelist()
+                              if (match := re.fullmatch(r'lib/([A-Za-z0-9_-]+)/[^/]+\.so', name))})
         for member, limit in [('AndroidManifest.xml', 8 * 1024 * 1024), ('resources.arsc', 64 * 1024 * 1024)]:
             try:
                 size = archive.getinfo(member).file_size
@@ -104,6 +106,7 @@ def inspect(apk, root):
                 version_code=int(identity[2] or 0),
                 id='android-' + hashlib.sha256(identity[1].encode()).hexdigest()[:16],
                 sha=sha, icon=str(icon) if icon else '', min_sdk=int(sdk[1]) if sdk else 1,
+                native_abis=native_abis,
                 needs_runtime_download=not (RUNTIME / 'emulator/emulator').is_file()
                     and not os.environ.get('OLYMPIUM_ANDROID_SERIAL'))
 
@@ -399,6 +402,16 @@ def install(apk, root, update_only=False):
     sdk = int(adb(serial, 'shell', 'getprop', 'ro.build.version.sdk').strip())
     if sdk not in (29, 37) or info['min_sdk'] > sdk:
         raise RuntimeError('This app needs a different Android version; configure the Android 17 runtime')
+    native_abis = set(info.get('native_abis', ()))
+    if native_abis:
+        reported = adb(serial, 'shell', 'getprop', 'ro.product.cpu.abilist').strip()
+        if not reported:
+            reported = adb(serial, 'shell', 'getprop', 'ro.product.cpu.abi').strip()
+        supported = {abi for abi in reported.split(',') if re.fullmatch(r'[A-Za-z0-9_-]+', abi)}
+        if supported and native_abis.isdisjoint(supported):
+            raise RuntimeError(
+                f"APK requires {', '.join(sorted(native_abis))}. "
+                f"The selected Android device supports {', '.join(sorted(supported))}.")
     if sdk == 37:
         prepare_services(serial, root)
     dest.mkdir(parents=True, exist_ok=True)
