@@ -33,6 +33,7 @@ PATCH_DIR=$SCRIPT_DIR/darling-patches
 PATCHES=()
 DISPATCH_PATCH=libdispatch/0001-disable-internal-memory-pressure-observer.patch
 SERVER_PATCH=darlingserver/0001-reload-worker-thread-after-suspension.patch
+FOUNDATION_PATCH=foundation/0001-discard-pending-undo-actions.patch
 normalized_components=${COMPONENTS,,}
 normalized_components=${normalized_components//[[:space:]]/}
 normalized_components=${normalized_components//,/;}
@@ -90,6 +91,7 @@ apply_patches() {
 
 apply_patches "$SRC/src/external/libdispatch" "$PATCH_DIR/$DISPATCH_PATCH"
 apply_patches "$SRC/src/external/darlingserver" "$PATCH_DIR/$SERVER_PATCH"
+apply_patches "$SRC/src/external/foundation" "$PATCH_DIR/$FOUNDATION_PATCH"
 if [ "${#PATCHES[@]}" -gt 0 ]; then
 	apply_patches "$SRC/src/external/cocotron" "${PATCHES[@]}"
 fi
@@ -117,7 +119,7 @@ install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
 	echo "components $COMPONENTS"
 	echo "built by image/build-darling.sh"
 	echo "Core runtime patch SHA256:"
-	(cd "$PATCH_DIR" && sha256sum -- "$DISPATCH_PATCH" "$SERVER_PATCH")
+	(cd "$PATCH_DIR" && sha256sum -- "$DISPATCH_PATCH" "$SERVER_PATCH" "$FOUNDATION_PATCH")
 	if [ "${#PATCHES[@]}" -gt 0 ]; then
 		echo "AppKit patch SHA256:"
 		(cd "$PATCH_DIR" && sha256sum -- ./*.patch)

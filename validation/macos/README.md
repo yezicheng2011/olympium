@@ -93,3 +93,12 @@ path as an argument. The reopened canvas matched all 26 ink pixels in the
 saved document's embedded PNG, including their positions.
 `evidence/pikopixel-save-roundtrip.json` records the document SHA-256,
 the input path, and the screenshot comparison.
+
+Closing a document after a new stroke originally discarded the unsaved edit
+without a prompt. AppKit now counts committed undo groups as edits. Foundation
+clears pending actions when the application clears its undo history during
+document initialization, so opening a saved file keeps it clean. The patched
+runtime closed an untouched document directly. After editing, **Cancel** left
+the stroke visible and the file hash unchanged. Choosing **Yes** on the next
+close wrote six new ink pixels into the embedded PNG and closed the window.
+See `evidence/pikopixel-close-guard.json`.

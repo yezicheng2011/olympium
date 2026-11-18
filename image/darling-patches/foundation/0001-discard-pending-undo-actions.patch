@@ -1,0 +1,41 @@
+diff --git a/include/Foundation/NSUndoGroup.h b/include/Foundation/NSUndoGroup.h
+index da37dc0..775574b 100644
+--- a/include/Foundation/NSUndoGroup.h
++++ b/include/Foundation/NSUndoGroup.h
+@@ -35,6 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+ - (void) addInvocationsFromArray: (NSArray *) array;
+ - (NSArray *) invocations;
+
++- (void) removeAllInvocations;
+ - (void) removeInvocationsWithTarget: (id) target;
+
+ - (void) invokeInvocations;
+diff --git a/src/NSUndoGroup.m b/src/NSUndoGroup.m
+index d0816c8..2b52149 100644
+--- a/src/NSUndoGroup.m
++++ b/src/NSUndoGroup.m
+@@ -59,6 +59,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+     return _invocations;
+ }
+
++- (void) removeAllInvocations {
++    [_invocations removeAllObjects];
++}
++
+ - (void) removeInvocationsWithTarget: (id) target {
+     int i;
+
+diff --git a/src/NSUndoManager.m b/src/NSUndoManager.m
+index 78ac4bb..879e5fc 100644
+--- a/src/NSUndoManager.m
++++ b/src/NSUndoManager.m
+@@ -360,6 +360,9 @@ NSString *const NSUndoManagerDidRedoChangeNotification =
+ }
+
+ - (void) removeAllActions {
++    // Discard pending edits while keeping explicitly opened groups balanced.
++    for (NSUndoGroup *group = _currentGroup; group != nil; group = [group parentGroup])
++        [group removeAllInvocations];
+     [_undoStack removeAllObjects];
+     [_redoStack removeAllObjects];
+     _disableCount = 0;
