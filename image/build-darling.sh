@@ -23,6 +23,7 @@
 # 24.04, the clone with its 157 submodules was 5 GB, the build was 15,457
 # steps and about 20 minutes, and the staged result was 293 MB. x86_64 only.
 set -euo pipefail
+umask 022
 PIN=3fcd2e1aa85079789d19d82415695bdecc512241
 SRC=${DARLING_SRC:-/var/tmp/darling-src}
 OUT=${DARLING_OUT:-/var/tmp/darling-out}
@@ -86,6 +87,14 @@ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPONENTS="$COMPONENTS" -DCMAKE_INS
 ninja
 rm -rf "$OUT"
 DESTDIR="$OUT" ninja install
+# Groff's install rule preserves checkout modes, including the guest /usr
+# directory. Make the staged system files accessible to guest app users.
+guest_root="$OUT/usr/local/libexec/darling"
+guest_usr="$guest_root/usr"
+if [ -d "$guest_usr" ] && [ ! -L "$guest_usr" ]; then
+	chmod -R a+rX "$guest_usr"
+fi
+chmod -R go-w "$guest_root"
 
 # What the image needs beside the programs: the license, and what was built.
 install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
