@@ -9,6 +9,7 @@ on:
       - 'validation/openharmony/*.cpp'
       - 'validation/openharmony/*.c'
       - 'validation/openharmony/sources.json'
+      - 'validation/openharmony/fresh-hap/**'
       - 'validation/runtime-artifacts.json'
       - 'desktop/*.c'
       - 'desktop/*.h'
@@ -34,7 +35,7 @@ jobs:
           test -c /dev/kvm
           apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25)
           sudo apt-get "${apt_options[@]}" update
-          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends acl qemu-system-x86 e2fsprogs git python3-pil libusb-1.0-0 \
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends acl qemu-system-x86 e2fsprogs git python3-pil libusb-1.0-0 default-jre-headless \
             gir1.2-gtk-3.0 python3-gi grim libwlroots-dev libwayland-dev libpango1.0-dev \
             libgdk-pixbuf-2.0-dev libxkbcommon-dev libdrm-dev libpixman-1-dev
           sudo usermod -aG kvm "$(id -un)"
@@ -53,7 +54,7 @@ jobs:
         run: |
           sudo -u "$(id -un)" -g kvm -- /usr/bin/python3 validation/openharmony/managed-gui.py \
             --work "$RUNNER_TEMP/oh-managed" --output build/openharmony-managed-report \
-            --desktop-pointer build/openharmony-input/pointer-click
+            --desktop-pointer build/openharmony-input/pointer-click --fresh-hap
       - name: Save actual verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

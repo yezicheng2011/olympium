@@ -14,6 +14,7 @@ from android_runtime import download, extract
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--work', type=Path, required=True)
+parser.add_argument('--with-ets', action='store_true')
 args = parser.parse_args()
 work = args.work.resolve()
 work.mkdir(parents=True, exist_ok=True)
@@ -37,6 +38,8 @@ names = {
     'linux/native-linux-x64-6.1.0.31-Release.zip': 'native',
     'linux/toolchains-linux-x64-6.1.0.31-Release.zip': 'toolchains',
 }
+if args.with_ets:
+    names['linux/ets-linux-x64-6.1.0.31-Release.zip'] = 'ets'
 selected = []
 with tarfile.open(archive, 'r|gz') as sdk:
     for entry in sdk:

@@ -21,6 +21,8 @@ parser.add_argument('--work', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--desktop-pointer', type=Path,
                     help='Built Wayland test pointer, enables host window acceptance')
+parser.add_argument('--fresh-hap', action='store_true',
+                    help='Build and verify first installation of a separate SDK test app')
 a = parser.parse_args()
 work, out = a.work.resolve(), a.output.resolve()
 work.mkdir(parents=True, exist_ok=True)
@@ -32,6 +34,7 @@ qmp = None
 serial = None
 started = time.monotonic()
 BUNDLE = 'ohos.samples.distributedcalc'
+FRESH_BUNDLE = 'org.olympium.validation.hap'
 
 
 def run(*args, timeout=180, check=True):
@@ -103,12 +106,12 @@ def layout(label):
     return json.loads((out / name).read_text())
 
 
-def app_nodes(tree):
+def app_nodes(tree, bundle=BUNDLE):
     # Only descendants of an actual app-owned root can supply calculator proof.
-    if tree.get('attributes', {}).get('bundleName') == BUNDLE:
+    if tree.get('attributes', {}).get('bundleName') == bundle:
         return list(nodes(tree))
     for child in tree.get('children', []):
-        result = app_nodes(child)
+        result = app_nodes(child, bundle)
         if result:
             return result
     return []
@@ -336,11 +339,59 @@ def calculator(round_name):
     return tree
 
 
+def verify_fresh_install(package):
+    report['fresh_hap_install_verified'] = False
+    report['fresh_hap_input_verified'] = False
+    report['fresh_hap_sha256'] = hashlib.sha256(package.read_bytes()).hexdigest()
+    previous = shell('bm', 'dump', '-a')
+    if BUNDLE not in previous or FRESH_BUNDLE in previous:
+        raise RuntimeError('Could not confirm that the SDK probe was absent before install')
+    report['fresh_hap_absent_before_install'] = True
+    remote_path = '/data/local/tmp/olympium-fresh-probe.hap'
+    run(hdc, '-t', target, 'file', 'send', package, remote_path)
+    result = shell('bm', 'install', '-p', remote_path, timeout=120)
+    (out / 'fresh-hap-install.log').write_text(result)
+    if 'install bundle successfully' not in result.lower():
+        raise RuntimeError('Bundle Manager rejected the fresh SDK test package')
+    installed = shell('bm', 'dump', '-n', FRESH_BUNDLE)
+    if FRESH_BUNDLE not in installed or 'MainAbility' not in installed:
+        raise RuntimeError('Installed SDK probe has no registered MainAbility')
+    report['fresh_hap_install_verified'] = True
+    launch = shell('aa', 'start', '-a', 'MainAbility', '-b', FRESH_BUNDLE)
+    if 'start ability successfully' not in launch.lower():
+        raise RuntimeError('Ability Manager did not accept the SDK probe launch')
+
+    def native_view():
+        elements = app_nodes(layout('fresh-hap-opened'), FRESH_BUNDLE)
+        if any(n.get('text') == 'Olympium fresh HAP' for n in elements):
+            return elements
+        return None
+
+    elements = wait_for(native_view, 45, 'fresh HAP owned GUI')
+    capture('fresh-hap-opened')
+    report['fresh_hap_gui_verified'] = True
+    button = next((n for n in elements if n.get('id') == 'verify-fresh-hap'), None)
+    if button is None:
+        raise RuntimeError('Fresh SDK probe input button is missing')
+    click_node(button)
+    wait_for(lambda: any(n.get('text') == 'Fresh HAP input received'
+                         for n in app_nodes(layout('fresh-hap-input'), FRESH_BUNDLE)),
+             25, 'fresh HAP changes its text after the pointer click')
+    capture('fresh-hap-input')
+    report['fresh_hap_input_verified'] = True
+
+
 try:
     if not Path('/dev/kvm').exists():
         raise RuntimeError('Hardware acceptance requires /dev/kvm')
     if not (work / 'publisher-provenance.json').exists():
-        run(sys.executable, ROOT / 'validation/openharmony/prepare-runtime.py', '--work', work, timeout=1800)
+        extra = ['--with-ets'] if a.fresh_hap else []
+        run(sys.executable, ROOT / 'validation/openharmony/prepare-runtime.py',
+            '--work', work, *extra, timeout=1800)
+    if a.fresh_hap:
+        fresh_work = work / 'fresh-hap-build'
+        run(sys.executable, ROOT / 'validation/openharmony/build-fresh-hap.py',
+            '--sdk', work / 'sdk', '--work', fresh_work, timeout=240)
     image = work / 'oniro/images'
     build = work / 'bootstrap-build'
     run(sys.executable, ROOT / 'validation/openharmony/build-bootstrap.py',
@@ -488,6 +539,8 @@ try:
         tree = calculator('desktop-reopened')
         desktop_calculation(tree, 'host-reopened')
         report['desktop_relaunch_verified'] = True
+    if a.fresh_hap:
+        verify_fresh_install(fresh_work / 'probe.hap')
 except Exception as error:
     report['error'] = str(error)
     if qmp:
