@@ -137,7 +137,7 @@ def calculator_button(tree, ids):
     raise RuntimeError('Calculator button absent: ' + repr(ids))
 
 
-def desktop_calculation(tree, screenshot):
+def desktop_calculation(tree):
     from PIL import Image
 
     runtime = work / 'host-wayland'
@@ -149,15 +149,8 @@ def desktop_calculation(tree, screenshot):
     bounds = list(map(int, re.findall(r'\d+', app['bounds'])))
     if bounds != [0, 36, 360, 684]:
         raise RuntimeError('Unexpected calculator content bounds')
-    with Image.open(screenshot) as image:
-        guest = image.convert('RGB')
-    # Match two strips inside the keypad while avoiding the host's rounded
-    # window corners. Derive host coordinates from actual displayed content.
-    sample_x, first_y, second_y = 24, 374, 468
-    first = guest.crop((sample_x, first_y, 336, first_y + 1)).tobytes()
-    second = guest.crop((sample_x, second_y, 336, second_y + 1)).tobytes()
-    if len(set(first)) < 3 or len(set(second)) < 3:
-        raise RuntimeError('Cannot locate the calculator keypad on the host')
+    reference = work / 'host-calculator-reference.png'
+    reference.unlink(missing_ok=True)
 
     def host_frame(name):
         frame = out / (name + '.png')
@@ -166,18 +159,30 @@ def desktop_calculation(tree, screenshot):
             return image.convert('RGB')
 
     def locate():
+        if not reference.is_file():
+            return None
+        with Image.open(reference) as image:
+            guest = image.convert('RGB')
+        # Match two strips inside the keypad away from rounded window corners.
+        # Derive the pointer origin from actual pixels on the host output.
+        sample_x, first_y, second_y = 20, 270, 345
+        sample_end = guest.width - sample_x
+        first = guest.crop((sample_x, first_y, sample_end, first_y + 1)).tobytes()
+        second = guest.crop((sample_x, second_y, sample_end, second_y + 1)).tobytes()
+        if len(set(first)) < 3 or len(set(second)) < 3:
+            raise RuntimeError('Cannot locate the calculator keypad on the host')
         screen = host_frame('host-calculator-opened')
         width, height = screen.size
-        for row in range(first_y - bounds[1], height - second_y + first_y):
+        for row in range(first_y, height - second_y + first_y):
             line = screen.crop((0, row, width, row + 1)).tobytes()
             pos = line.find(first)
             if pos < 0 or pos % 3:
                 continue
             left = pos // 3 - sample_x
             sample_row = row + second_y - first_y
-            other = screen.crop((left + sample_x, sample_row, left + 336, sample_row + 1))
+            other = screen.crop((left + sample_x, sample_row, left + sample_end, sample_row + 1))
             if other.tobytes() == second:
-                return left, row - first_y, width, height
+                return left, row - first_y, guest.width, guest.height, width, height
         return None
 
     with ((out / 'host-compositor.log').open('w') as compositor_log,
@@ -189,7 +194,7 @@ def desktop_calculation(tree, screenshot):
             wait_for(lambda: (runtime / 'wayland-0').exists(), 20, 'host Wayland socket')
             window = subprocess.Popen([sys.executable, ROOT / 'validation/openharmony/app-window.py',
                                        '--qmp', work / 'window.sock', '--hdc', hdc, '--target', target,
-                                       '--bounds', *map(str, bounds)],
+                                       '--bounds', *map(str, bounds), '--reference', reference],
                                       env=env, stdout=window_log, stderr=subprocess.STDOUT)
 
             def live_location():
@@ -197,7 +202,8 @@ def desktop_calculation(tree, screenshot):
                     raise RuntimeError('OpenHarmony Wayland test window exited')
                 return locate()
 
-            offset_x, offset_y, width, height = wait_for(live_location, 30, 'calculator pixels on host')
+            left, top, display_w, display_h, width, height = wait_for(
+                live_location, 30, 'calculator pixels on host')
             def guest_fields():
                 current = app_nodes(layout('host-pointer-result'))
                 return {n.get('id'): n.get('text') for n in current if n.get('type') == 'Text'}
@@ -206,8 +212,10 @@ def desktop_calculation(tree, screenshot):
                      ('3', '2+3', '5'), ('=', '5', ''))
             for button, expression, result in cases:
                 gx, gy = node_center(calculator_button(tree, (button,)))
+                x = left + int((gx - bounds[0]) * display_w / (bounds[2] - bounds[0]))
+                y = top + int((gy - bounds[1]) * display_h / (bounds[3] - bounds[1]))
                 subprocess.run([str(a.desktop_pointer.resolve()), str(width), str(height),
-                                str(gx + offset_x), str(gy + offset_y)],
+                                str(x), str(y)],
                                env=env, timeout=10, check=True)
 
                 def input_observed():
@@ -465,7 +473,7 @@ try:
     tree = calculator('reopened')
     report['relaunch_verified'] = True
     if a.desktop_pointer:
-        desktop_calculation(tree, out / 'reopened-result.png')
+        desktop_calculation(tree)
 except Exception as error:
     report['error'] = str(error)
     if qmp:

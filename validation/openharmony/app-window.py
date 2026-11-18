@@ -11,6 +11,7 @@ import tempfile
 
 import gi
 gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
 
@@ -32,18 +33,19 @@ def main():
     parser.add_argument('--hdc', required=True)
     parser.add_argument('--target', required=True)
     parser.add_argument('--bounds', required=True, nargs=4, type=int)
+    parser.add_argument('--reference', type=Path, required=True)
     args = parser.parse_args()
     x, y, right, bottom = args.bounds
     if not (0 <= x < right <= 360 and 0 <= y < bottom <= 720):
         parser.error('invalid guest bounds')
     width, height = right - x, bottom - y
+    display_width, display_height = width * 4 // 5, height * 4 // 5
     window = Gtk.Window(title='OpenHarmony Calculator')
-    window.set_wmclass('olympium-oh-calculator', 'olympium-oh-calculator')
     window.set_decorated(False)
     window.set_resizable(False)
     surface = Gtk.EventBox()
     picture = Gtk.Image()
-    surface.set_size_request(width, height)
+    surface.set_size_request(display_width, display_height)
     surface.add(picture)
     window.add(surface)
     error = []
@@ -67,7 +69,8 @@ def main():
                 pixels = GdkPixbuf.Pixbuf.new_from_file(str(frame))
                 if pixels.get_width() != 360 or pixels.get_height() != 720:
                     raise RuntimeError('Guest display size changed')
-                return pixels.new_subpixbuf(x, y, width, height)
+                cropped = pixels.new_subpixbuf(x, y, width, height)
+                return cropped.scale_simple(display_width, display_height, GdkPixbuf.InterpType.NEAREST)
 
             def send_click(gx, gy):
                 result = subprocess.run(
@@ -82,8 +85,8 @@ def main():
 
             def receive_click(_widget, event):
                 nonlocal pending_click
-                if (event.button == Gdk.BUTTON_PRIMARY and 0 <= event.x < width and
-                        0 <= event.y < height and
+                if (event.button == Gdk.BUTTON_PRIMARY and 0 <= event.x < display_width and
+                        0 <= event.y < display_height and
                         (pending_click is None or pending_click.done())):
                     if pending_click is not None:
                         try:
@@ -92,7 +95,10 @@ def main():
                             error.append(failure)
                             closed()
                             return True
-                    pending_click = executor.submit(send_click, x + int(event.x), y + int(event.y))
+                    gx = x + int(event.x * width / display_width)
+                    gy = y + int(event.y * height / display_height)
+                    print(f'Wayland pointer → guest ({gx}, {gy})', flush=True)
+                    pending_click = executor.submit(send_click, gx, gy)
                 return True
 
             def refresh():
@@ -106,6 +112,8 @@ def main():
                         pending_frame = None
                         current = pixbuf.get_pixels()
                         if current != last_pixels:
+                            if last_pixels is None:
+                                pixbuf.savev(str(args.reference), 'png', [], [])
                             picture.set_from_pixbuf(pixbuf)
                             last_pixels = current
                     if pending_frame is None and window.get_mapped():
@@ -116,8 +124,8 @@ def main():
                     closed()
                     return False
 
-            surface.add_events(Gdk.EventMask.BUTTON_RELEASE_MASK)
-            surface.connect('button-release-event', receive_click)
+            surface.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK)
+            surface.connect('button-press-event', receive_click)
             window.connect('destroy', closed)
             window.show_all()
             timer = GLib.timeout_add(160, refresh)
