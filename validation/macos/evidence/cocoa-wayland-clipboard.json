@@ -1,0 +1,27 @@
+{
+  "runtime": "Full source-built x86_64 Darling in Ubuntu 24.04 QEMU TCG, native Wayland, software rendering",
+  "appkit_sha256": "0dbd3f4103e12fad24f22ec5700aa7c58b014d09fcab1bedce7d2a09fa56e7a9",
+  "mac_fixture_source_sha256": "a60dec60d7c9fb34b83ce0407c9b1e5f1cd81cc09b48d7ff968a91b6be76d102",
+  "mac_fixture_binary_sha256": "c1abd6a961b9c3a70d3f4625fc6e66b5bb2df264656061027c75407cfcf8b516",
+  "linux_source_sha256": "d9ee0e76fc02fa23b7683c4c038bfb812b20fbe0f4dde4f0322478e2bc36bb80",
+  "mac_installed_with_landlock": true,
+  "cocoa_to_gtk": {
+    "pointer_action": "Copy from Cocoa",
+    "receiver": "desktop/desk-paste.c",
+    "received": "Olympium Cocoa copy"
+  },
+  "gtk_to_cocoa": {
+    "pointer_actions": [
+      "Copy from Linux",
+      "Read host clipboard"
+    ],
+    "received": "Linux Wayland copy",
+    "source_still_running": true
+  },
+  "screenshot": "linux-to-cocoa-clipboard.png",
+  "limits": [
+    "Plain text only",
+    "Linux-to-Cocoa after the copy source closed failed in this isolated session without the Xwayland clipboard helper",
+    "Third-party app clipboard and image/file MIME are unverified"
+  ]
+}

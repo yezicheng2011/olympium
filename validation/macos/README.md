@@ -102,3 +102,14 @@ runtime closed an untouched document directly. After editing, **Cancel** left
 the stroke visible and the file hash unchanged. Choosing **Yes** on the next
 close wrote six new ink pixels into the embedded PNG and closed the window.
 See `evidence/pikopixel-close-guard.json`.
+
+The independent `clipboard-gui.c` fixture verifies plain text using Cocoa's
+`NSPasteboardTypeString` and native Wayland. Compile it with the same target
+and link options as `hello-gui.c`. Compile `gtk-clipboard-button.c` on Linux
+with `$(pkg-config --cflags --libs gtk+-3.0)`. Install the Mach-O app under
+Landlock and click **Copy from Cocoa**, then start the Linux `desk-paste`
+client. It reported `Olympium Cocoa copy`. Next click **Copy from Linux**
+in the GTK fixture and **Read host clipboard** in Cocoa with both windows
+still running. Cocoa read `Linux Wayland copy`. Text after the GTK owner
+closed did not pass in the isolated session without the Xwayland clipboard
+helper. See `evidence/cocoa-wayland-clipboard.json`.
