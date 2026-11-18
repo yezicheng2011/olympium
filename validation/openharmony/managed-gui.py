@@ -163,26 +163,26 @@ def desktop_calculation(tree):
             return None
         with Image.open(reference) as image:
             guest = image.convert('RGB')
-        # Match two strips inside the keypad away from rounded window corners.
-        # Derive the pointer origin from actual pixels on the host output.
-        sample_x, first_y, second_y = 20, 270, 345
+        # Match the entire interior keypad to disambiguate repeated solid
+        # rows. Use its rendered position for host pointer coordinates.
+        sample_x, anchor_y, top_y, bottom_y = 20, 270, 225, 485
         sample_end = guest.width - sample_x
-        first = guest.crop((sample_x, first_y, sample_end, first_y + 1)).tobytes()
-        second = guest.crop((sample_x, second_y, sample_end, second_y + 1)).tobytes()
-        if len(set(first)) < 3 or len(set(second)) < 3:
+        anchor = guest.crop((sample_x, anchor_y, sample_end, anchor_y + 1)).tobytes()
+        keypad = guest.crop((sample_x, top_y, sample_end, bottom_y)).tobytes()
+        if len(set(anchor)) < 3 or len(set(keypad)) < 3:
             raise RuntimeError('Cannot locate the calculator keypad on the host')
         screen = host_frame('host-calculator-opened')
         width, height = screen.size
-        for row in range(first_y, height - second_y + first_y):
+        for row in range(anchor_y, height - guest.height + anchor_y + 1):
             line = screen.crop((0, row, width, row + 1)).tobytes()
-            pos = line.find(first)
+            pos = line.find(anchor)
             if pos < 0 or pos % 3:
                 continue
             left = pos // 3 - sample_x
-            sample_row = row + second_y - first_y
-            other = screen.crop((left + sample_x, sample_row, left + sample_end, sample_row + 1))
-            if other.tobytes() == second:
-                return left, row - first_y, guest.width, guest.height, width, height
+            top = row - anchor_y
+            other = screen.crop((left + sample_x, top + top_y, left + sample_end, top + bottom_y))
+            if other.tobytes() == keypad:
+                return left, top, guest.width, guest.height, width, height
         return None
 
     with ((out / 'host-compositor.log').open('w') as compositor_log,
