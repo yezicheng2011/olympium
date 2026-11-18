@@ -1,0 +1,69 @@
+{
+  "status": "passed",
+  "kvm_access": true,
+  "automatic_microg_bootstrap_verified": true,
+  "cold_boot_recovery_verified": true,
+  "gms_api_compatibility_verified": false,
+  "desktop_window_verified": false,
+  "rounds": [
+    {
+      "process": {
+        "pid": 3500,
+        "start_ticks": "8218"
+      },
+      "managed_install_seconds": 158.018,
+      "round_seconds": 172.208,
+      "framework_sha256": "55b6a1b333a3fe90724c4eb09b26896ba46328c40c44f496ba17304afd98b1ad",
+      "basic_services_verified": true,
+      "calculator_input_verified": true
+    },
+    {
+      "process": {
+        "pid": 4040,
+        "start_ticks": "22919"
+      },
+      "managed_install_seconds": 77.499,
+      "round_seconds": 89.178,
+      "framework_sha256": "55b6a1b333a3fe90724c4eb09b26896ba46328c40c44f496ba17304afd98b1ad",
+      "basic_services_verified": true,
+      "calculator_input_verified": true
+    }
+  ],
+  "kvm_checks": [
+    {
+      "round": 1,
+      "access": true,
+      "process_gid": 993,
+      "groups": [
+        4,
+        100,
+        118,
+        993,
+        999,
+        1001
+      ],
+      "mode": "0o660",
+      "owner": 0,
+      "group": 993
+    },
+    {
+      "round": 2,
+      "access": true,
+      "process_gid": 993,
+      "groups": [
+        4,
+        100,
+        118,
+        993,
+        999,
+        1001
+      ],
+      "mode": "0o660",
+      "owner": 0,
+      "group": 993
+    }
+  ],
+  "source_commit": "b0af20e338ee5fc912d96749efc0d16321a93bce",
+  "ci_run": "https://github.com/yezicheng2011/bbb/actions/runs/44208210089",
+  "timing_scope": "Managed installation includes provisioning/checks and APK installation; first round includes runtime downloads. These are not desktop or app first-frame timings."
+}

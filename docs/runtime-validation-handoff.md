@@ -8,7 +8,7 @@
 - **Android 17 正式 APK 链路已实跑通过**：在官方 AOSP API 37.0 rev6 x86_64 上，经正式安装器安装并核验 Fossify Calculator 字节；桌面搜索打开独立 Wayland 窗口，普通桌面指针计算 **2+3=5**；关闭后从 Launchpad 原始 APK 图标重开，再次计算通过。截图、两份新 UI 树及结果在 `validation/android/evidence/api37-*`。
 - **修复首次窗口尺寸和 SVG 图标依赖**：竖屏客户端初始尺寸适配面板与 Dock 之间的空间，底部按键可点；补装 `librsvg2-common` 后，自适应 APK 图标正确显示。构建、渲染和启动回归通过，四秒空闲 0 帧；受控延迟下原生映射 0.222 秒、兼容路径 1.887 秒。
 - **Android 验收配置有明确限制**：云机没有 KVM。本轮用单线程 TCG 和诊断 `-icount shift=0,align=off,sleep=off` 避免正常时钟下的 system_server/WebView 启动崩溃；未修改发布者系统镜像。功能通过不代表正常时钟/KVM 冷启动可靠或近原生性能。正式自动启动在下载前检查 KVM，TCG 仅显式开发启用。
-- **microG 限定签名兼容原型和基础 RPC 已验证**：Services 与 Companion 已安装且已核对实际 base APK 的 SHA256。新增独立普通 UID 的 Android 验证应用：Common 服务 broker、getService 请求、成功回调和返回服务 Binder 均通过；原始系统的证书查询失败保留在 `api37-microg-probe.json`；限定兼容层下同一普通 UID 客户端的旧/新 GMS、Companion 证书查询及 Common RPC 均通过，见 `api37-microg-compatible-probe.json`。原签名 Companion 更新成功，异签名 APK 被拒绝且已安装 APK 哈希不变，见 `api37-microg-update-signatures.json`。自动启动接入仍在验证；完整 GMS API、FCM、账号、地图和认证均未验收。
+- **microG 限定签名兼容原型和基础 RPC 已验证**：Services 与 Companion 已安装且已核对实际 base APK 的 SHA256。新增独立普通 UID 的 Android 验证应用：Common 服务 broker、getService 请求、成功回调和返回服务 Binder 均通过；原始系统的证书查询失败保留在 `api37-microg-probe.json`；限定兼容层下同一普通 UID 客户端的旧/新 GMS、Companion 证书查询及 Common RPC 均通过，见 `api37-microg-compatible-probe.json`。原签名 Companion 更新成功，异签名 APK 被拒绝且已安装 APK 哈希不变，见 `api37-microg-update-signatures.json`。自动启动接入与两轮正常时钟 KVM 冷启动已通过，见 `api37-kvm-managed-roundtrip.json` 和 CI 44208210089；完整 GMS API、FCM、账号、地图和认证均未验收。
 - **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 仍仅有此前的两个 `nobody` 回退隔离断言失败，不能称整套通过。
 - **OpenHarmony 尚未解锁**：恢复 QEMU 从 S3 挂起后屏幕电源状态恢复。SystemUI 返回解锁成功约需 1.5 秒，但官方 AbilityManager 仅等 500 毫秒，可能导致超时；仅为源码和日志支持的诊断，尚未验证修复。保留安全锁屏判断，未绕过认证。仅在一次性 `-snapshot` VM 中尝试延长等待常量进行诊断，但没有取得成功启动结果；未分发该二进制实验。VM 已停止并丢弃临时快照，原始镜像保持不变。
 
@@ -56,7 +56,7 @@ Ubuntu 24.04 开发容器中：
 - `validation/android/open-window.py` 已在 API 29 重新启动验证显示就绪和任务归位；再次经桌面指针计算通过。通过桌面 File → Close Window 关闭后 scrcpy 正常退出，脚本记录 `closed`。位置就绪状态本身不自动等于输入通过。
 - 续接后在停止其他实验 compositor 的隔离条件下重跑 `test`、`test-render`、`test-startup` 通过：四秒空闲 1 帧，渲染/生命周期通过；受控延迟下原生窗口 0.286 秒、兼容路径 1.951 秒。额外验证正式二进制不暴露测试虚拟指针协议。
 
-下一步：验证 microG 自动启动接入和重启恢复，验证正常时钟/KVM 重复冷启动、ARM 应用、剪贴板与文件共享。Android 17 的正式安装、图标、桌面鼠标和关闭重开结果见本页最新状态。API 29 的单个 x86 APK 通过不能代表所有 APK。Waydroid 的原生 Binder 方案仍未安装/运行。
+下一步：验证应用滚动更新与回退、ARM 应用、剪贴板与文件共享。正常时钟 KVM 的自动接入和第二次冷启动恢复已通过。Android 17 的正式安装、图标、桌面鼠标和关闭重开结果见本页最新状态。API 29 的单个 x86 APK 通过不能代表所有 APK。Waydroid 的原生 Binder 方案仍未安装/运行。
 
 ### OpenHarmony
 
