@@ -6,12 +6,13 @@
 
 - **Cocoa GUI 冒烟通过**：正式 `.app` 导入、桌面搜索启动、真实 Mach-O/Cocoa 窗口、普通桌面指针触发 NSButton 回调，窗口标题变为 `Olympium Mac GUI - verified`。随后经桌面指针关闭、确认窗口不可见，用当前安装器在 Landlock 下重新导入并从搜索打开，第二个窗口再次响应按钮；生命周期记录在 `cocoa-lifecycle.log`。使用原始官方 Darling 二进制、Mesa softpipe 和关闭 MIT-SHM 的 Xwayland；没有应用二进制补丁或关闭 Landlock。证据在 `validation/macos/evidence/`。截帧中标签文字未更新，文字重绘不计通过；第三方 GUI 应用和近原生性能未验证。
 - **第三方 macOS 应用仍未通过**：官方 Hex Fiend 2.3.0 Intel 包可在 Landlock 下导入，但 WebKit 的 `_OBJC_EHTYPE_id` 和进一步诊断中的 `DARegisterDiskAppearedCallback` 缺失阻止启动。程序未打补丁，诊断平坦命名空间选项未写入产品默认值。新增运行时退出监督，错误退出改为桌面提示；已验证正常退出、错误码和信号退出，实际失败提示已有截图。当前安装器下独立 Cocoa 窗口和真实桌面指针回调再次通过，不能扩写为 Hex Fiend 可运行。见 `validation/macos/evidence/hexfiend-2.3.0-result.json`。
+- **PikoPixel 部分可用**。原版 DMG 正式导入成功。新版 Darling AppKit 加上 ICC 配置读取与自定义视图修复后，Wayland 后端显示新建图像窗口，桌面指针确认后创建 64×64 文档。验证使用隔离的源码框架路径。画布仍灰色，进程随后报错退出。完整源码运行时、绘制及稳定重开尚待验收。
 - **Android 17 正式 APK 链路已实跑通过**：在官方 AOSP API 37.0 rev6 x86_64 上，经正式安装器安装并核验 Fossify Calculator 字节；桌面搜索打开独立 Wayland 窗口，普通桌面指针计算 **2+3=5**；关闭后从 Launchpad 原始 APK 图标重开，再次计算通过。截图、两份新 UI 树及结果在 `validation/android/evidence/api37-*`。
 - **修复首次窗口尺寸和 SVG 图标依赖**：竖屏客户端初始尺寸适配面板与 Dock 之间的空间，底部按键可点；补装 `librsvg2-common` 后，自适应 APK 图标正确显示。构建、渲染和启动回归通过，四秒空闲 0 帧；受控延迟下原生映射 0.222 秒、兼容路径 1.887 秒。
 - **Android 已补充正常时钟 KVM 验收**：CI 44208210089 在两个独立模拟器进程中通过自动配置、microG 普通 UID 验证和真实计算器输入；没有启用 TCG 或 icount。首次受控安装用时 158.018 秒，第二轮冷启动安装链路 77.499 秒，均不是桌面首帧或整机开机成绩。原始 APK 图标、桌面指针和独立窗口仍对应前述诊断 TCG 记录，KVM 作业没有验收宿主桌面窗口。
 - **microG 限定签名兼容原型和基础 RPC 已验证**：Services 与 Companion 已安装且已核对实际 base APK 的 SHA256。新增独立普通 UID 的 Android 验证应用：Common 服务 broker、getService 请求、成功回调和返回服务 Binder 均通过；原始系统的证书查询失败保留在 `api37-microg-probe.json`；限定兼容层下同一普通 UID 客户端的旧/新 GMS、Companion 证书查询及 Common RPC 均通过，见 `api37-microg-compatible-probe.json`。原签名 Companion 更新成功，异签名 APK 被拒绝且已安装 APK 哈希不变，见 `api37-microg-update-signatures.json`。自动启动接入与两轮正常时钟 KVM 冷启动已通过，见 `api37-kvm-managed-roundtrip.json` 和 CI 44208210089；完整 GMS API、FCM、账号、地图和认证均未验收。
 - **启动器路径回归已修复**：用 GIO 实际启动生成的桌面入口，验证空格、引号、`%`、反斜杠、美元符号和反引号路径；DEB/RPM 整套回归通过。完整 `test-mac` 仍仅有此前的两个 `nobody` 回退隔离断言失败，不能称整套通过。
-- **OpenHarmony SDK 计算器实测通过**。KVM 以正常时钟启动 OpenHarmony 6.1.0.31，使用正常锁屏 API 和来宾手势解锁，从系统图标打开计算器。点击得到 `2+3=5`，强制关闭后通过 Bundle Manager 重装原厂签名 HAP，重开并再次点击验证通过。该 HAP 原已随镜像提供。另有实验性的宿主 Wayland 显示和输入测试，桌面安装器与通用应用独立窗口仍待集成。见 `validation/openharmony/evidence/` 和 CI 44222505725。
+- **OpenHarmony SDK 计算器实测通过**。KVM 以正常时钟启动 OpenHarmony 6.1.0.31，使用正常锁屏 API 和来宾手势解锁，从系统图标打开计算器。点击得到 `2+3=5`，强制关闭后通过 Bundle Manager 重装原厂签名 HAP，重开并再次点击验证通过。该 HAP 原已随镜像提供。实验性的宿主 Wayland 窗口也已通过实际指针输入和结果验收。桌面安装器和通用 HAP 窗口仍待集成。见 `validation/openharmony/evidence/`，CI 44222505725 和 44230816932。
 - **Android 更新和数据回退已有实际验证，后续更新开发暂停**：CI 44212303251 验证同签名 v1→v2 保留 UID 和私有数据、异签名 v3 被系统拒绝、原生 `pm rollback-app` 恢复 v1 APK 与更新前私有数据。正式桌面命令保留同一图标记录，新增 8 项事务检查及前端安装记录测试；不是所有软件的统一滚动更新。按用户要求，当前优先完善应用运行。
 
 下方包含此前检查点，冲突处以本节为准。尚未重建 ISO、验证所有平台同时运行或任意商业应用。

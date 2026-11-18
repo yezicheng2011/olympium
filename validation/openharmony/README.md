@@ -19,9 +19,14 @@ of five, and successful force-stop/relaunch with repeated input. A successful
 ability start alone is insufficient. Failures retain logs, trees and a display
 capture. APK/SDK archives and guest userdata are not uploaded.
 
-This test does not certify host desktop window integration, arbitrary HAPs,
-commercial HarmonyOS compatibility, or removal of guest system services.
-See the workflow result and `result.json` for actual verification status.
+With `--desktop-pointer` and the test compositor built, acceptance also opens
+the calculator in a GTK Wayland window. The window displays the app region
+from QEMU and translates host pointer events to guest coordinates. The test
+compares host pixels and reads guest expression and result after each click.
+The [passing desktop run](https://github.com/yezicheng2011/bbb/actions/runs/44230816932)
+recorded the host clicking `2+3=5` in that window. The window bridge is specific
+to this controlled fixture. Desktop HAP import, arbitrary apps, and commercial
+HarmonyOS compatibility still require separate implementation and testing.
 
 The [KVM run with native HAP reinstallation](https://github.com/yezicheng2011/bbb/actions/runs/44222505725)
 reached the unprotected launcher, rendered the calculator, and verified

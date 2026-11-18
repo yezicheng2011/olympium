@@ -53,3 +53,13 @@ symbol, `DARegisterDiskAppearedCallback`; that diagnostic flag is not shipped.
 See `evidence/hexfiend-2.3.0-result.json`. The associated screenshot is the
 native desktop failure dialog, **not** a functioning Hex Fiend GUI. These
 framework gaps remain unresolved.
+
+The original x86_64 slice from the publisher PikoPixel 1.0 BETA10 DMG now
+reaches the New Image dialog after applying the two AppKit patches under
+`image/darling-patches/`. A host pointer click created a 64×64 document and
+changed the title to `Untitled 1 (64x64) (8x)`. The experiment used an
+isolated source-built framework path over the official Darling runtime.
+The canvas remained gray and the process later exited with an error.
+Drawing and stable relaunch remain open. See
+`evidence/pikopixel-beta10-source-runtime-result.json` for the source,
+binary, and patch hashes and the two screenshots.
