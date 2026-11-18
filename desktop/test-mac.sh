@@ -418,9 +418,9 @@ if make dev-compositor >/dev/null 2>&1 && [ -x ./dev-compositor ]; then
 	LOG=$ROOT/compositor.log
 	printf '#!/bin/sh\nenv | grep -E "^(DISPLAY|WAYLAND_DISPLAY)=" > "%s/session.env"\n' "$ROOT" > "$ROOT/session.sh"
 	chmod 755 "$ROOT/session.sh"
-	# What Launchpad starts inherits the desktop's environment, so the desktop
-	# is started without this test's "no window" and "no runtime" settings.
-	env -u OLYMPIUM_NO_DIALOG -u OLYMPIUM_MAC_RUNTIME \
+	# What Launchpad starts inherits the desktop's environment. Start with
+	# dialogs enabled and a runtime path that does not exist yet.
+	env -u OLYMPIUM_NO_DIALOG OLYMPIUM_MAC_RUNTIME="$ROOT/launchpad-runtime" \
 		WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 DEV_DESK_HEADLESS=1 \
 		./dev-compositor -s "$ROOT/session.sh" >"$LOG" 2>&1 &
 	echo $! > "$ROOT/comp.pid"
@@ -543,27 +543,21 @@ PYEOF
 		fi
 		pkill -f "dev-install launch" 2>/dev/null
 		export OLYMPIUM_NO_DIALOG=1
-		# From Launchpad with the stand-in runtime. The wrapper Launchpad
-		# runs does not carry this shell's environment, so the stand-in is
-		# put where the desktop looks for the real helper.
-		if [ ! -e /usr/libexec/dev-desktop/olympium-mac-run ]; then
-			mkdir -p /usr/libexec/dev-desktop
-			cp "$ROOT/runtime" /usr/libexec/dev-desktop/olympium-mac-run
+		# Install the stand-in at the path the running compositor inherited.
+		if cp "$ROOT/runtime" "$ROOT/launchpad-runtime"; then
 			rm -f "$ROOT/runtime.args"
 			ctl "launchpad start Desk Mac"
 			for _ in $(seq 1 60); do
 				[ -s "$ROOT/runtime.args" ] && break
 				sleep 0.1
 			done
-			rm -f /usr/libexec/dev-desktop/olympium-mac-run
-			rmdir /usr/libexec/dev-desktop 2>/dev/null
 			if [ "$(sed -n 2p "$ROOT/runtime.args" 2>/dev/null)" = "$APPS/Desk Mac.app/Contents/MacOS/Desk Mac" ]; then
 				ok "started from Launchpad with a runtime, the runtime is handed the program"
 			else
 				bad "Launchpad did not reach the runtime"
 			fi
 		else
-			echo "a Mac runtime helper is installed on this machine; the stand-in was not put in its place"
+			bad "could not install the test Launchpad runtime"
 		fi
 	else
 		echo "the compositor did not start; the windows were not tested"
