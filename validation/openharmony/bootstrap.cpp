@@ -30,8 +30,9 @@ public:
 };
 int main(int argc, char **argv) {
     bool app_profile = argc == 2 && std::strcmp(argv[1], "--app-runtime") == 0;
+    bool status_only = argc == 2 && std::strcmp(argv[1], "--status") == 0;
     bool configure_profile = app_profile || (argc == 2 && std::strcmp(argv[1], "--full-runtime") == 0);
-    if (argc != 1 && !configure_profile) return 1;
+    if (argc != 1 && !configure_profile && !status_only) return 1;
     struct utsname machine;
     char command_line[16384] = {0};
     FILE *kernel = std::fopen("/proc/cmdline", "r");
@@ -46,6 +47,7 @@ int main(int argc, char **argv) {
     bool secure = manager->GetSecure();
     std::printf("credential_configured=%d screen_locked=%d\n", secure, locked);
     std::fflush(stdout);
+    if (status_only) return 0;
     if (secure) { std::puts("Authentication required; no unlock attempted"); return 3; }
     if (!locked && !configure_profile) return 0;
     if (geteuid() != 0) return 7;

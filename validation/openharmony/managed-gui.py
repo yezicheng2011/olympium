@@ -265,6 +265,14 @@ try:
             if helper.poll() is None:
                 helper.terminate()
                 helper.wait(timeout=10)
+    def unlocked():
+        status = shell('/data/local/tmp/bootstrap', '--status')
+        if 'credential_configured=1' in status:
+            raise RuntimeError('SDK user unexpectedly requires authentication')
+        return 'credential_configured=0 screen_locked=0' in status
+
+    wait_for(unlocked, 60, 'normal gesture unlock completion')
+    report['unprotected_sdk_unlock_verified'] = True
     calculator('first')
     shell('aa', 'force-stop', BUNDLE)
     wait_for(lambda: not app_nodes(layout('stopped')), 30, 'app window removed')
