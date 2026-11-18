@@ -137,10 +137,10 @@ def calculator_button(tree, ids):
     raise RuntimeError('Calculator button absent: ' + repr(ids))
 
 
-def desktop_calculation(tree):
+def desktop_calculation(tree, label):
     from PIL import Image
 
-    runtime = work / 'host-wayland'
+    runtime = work / f'{label}-wayland'
     runtime.mkdir(mode=0o700, exist_ok=True)
     env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY='wayland-0',
                WLR_BACKENDS='headless', WLR_RENDERER='pixman', DEV_DESK_HEADLESS='1',
@@ -149,7 +149,7 @@ def desktop_calculation(tree):
     bounds = list(map(int, re.findall(r'\d+', app['bounds'])))
     if bounds != [0, 36, 360, 684]:
         raise RuntimeError('Unexpected calculator content bounds')
-    reference = work / 'host-calculator-reference.png'
+    reference = work / f'{label}-reference.png'
     reference.unlink(missing_ok=True)
 
     def host_frame(name):
@@ -171,7 +171,7 @@ def desktop_calculation(tree):
         keypad = guest.crop((sample_x, top_y, sample_end, bottom_y)).tobytes()
         if len(set(anchor)) < 3 or len(set(keypad)) < 3:
             raise RuntimeError('Cannot locate the calculator keypad on the host')
-        screen = host_frame('host-calculator-opened')
+        screen = host_frame(f'{label}-calculator-opened')
         width, height = screen.size
         for row in range(anchor_y, height - guest.height + anchor_y + 1):
             line = screen.crop((0, row, width, row + 1)).tobytes()
@@ -185,8 +185,8 @@ def desktop_calculation(tree):
                 return left, top, guest.width, guest.height, width, height
         return None
 
-    with ((out / 'host-compositor.log').open('w') as compositor_log,
-          (out / 'host-window.log').open('w') as window_log):
+    with ((out / f'{label}-compositor.log').open('w') as compositor_log,
+          (out / f'{label}-window.log').open('w') as window_log):
         compositor = subprocess.Popen([ROOT / 'desktop/dev-compositor-input-test', '-n'],
                                       env=env, stdout=compositor_log, stderr=subprocess.STDOUT)
         window = None
@@ -204,6 +204,11 @@ def desktop_calculation(tree):
 
             left, top, display_w, display_h, width, height = wait_for(
                 live_location, 30, 'calculator pixels on host')
+            report['desktop_window_verified'] = True
+
+            def pointer_click(x, y):
+                subprocess.run([str(a.desktop_pointer.resolve()), str(width), str(height),
+                                str(x), str(y)], env=env, timeout=10, check=True)
             def guest_fields():
                 current = app_nodes(layout('host-pointer-result'))
                 return {n.get('id'): n.get('text') for n in current if n.get('type') == 'Text'}
@@ -214,9 +219,7 @@ def desktop_calculation(tree):
                 gx, gy = node_center(calculator_button(tree, (button,)))
                 x = left + int((gx - bounds[0]) * display_w / (bounds[2] - bounds[0]))
                 y = top + int((gy - bounds[1]) * display_h / (bounds[3] - bounds[1]))
-                subprocess.run([str(a.desktop_pointer.resolve()), str(width), str(height),
-                                str(x), str(y)],
-                               env=env, timeout=10, check=True)
+                pointer_click(x, y)
 
                 def input_observed():
                     fields = guest_fields()
@@ -225,11 +228,19 @@ def desktop_calculation(tree):
                 wait_for(input_observed, 20, f'guest response to host button {button}')
                 if button == '3':
                     time.sleep(0.5)
-                    host_frame('host-calculator-preview')
+                    host_frame(f'{label}-calculator-preview')
             time.sleep(0.5)
-            host_frame('host-calculator-result')
-            report['desktop_window_verified'] = True
+            host_frame(f'{label}-calculator-result')
             report['desktop_pointer_verified'] = True
+            # Olympium places the close button 16px from the left edge and
+            # halfway up its 34px server decoration. Exercise its real close.
+            pointer_click(left + 16, top - 17)
+            if window.wait(timeout=20) != 0:
+                raise RuntimeError('The host app window did not close cleanly')
+            shell('aa', 'force-stop', BUNDLE)
+            wait_for(lambda: not app_nodes(layout(f'{label}-desktop-closed')), 30,
+                     'guest application closed after desktop close')
+            report['desktop_close_verified'] = True
         finally:
             for process in (window, compositor):
                 if process is not None and process.poll() is None:
@@ -473,7 +484,10 @@ try:
     tree = calculator('reopened')
     report['relaunch_verified'] = True
     if a.desktop_pointer:
-        desktop_calculation(tree)
+        desktop_calculation(tree, 'host')
+        tree = calculator('desktop-reopened')
+        desktop_calculation(tree, 'host-reopened')
+        report['desktop_relaunch_verified'] = True
 except Exception as error:
     report['error'] = str(error)
     if qmp:

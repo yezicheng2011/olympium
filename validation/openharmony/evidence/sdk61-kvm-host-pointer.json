@@ -1,0 +1,53 @@
+{
+  "kvm_verified": true,
+  "guest_app_gui_verified": true,
+  "input_verified": true,
+  "relaunch_verified": true,
+  "desktop_window_verified": true,
+  "kvm": {
+    "enabled": true,
+    "present": true
+  },
+  "lock_manager_reports_unlocked": true,
+  "launch_method": "ordinary guest launcher icon",
+  "optional_collaboration_permission": "denied through guest UI",
+  "first_preview": {
+    "result": "5",
+    "expression": "2+3"
+  },
+  "first_calculation": {
+    "expression": "5",
+    "preview_cleared": true,
+    "input_button_ids": [
+      "C",
+      "2",
+      "+",
+      "3",
+      "="
+    ]
+  },
+  "publisher_hap_sha256": "3f4ef702fd7c9ccde0cb343b4cdb91187bb2f41038ba9ef0b0461976d1fa7588",
+  "native_hap_reinstall_verified": true,
+  "reopened_preview": {
+    "result": "5",
+    "expression": "2+3"
+  },
+  "reopened_calculation": {
+    "expression": "5",
+    "preview_cleared": true,
+    "input_button_ids": [
+      "C",
+      "2",
+      "+",
+      "3",
+      "="
+    ]
+  },
+  "desktop_pointer_verified": true,
+  "elapsed_seconds": 207.908,
+  "ci_run": "https://github.com/yezicheng2011/bbb/actions/runs/44230816932",
+  "source_commit": "df0766d",
+  "guest_release": "OpenHarmony 6.1.0.31",
+  "desktop_transport": "Cropped QMP display frames and HDC input through a GTK Wayland window",
+  "preview_screenshot": "sdk61-kvm-host-pointer-preview.png"
+}

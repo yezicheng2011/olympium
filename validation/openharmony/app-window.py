@@ -40,7 +40,7 @@ def main():
         parser.error('invalid guest bounds')
     width, height = right - x, bottom - y
     display_width, display_height = width * 4 // 5, height * 4 // 5
-    window = Gtk.Window(title='OpenHarmony Calculator')
+    window = Gtk.Window(title='Calculator')
     window.set_decorated(False)
     window.set_resizable(False)
     surface = Gtk.EventBox()
@@ -52,6 +52,7 @@ def main():
     pending_click = None
     pending_frame = None
     last_pixels = None
+    close_requested = False
 
     with (socket.socket(socket.AF_UNIX) as connection,
           tempfile.TemporaryDirectory(prefix='olympium-oh-frame-') as directory,
@@ -70,7 +71,7 @@ def main():
                 if pixels.get_width() != 360 or pixels.get_height() != 720:
                     raise RuntimeError('Guest display size changed')
                 cropped = pixels.new_subpixbuf(x, y, width, height)
-                return cropped.scale_simple(display_width, display_height, GdkPixbuf.InterpType.NEAREST)
+                return cropped.scale_simple(display_width, display_height, GdkPixbuf.InterpType.BILINEAR)
 
             def send_click(gx, gy):
                 result = subprocess.run(
@@ -82,6 +83,11 @@ def main():
 
             def closed(*_):
                 Gtk.main_quit()
+
+            def request_close(*_):
+                nonlocal close_requested
+                close_requested = True
+                return False
 
             def receive_click(_widget, event):
                 nonlocal pending_click
@@ -126,6 +132,7 @@ def main():
 
             surface.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK)
             surface.connect('button-press-event', receive_click)
+            window.connect('delete-event', request_close)
             window.connect('destroy', closed)
             window.show_all()
             timer = GLib.timeout_add(160, refresh)
@@ -138,6 +145,9 @@ def main():
                 pending_click.result()
     if error:
         raise error[0]
+    if close_requested:
+        return
+    raise RuntimeError('Window exited without a close request')
 
 
 if __name__ == '__main__':
