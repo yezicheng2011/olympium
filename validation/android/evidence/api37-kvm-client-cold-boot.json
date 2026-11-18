@@ -1,0 +1,33 @@
+{
+  "status": "passed-probe",
+  "android17_verified": true,
+  "gms_api_compatibility_verified": false,
+  "android_release": "17",
+  "android_api": 37,
+  "probe_apk_sha256": "5b8abd0229e0e5ae48c09ce03accef95e14f7fcafd64050460e07802c2268fbb",
+  "installed_microg_sha256": {
+    "com.google.android.gms": "1094fa60ace2367ac52bd08d1bd4f33fa8144ba930e355121b28234b8ebbf382",
+    "com.android.vending": "3f1bde2f72bca746fbb53b61a32c2a85fcb026f886ee96d6fe9a05de9a6c6d5b"
+  },
+  "probe": {
+    "android_release": "17",
+    "android_api": 37,
+    "caller_package": "org.olympium.validation.gms",
+    "caller_uid": 10160,
+    "gms_version": "0.3.18.252432",
+    "legacy_signature_sha1": "38918a453d07199354f8b19af05ec6562ced5788",
+    "modern_signature_sha1": "38918a453d07199354f8b19af05ec6562ced5788",
+    "signature_compatibility_verified": true,
+    "companion_signature_sha1": "38918a453d07199354f8b19af05ec6562ced5788",
+    "companion_signature_compatibility_verified": true,
+    "broker_binding_accepted": true,
+    "broker_descriptor": "com.google.android.gms.common.internal.IGmsServiceBroker",
+    "service_descriptor": "com.google.android.gms.common.internal.service.ICommonService",
+    "service_status": 0,
+    "gms_service_handshake_verified": true,
+    "error": "",
+    "gms_api_compatibility_verified": false,
+    "probe_completed": true
+  },
+  "checks_passed": true
+}

@@ -1,0 +1,64 @@
+diff --git a/AppKit/NSBitmapImageRep.m b/AppKit/NSBitmapImageRep.m
+index 000c40e..4018959 100644
+--- a/AppKit/NSBitmapImageRep.m
++++ b/AppKit/NSBitmapImageRep.m
+@@ -572,6 +572,48 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
+     return self;
+ }
+
++- copyWithZone: (NSZone *) zone {
++    NSBitmapImageRep *copy = [super copyWithZone: zone];
++    NS_EXTRA_COPY(NSBitmapImageRep, copy, self);
++
++    unsigned char **sourcePlanes = NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes;
++    NS_EXTRA(NSBitmapImageRep, copy)->_bitmapPlanes = NULL;
++    NS_EXTRA(NSBitmapImageRep, copy)->_cgImage =
++            CGImageRetain(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
++    if (sourcePlanes == NULL)
++        return copy;
++
++    int planeCount = [self numberOfPlanes];
++    unsigned char **copyPlanes = NSZoneCalloc(NULL, planeCount, sizeof(*copyPlanes));
++    NS_EXTRA(NSBitmapImageRep, copy)->_bitmapPlanes = copyPlanes;
++    NS_EXTRA(NSBitmapImageRep, copy)->_freeWhenDone = YES;
++
++    @try {
++        if (copyPlanes == NULL && planeCount > 0)
++            [NSException raise: NSMallocException
++                        format: @"NSBitmapImageRep: cannot copy bitmap planes"];
++        [copy _allocateOwnedPlanes];
++
++        // The original may wrap an external subimage without padding after
++        // the final row. Copy samples and keep the same stride.
++        int pixelBits = [self isPlanar] ? _bitsPerSample : _bitsPerPixel;
++        size_t rowLength = ((uint64_t) pixelBits * _pixelsWide + 7) / 8;
++        for (int plane = 0; rowLength > 0 && plane < planeCount; plane++) {
++            if (sourcePlanes[plane] == NULL)
++                continue;
++            for (int row = 0; row < _pixelsHigh; row++) {
++                size_t offset = (size_t) row * _bytesPerRow;
++                memcpy(copyPlanes[plane] + offset, sourcePlanes[plane] + offset, rowLength);
++            }
++        }
++    } @catch (id exception) {
++        [copy release];
++        @throw;
++    }
++
++    return copy;
++}
++
+ - (void) dealloc {
+     if (NS_EXTRA_ALLOCATED(NSBitmapImageRep, self)) {
+         if (NS_EXTRA(NSBitmapImageRep, self)->_freeWhenDone) {
+@@ -1029,6 +1071,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
+ }
+
+ - (CGColorSpaceRef) CGColorSpace {
++    if ([_colorSpaceName isEqualToString: NSDeviceWhiteColorSpace] ||
++        [_colorSpaceName isEqualToString: NSCalibratedWhiteColorSpace])
++        return (CGColorSpaceRef)[(id) CGColorSpaceCreateDeviceGray()
++                                         autorelease];
+     if ([_colorSpaceName isEqualToString: NSDeviceRGBColorSpace])
+         return (CGColorSpaceRef)[(id) CGColorSpaceCreateDeviceRGB()
+                                          autorelease];

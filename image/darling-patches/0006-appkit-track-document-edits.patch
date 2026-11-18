@@ -1,0 +1,26 @@
+diff --git a/AppKit/NSDocument.m b/AppKit/NSDocument.m
+index 886965e..63fff68 100644
+--- a/AppKit/NSDocument.m
++++ b/AppKit/NSDocument.m
+@@ -224,8 +224,7 @@ static int untitled_document_number = 0;
+
+ - (NSUndoManager *) undoManager {
+     if (NS_EXTRA(NSDocument, self)->_undoManager == nil && NS_EXTRA(NSDocument, self)->_hasUndoManager == YES) {
+-        [self setUndoManager: [NSUndoManager new]];
+-        [NS_EXTRA(NSDocument, self)->_undoManager beginUndoGrouping];
++        [self setUndoManager: [[[NSUndoManager alloc] init] autorelease]];
+     }
+
+     return NS_EXTRA(NSDocument, self)->_undoManager;
+@@ -1440,9 +1439,8 @@ static int untitled_document_number = 0;
+ }
+
+ - (void) _undoManagerDidCloseGroup: (NSNotification *) note {
+-    // FIXME: the following would mark just opened and otherwise pristine
+-    // documents as changed
+-    //  [self updateChangeCount:NSChangeDone];
++    // Foundation posts this notification for nonempty groups during normal editing.
++    [self updateChangeCount: NSChangeDone];
+ }
+
+ - (BOOL) windowShouldClose: sender {

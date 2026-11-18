@@ -1,0 +1,607 @@
+#!/usr/bin/env python3
+"""APK metadata, installation and app windows for the desktop's Android runtime."""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import zipfile
+
+from android_icon import apk_icon
+import android_window
+from android_runtime import ensure_runtime, download, PINS
+from android_framework import owned_runtime, process_identity, prepare_framework
+
+PACKAGE = r'[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+'
+RUNTIME = Path('/opt/olympium/android')
+MANAGED_PROCESS = None
+
+
+def tool(name):
+    default = {'adb': RUNTIME / 'platform-tools/adb', 'scrcpy': RUNTIME / 'scrcpy/scrcpy'}
+    value = os.environ.get('OLYMPIUM_ANDROID_' + name.upper())
+    path = value or (str(default[name]) if name in default and default[name].is_file() else shutil.which(name))
+    if not path or not os.access(path, os.X_OK):
+        raise RuntimeError('Android component is not installed: ' + name)
+    return path
+
+
+def command(argv, timeout=60, check=True, monitor=None):
+    # A file-backed bounded read prevents untrusted metadata filling memory.
+    with tempfile.TemporaryFile() as output:
+        if monitor is None:
+            result = subprocess.run(argv, stdout=output, stderr=subprocess.STDOUT, timeout=timeout)
+        else:
+            monitor()
+            result = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT)
+            deadline = time.monotonic() + timeout
+            try:
+                while True:
+                    monitor()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(argv, timeout)
+                    try:
+                        result.wait(timeout=min(1, remaining))
+                        break
+                    except subprocess.TimeoutExpired:
+                        pass
+            except BaseException:
+                result.kill()
+                result.wait()
+                raise
+        if output.tell() > 16 * 1024 * 1024:
+            raise RuntimeError('Android tool output exceeded the metadata limit')
+        output.seek(0)
+        text = output.read().decode('utf-8', errors='replace')
+    if check and result.returncode:
+        raise RuntimeError(text[-2000:] or 'Android tool failed')
+    return text
+
+
+def digest(path):
+    with open(path, 'rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def inspect(apk, root):
+    apk = apk.resolve(strict=True)
+    if not apk.is_file() or apk.stat().st_size > 1024 * 1024 * 1024:
+        raise RuntimeError('Not a supported standalone APK')
+    with zipfile.ZipFile(apk) as archive:
+        native_abis = sorted({match[1] for name in archive.namelist()
+                              if (match := re.fullmatch(r'lib/([A-Za-z0-9_-]+)/[^/]+\.so', name))})
+        for member, limit in [('AndroidManifest.xml', 8 * 1024 * 1024), ('resources.arsc', 64 * 1024 * 1024)]:
+            try:
+                size = archive.getinfo(member).file_size
+            except KeyError:
+                if member == 'resources.arsc':
+                    continue
+                raise RuntimeError('APK has no Android manifest')
+            if size > limit:
+                raise RuntimeError('APK metadata exceeds the supported limit')
+    aapt = lambda *argv: command([tool('aapt'), *argv])
+    badging = aapt('dump', 'badging', str(apk))
+    identity = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']*)'", badging, re.M)
+    if not identity or not re.fullmatch(PACKAGE, identity[1]):
+        raise RuntimeError('Invalid Android package identity')
+    label = re.search(r"^application-label:'(.*)'$", badging, re.M)
+    name = label[1] if label else identity[1]
+    # Library/desktop records are line based. Never let APK text add keys/rows.
+    name = ''.join(c for c in name if c >= ' ' and c != '\x7f').strip()
+    name = name.encode()[:120].decode(errors='ignore') or identity[1]
+    sha = digest(apk)
+    previews = root / 'android/previews'
+    previews.mkdir(parents=True, exist_ok=True)
+    icon = apk_icon(apk, badging, aapt, previews / sha)
+    sdk = re.search(r"^sdkVersion:'(\d+)'$", badging, re.M)
+    return dict(ok=True, package=identity[1], name=name, version=identity[3],
+                version_code=int(identity[2] or 0),
+                id='android-' + hashlib.sha256(identity[1].encode()).hexdigest()[:16],
+                sha=sha, icon=str(icon) if icon else '', min_sdk=int(sdk[1]) if sdk else 1,
+                native_abis=native_abis,
+                needs_runtime_download=not (RUNTIME / 'emulator/emulator').is_file()
+                    and not os.environ.get('OLYMPIUM_ANDROID_SERIAL'))
+
+
+def adb(serial, *args, timeout=None, check=True):
+    if timeout is None:
+        timeout = int(os.environ.get('OLYMPIUM_ANDROID_TOOL_TIMEOUT', '60'))
+        if not 15 <= timeout <= 600:
+            raise RuntimeError('Android tool timeout must be between 15 and 600 seconds')
+    monitor = managed_process_running if serial == 'emulator-5560' and MANAGED_PROCESS else None
+    argv = [tool('adb'), '-s', serial, *args]
+    read_only = (args[:2] in (('shell', 'getprop'), ('shell', 'sha256sum'), ('shell', 'pidof'))
+                 or args[:3] in (('shell', 'pm', 'path'), ('shell', 'id', '-u')))
+    if not read_only:
+        return command(argv, timeout, check, monitor)
+    # adbd can become transiently offline around a cold boot or root/unroot.
+    # Retry only the reads that establish runtime and package identity.
+    for attempt in range(6):
+        try:
+            result = command(argv, timeout, check, monitor)
+        except RuntimeError as error:
+            if str(error).strip() != 'adb: device offline':
+                raise
+            result = str(error)
+        if result.strip() != 'adb: device offline':
+            return result
+        if attempt < 5:
+            time.sleep(1)
+    raise RuntimeError(f"Android device offline while reading {' '.join(args[:3])}")
+
+
+def managed_process_running():
+    try:
+        current = process_identity(MANAGED_PROCESS['pid'])
+        stat = (Path('/proc') / str(current['pid']) / 'stat').read_text()
+        if current == MANAGED_PROCESS and stat[stat.rfind(')') + 2:].split()[0] != 'Z':
+            return
+    except (OSError, RuntimeError):
+        pass
+    raise RuntimeError('Android emulator exited during this operation; see android/avd/emulator.log')
+
+
+def device(root, selected=None):
+    global MANAGED_PROCESS
+    serial = selected or os.environ.get('OLYMPIUM_ANDROID_SERIAL', 'emulator-5560')
+    if not re.fullmatch(r'[A-Za-z0-9_.:\[\]-]+', serial):
+        raise RuntimeError('Invalid configured Android device')
+    devices = command([tool('adb'), 'devices'])
+    if not re.search(r'^' + re.escape(serial) + r'\s+(?:device|offline)\b', devices, re.M):
+        if serial != 'emulator-5560':
+            raise RuntimeError('The configured Android runtime is not running: ' + serial)
+        start_runtime(root)
+    if serial == 'emulator-5560' and not os.environ.get('OLYMPIUM_ANDROID_SERIAL'):
+        MANAGED_PROCESS = owned_runtime(root, RUNTIME, serial)
+    deadline = time.monotonic() + ready_timeout()
+    while time.monotonic() < deadline:
+        try:
+            if adb(serial, 'shell', 'getprop', 'sys.boot_completed').strip() == '1':
+                service = adb(serial, 'shell', 'service', 'check', 'package')
+                if 'found' in service and 'not found' not in service:
+                    # sys.boot_completed can survive a system_server restart.
+                    # Do not offer installation while its storage service is
+                    # absent or still blocked during initialization.
+                    volumes = adb(serial, 'shell', 'sm', 'list-volumes', 'private')
+                    user = adb(serial, 'shell', 'am', 'get-started-user-state', '0').strip()
+                    if re.search(r'^private\s+mounted\b', volumes, re.M) and user == 'RUNNING_UNLOCKED':
+                        return serial
+        except (RuntimeError, subprocess.TimeoutExpired):
+            if serial == 'emulator-5560' and MANAGED_PROCESS:
+                managed_process_running()
+        time.sleep(2)
+    raise RuntimeError('Android did not become ready before the configured deadline')
+
+
+def ready_timeout():
+    value = int(os.environ.get('OLYMPIUM_ANDROID_READY_TIMEOUT', '600'))
+    if not 60 <= value <= 3600:
+        raise RuntimeError('Android readiness timeout must be between 60 and 3600 seconds')
+    return value
+
+
+def clean_stale_avd_lock(avd):
+    """Crash recovery: emulator kill(pid,0) mistakes unreaped zombies for VMs."""
+    lock = avd / 'hardware-qemu.ini.lock'
+    if not lock.exists():
+        return
+    if lock.stat().st_uid != os.getuid():
+        raise RuntimeError('Android AVD lock belongs to another user')
+    # The upstream emulator writes a NUL-terminated decimal PID.
+    text = lock.read_text().rstrip('\0').strip()
+    if not text.isdecimal() or not 1 <= int(text) <= 2 ** 31 - 1:
+        raise RuntimeError('Invalid Android AVD lock; refusing to overwrite it')
+    proc = Path('/proc') / text
+    try:
+        if proc.stat().st_uid != os.getuid():
+            return
+        stat = (proc / 'stat').read_text()
+        if stat[stat.rfind(')') + 2:].split()[0] != 'Z':
+            return
+    except FileNotFoundError:
+        pass
+    lock.unlink()
+
+
+def start_runtime(root):
+    # Do this before downloading images. TCG has not passed Android 17 boot
+    # validation and must not silently become the normal desktop experience.
+    acceleration = 'on' if os.access('/dev/kvm', os.R_OK | os.W_OK) else 'off'
+    if acceleration == 'off' and os.environ.get('OLYMPIUM_ANDROID_ALLOW_TCG') != '1':
+        raise RuntimeError('Android 17 needs hardware virtualization. Enable it and allow this user to access KVM before installing Android support.')
+    avd_home = root / 'android/avd'
+    avd_home.mkdir(parents=True, exist_ok=True)
+    with (avd_home / 'boot.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        devices = command([tool('adb'), 'devices'])
+        if re.search(r'^emulator-5560\s', devices, re.M):
+            return
+        if not (RUNTIME / 'emulator/emulator').is_file():
+            ensure_runtime(RUNTIME)
+        avd = avd_home / 'olympium-android17.avd'
+        avd.mkdir(exist_ok=True)
+        clean_stale_avd_lock(avd)
+        image = RUNTIME / 'system-images/android-37.0/default/x86_64'
+        if not (image / 'system.img').is_file():
+            raise RuntimeError('The Android system image is not installed')
+        (avd_home / 'olympium-android17.ini').write_text(f'avd.ini.encoding=UTF-8\npath={avd}\ntarget=android-37.0\n')
+        (avd / 'config.ini').write_text(f'''avd.ini.encoding=UTF-8
+abi.type=x86_64
+hw.cpu.arch=x86_64
+hw.cpu.ncore=2
+hw.ramSize=2048
+hw.lcd.width=360
+hw.lcd.height=640
+hw.lcd.density=160
+hw.gpu.enabled=yes
+hw.gpu.mode=swiftshader_indirect
+hw.keyboard=yes
+image.sysdir.1={image}/
+disk.dataPartition.size=6442450944
+showDeviceFrame=no
+''')
+        env = dict(os.environ, ANDROID_AVD_HOME=str(avd_home), ANDROID_SDK_ROOT=str(RUNTIME))
+        with (avd_home / 'emulator.log').open('a') as log:
+            argv = [str(RUNTIME / 'emulator/emulator'), '-avd', 'olympium-android17',
+                '-port', '5560', '-no-window', '-no-audio', '-no-snapshot', '-no-boot-anim', '-no-metrics',
+                '-gpu', 'swiftshader_indirect', '-feature', '-Vulkan', '-accel', acceleration]
+            if os.environ.get('OLYMPIUM_ANDROID_LEGACY_WIFI') == '1':
+                # Diagnostic fallback for the pinned emulator's netsim gRPC
+                # abort. Keep VirtioWifi and use QEMU's earlier WiFi backend.
+                argv += ['-feature', '-WiFiPacketStream']
+            if acceleration == 'off' and os.environ.get('OLYMPIUM_ANDROID_TCG_ICOUNT') == '1':
+                argv += ['-cores', '1', '-memory', '4096', '-qemu', '-icount', 'shift=0,align=off,sleep=off']
+            process = subprocess.Popen(argv,
+                env=env, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+            (avd_home / 'process.json').write_text(json.dumps(process_identity(process.pid)) + '\n')
+        # Hold the boot lock until ADB can identify the managed emulator.
+        for _ in range(ready_timeout()):
+            if process.poll() is not None:
+                raise RuntimeError('Android emulator exited; see android/avd/emulator.log')
+            if re.search(r'^emulator-5560\s', command([tool('adb'), 'devices']), re.M):
+                return
+            time.sleep(1)
+        raise RuntimeError('The Android emulator did not start; see android/avd/emulator.log')
+
+
+def installed_digest(serial, package):
+    paths = adb(serial, 'shell', 'pm', 'path', package).splitlines()
+    bases = [s[8:] for s in paths if s.startswith('package:') and s.endswith('/base.apk')]
+    if len(bases) != 1 or not re.fullmatch(r'/[A-Za-z0-9_./+=@~-]+\.apk', bases[0]):
+        raise RuntimeError('No unique installed base APK')
+    return adb(serial, 'shell', 'sha256sum', bases[0]).split()[0]
+
+
+def prepare_services(serial, root):
+    if serial == 'emulator-5560' and not os.environ.get('OLYMPIUM_ANDROID_SERIAL'):
+        owned_runtime(root, RUNTIME, serial)
+    services = root / 'android/services'
+    services.mkdir(parents=True, exist_ok=True)
+    with (services / 'operation.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return provision_services(serial, root)
+
+
+def provision_services(serial, root):
+    """Provision the reviewed microG packages; never overwrite another GMS signer."""
+    services = root / 'android/services'
+    services.mkdir(parents=True, exist_ok=True)
+    cache = services / 'downloads'
+    cache.mkdir(exist_ok=True)
+    records = []
+    for artifact in json.loads(PINS.read_bytes())['artifacts']:
+        if artifact.get('format') != 'apk':
+            continue
+        package = Path(artifact['destination']).stem
+        source = RUNTIME / artifact['destination']
+        if not source.is_file():
+            source = download(artifact, cache)
+        if digest(source) != artifact['checksum']:
+            raise RuntimeError('microG artifact checksum mismatch')
+        present = adb(serial, 'shell', 'pm', 'path', package, check=False)
+        if 'package:' in present:
+            if installed_digest(serial, package) != artifact['checksum']:
+                raise RuntimeError('Another implementation of ' + package +
+                    ' is installed. Use the AOSP Android 17 runtime for microG; its signer will not be replaced.')
+        else:
+            apk = services / (package + '.apk')
+            shutil.copyfile(source, apk)
+            result = adb(serial, 'install', '--no-streaming', str(apk), timeout=600)
+            if 'Success' not in result or installed_digest(serial, package) != artifact['checksum']:
+                raise RuntimeError('Android did not install the reviewed microG package')
+        records.append(dict(package=package, sha256=artifact['checksum']))
+    permissions = adb(serial, 'shell', 'pm', 'list', 'permissions', '-f')
+    state = dict(packages=records, installed=True,
+                 signature_permission_declared='android.permission.FAKE_PACKAGE_SIGNATURE' in permissions,
+                 signature_compatibility_verified=False,
+                 gms_api_compatibility_verified=False)
+    # Explicitly selected external devices keep their own framework. Automatic
+    # privilege and userspace restart are confined to our recorded managed VM.
+    if serial == 'emulator-5560' and not os.environ.get('OLYMPIUM_ANDROID_SERIAL'):
+        framework = prepare_framework(serial, root, RUNTIME, adb, installed_digest, ready_timeout())
+        state.update(signature_compatibility_verified=framework['basic_services_verified'],
+                     basic_services_verified=framework['basic_services_verified'],
+                     framework_profile=framework['profile'])
+    (services / 'installed.json').write_text(json.dumps(state, indent=2) + '\n')
+    return state
+
+
+def save_json(path, value):
+    with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as staged:
+        try:
+            json.dump(value, staged, ensure_ascii=False, indent=2)
+            staged.write('\n')
+            staged.flush()
+            os.fsync(staged.fileno())
+            os.replace(staged.name, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            Path(staged.name).unlink(missing_ok=True)
+
+
+def validate_installation(info, dest, package):
+    if info.get('package') != package or not re.fullmatch(r'[0-9a-f]{64}', info.get('sha', '')):
+        raise RuntimeError('Android installation record has changed')
+    expected_id = 'android-' + hashlib.sha256(package.encode()).hexdigest()[:16]
+    if info.get('id') != expected_id:
+        raise RuntimeError('Android application identity has changed')
+    saved = Path(info.get('path', ''))
+    if saved.parent != dest or saved.name != info['sha'] + '.apk' or digest(saved) != info['sha']:
+        raise RuntimeError('Saved APK identity has changed')
+    return info
+
+
+def load_installation(root, package):
+    dest = root / 'android/packages' / package
+    return validate_installation(json.loads((dest / 'installed.json').read_text()), dest, package)
+
+
+def recover_pending_update(root, package, serial):
+    """Reconcile an interrupted operation using only its already reviewed bytes."""
+    dest = root / 'android/packages' / package
+    latest = dest / 'updates/latest.json'
+    if latest.exists():
+        recovery = json.loads(latest.read_text())
+        if recovery.get('status') == 'rolling-back':
+            before = validate_installation(recovery['before'], dest, package)
+            after = validate_installation(recovery['after'], dest, package)
+            if before['serial'] != serial or after['serial'] != serial:
+                raise RuntimeError('Pending rollback belongs to another Android runtime')
+            actual = installed_digest(serial, package)
+            if actual == before['sha']:
+                save_json(dest / 'installed.json', before)
+                recovery['status'] = 'rolled-back'
+            elif actual == after['sha']:
+                recovery['status'] = 'installed'
+            else:
+                raise RuntimeError('Pending rollback does not match the installed APK')
+            save_json(latest, recovery)
+    pending = dest / 'updates/pending.json'
+    if not pending.exists():
+        return
+    transaction = json.loads(pending.read_text())
+    before = validate_installation(transaction['before'], dest, package)
+    after = validate_installation(transaction['after'], dest, package)
+    if before['serial'] != serial or after['serial'] != serial:
+        raise RuntimeError('Pending update belongs to another Android runtime')
+    actual = installed_digest(serial, package)
+    if actual == before['sha']:
+        transaction['status'] = 'not-installed'
+        save_json(pending, transaction)
+        pending.replace(pending.with_name('failed-' + after['sha'] + '.json'))
+    elif actual == after['sha']:
+        save_json(dest / 'installed.json', after)
+        transaction.update(status='installed', rollback_requested=True)
+        save_json(pending.with_name('latest.json'), transaction)
+        pending.unlink()
+    else:
+        raise RuntimeError('Pending update does not match the installed APK; review is required')
+
+
+def install(apk, root, update_only=False):
+    info = inspect(apk, root)
+    dest = root / 'android/packages' / info['package']
+    previous = load_installation(root, info['package']) if (dest / 'installed.json').exists() else None
+    if update_only and previous is None:
+        raise RuntimeError('Updates require an existing managed application')
+    serial = device(root, previous['serial'] if previous else None)
+    sdk = int(adb(serial, 'shell', 'getprop', 'ro.build.version.sdk').strip())
+    if sdk not in (29, 37) or info['min_sdk'] > sdk:
+        raise RuntimeError('This app needs a different Android version; configure the Android 17 runtime')
+    native_abis = set(info.get('native_abis', ()))
+    if native_abis:
+        reported = adb(serial, 'shell', 'getprop', 'ro.product.cpu.abilist').strip()
+        if not reported:
+            reported = adb(serial, 'shell', 'getprop', 'ro.product.cpu.abi').strip()
+        supported = {abi for abi in reported.split(',') if re.fullmatch(r'[A-Za-z0-9_-]+', abi)}
+        if supported and native_abis.isdisjoint(supported):
+            raise RuntimeError(
+                f"APK requires {', '.join(sorted(native_abis))}. "
+                f"The selected Android device supports {', '.join(sorted(supported))}.")
+    if sdk == 37:
+        prepare_services(serial, root)
+    dest.mkdir(parents=True, exist_ok=True)
+    with (dest / 'operation.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        recover_pending_update(root, info['package'], serial)
+        previous = load_installation(root, info['package']) if (dest / 'installed.json').exists() else None
+        if update_only and previous is None:
+            raise RuntimeError('The managed application was removed during update preparation')
+        adopting = False
+        if previous:
+            actual = installed_digest(serial, info['package'])
+            if previous['serial'] != serial:
+                raise RuntimeError('Android application belongs to another runtime')
+            if actual != previous['sha']:
+                if not update_only and actual == info['sha']:
+                    # Explicitly importing the currently installed bytes is a
+                    # fresh review, not an unattended publisher-trust update.
+                    previous = None
+                    adopting = True
+                else:
+                    raise RuntimeError('Android application changed outside this installer; review it before updating')
+        if previous:
+            if previous['sha'] == info['sha']:
+                # Reinstalling identical bytes can expire Android's existing
+                # rollback snapshot. Preserve it and avoid unnecessary work.
+                return dict(previous, unchanged=True)
+            if sdk != 37:
+                raise RuntimeError('Managed APK updates currently require the Android 17 runtime')
+            old_code = previous.get('version_code')
+            if old_code is None:
+                old_code = inspect(Path(previous['path']), root)['version_code']
+                previous['version_code'] = old_code
+            if info['version_code'] <= old_code:
+                raise RuntimeError('An update must have a newer Android version code')
+        history = dest / 'updates'
+        transaction = None
+        with tempfile.NamedTemporaryFile(dir=dest, suffix='.apk') as staged:
+            with apk.open('rb') as source:
+                shutil.copyfileobj(source, staged)
+            staged.flush()
+            if digest(staged.name) != info['sha']:
+                raise RuntimeError('APK changed while it was copied')
+            saved = dest / (info['sha'] + '.apk')
+            shutil.copyfile(staged.name, saved)
+            info.update(path=str(saved), serial=serial, needs_runtime_download=False)
+            if previous:
+                history.mkdir(exist_ok=True)
+                transaction = dict(status='installing', before=previous, after=info)
+                save_json(history / 'pending.json', transaction)
+            flags = ['--enable-rollback', '0'] if previous else []
+            try:
+                result = 'Success' if adopting else adb(serial, 'install', '--no-streaming', '-r', *flags, staged.name, timeout=600)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+                if transaction:
+                    transaction.update(status='failed', error=str(error))
+                    save_json(history / 'pending.json', transaction)
+                raise
+            if 'Success' not in result or installed_digest(serial, info['package']) != info['sha']:
+                raise RuntimeError('Android did not install the selected APK bytes')
+            manifest = dest / 'installed.json'
+            save_json(manifest, info)
+            if transaction:
+                transaction.update(status='installed', after=info, rollback_requested=True)
+                save_json(history / 'latest.json', transaction)
+                (history / 'pending.json').unlink(missing_ok=True)
+    return info
+
+
+def rollback(package, root):
+    dest = root / 'android/packages' / package
+    with (dest / 'operation.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        current = load_installation(root, package)
+        serial = device(root, current['serial'])
+        recover_pending_update(root, package, serial)
+        current = load_installation(root, package)
+        history = dest / 'updates/latest.json'
+        transaction = json.loads(history.read_text())
+        if transaction.get('status') == 'rolled-back' and transaction.get('before', {}).get('sha') == current['sha']:
+            if installed_digest(serial, package) != current['sha']:
+                raise RuntimeError('Android application changed after rollback')
+            return dict(current, rolled_back=True, unchanged=True)
+        if transaction.get('status') != 'installed' or transaction.get('after', {}).get('sha') != current['sha']:
+            raise RuntimeError('No managed update is ready for rollback')
+        previous = validate_installation(transaction['before'], dest, package)
+        if installed_digest(serial, package) != current['sha']:
+            raise RuntimeError('Android application changed outside this installer; rollback was refused')
+        transaction['status'] = 'rolling-back'
+        save_json(history, transaction)
+        result = adb(serial, 'shell', 'pm', 'rollback-app', package, timeout=600)
+        if 'Success' not in result or installed_digest(serial, package) != previous['sha']:
+            raise RuntimeError('Android did not restore the previous APK; its installation record was retained')
+        save_json(dest / 'installed.json', previous)
+        transaction['status'] = 'rolled-back'
+        save_json(history, transaction)
+        return dict(previous, rolled_back=True)
+
+
+def main():
+    global RUNTIME
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', choices=['check', 'inspect', 'install', 'update', 'rollback', 'recover', 'launch', 'remove'])
+    parser.add_argument('value', nargs='?')
+    parser.add_argument('--root', type=Path)
+    args = parser.parse_args()
+    if args.command == 'check':
+        for name in ['aapt', 'adb', 'scrcpy']:
+            tool(name)
+        return
+    if args.root is None or not args.root.is_absolute():
+        parser.error('--root must be an absolute desktop data path')
+    root = args.root.resolve()
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root_stat = root.stat()
+    if root_stat.st_uid != os.getuid() or root_stat.st_mode & 0o022:
+        raise RuntimeError('Android app data must be owned by this user and not writable by other users')
+    if os.environ.get('OLYMPIUM_ANDROID_SDK'):
+        RUNTIME = Path(os.environ['OLYMPIUM_ANDROID_SDK']).resolve()
+    elif not (RUNTIME / 'emulator/emulator').is_file():
+        RUNTIME = root / 'android/runtime'
+    if args.command in ('inspect', 'install', 'update'):
+        if not args.value:
+            parser.error('APK path is required')
+        info = inspect(Path(args.value), root) if args.command == 'inspect' else install(Path(args.value), root, args.command == 'update')
+        print(json.dumps(info, ensure_ascii=False))
+        return
+    if not args.value or not re.fullmatch(PACKAGE, args.value):
+        parser.error('Android package name is required')
+    if args.command == 'rollback':
+        print(json.dumps(rollback(args.value, root), ensure_ascii=False))
+        return
+    if args.command == 'recover':
+        dest = root / 'android/packages' / args.value
+        with (dest / 'operation.lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            current = load_installation(root, args.value)
+            serial = device(root, current['serial'])
+            recover_pending_update(root, args.value, serial)
+            print(json.dumps(load_installation(root, args.value), ensure_ascii=False))
+        return
+    dest = root / 'android/packages' / args.value
+    info = load_installation(root, args.value)
+    saved = Path(info['path'])
+    serial = device(root, info['serial'])
+    if installed_digest(serial, args.value) != info['sha']:
+        raise RuntimeError('The Android app was changed outside this installer; reinstall it to update the record')
+    if args.command == 'remove':
+        result = adb(serial, 'uninstall', args.value, timeout=180)
+        if 'Success' not in result:
+            raise RuntimeError('Android refused to uninstall this app')
+        # Only our fixed managed files, never paths supplied by edited records.
+        (dest / 'installed.json').unlink()
+        for apk in dest.glob('*.apk'):
+            if re.fullmatch(r'[0-9a-f]{64}\.apk', apk.name):
+                apk.unlink()
+        for suffix in ['.png', '.svg']:
+            (root / 'android/previews' / (info['sha'] + suffix)).unlink(missing_ok=True)
+        print(json.dumps(dict(ok=True, package=args.value)))
+    else:
+        if int(adb(serial, 'shell', 'getprop', 'ro.build.version.sdk').strip()) == 37:
+            prepare_services(serial, root)
+        android_window.main(['--adb', tool('adb'), '--scrcpy', tool('scrcpy'),
+            '--serial', serial, '--package', args.value, '--title', info['name'],
+            '--output', str(dest / 'window')])
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (RuntimeError, OSError, ValueError, zipfile.BadZipFile, subprocess.TimeoutExpired) as error:
+        print(json.dumps(dict(ok=False, message=str(error)), ensure_ascii=False))
+        print('Android: ' + str(error), file=sys.stderr)
+        sys.exit(3)

@@ -36,6 +36,8 @@ Wine is the distribution's package on every image. It is not rewritten or patche
 
 With `wine32` installed, a new prefix is 1.3 GB before deduplication, and Wine built it in 21 s on the build machine. The squashfs cost of the 32-bit half was not measured.
 
+The [Ubuntu CI regression](https://github.com/yezicheng2011/bbb/actions/runs/44294891959) also passed on a clean runner with both Wine loaders. The PE32 window mapped 654 ms after the launch request with an existing prefix. Plain text clipboard transfer, clipboard retention after the source closed, and shared files passed in both directions. The same run passed 26 Xwayland remap cycles.
+
 ## What was not run
 
 An amd64 image was built and booted under QEMU emulation with `install-wine.sh` and `wine-prefix.sh` run in its root (`docs/startup-latency.md`). i386 and arm64 images were not rebuilt. Before that boot, `install-wine.sh` had not been run in a chroot; the amd64 package set is the one installed on the build machine, which is the same Ubuntu release. The i386 Xwayland build of wlroots and Debian's `wine32` were not built or run. Wine on arm64 was not run, and no ARM64 Windows program was built.

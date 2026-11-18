@@ -1,0 +1,29 @@
+{
+  "status": "failed",
+  "automatic_microg_bootstrap_verified": false,
+  "emulator": "37.2.13.0 build 16740729",
+  "image": "AOSP API 37.0 revision 6 x86_64",
+  "configuration": {
+    "kvm": false,
+    "acceleration": "TCG",
+    "cores": 1,
+    "virtual_clock": "icount shift=0,align=off,sleep=off"
+  },
+  "observations": [
+    "Fresh managed AVD reached sys.boot_completed=1",
+    "Package service found and private volume mounted",
+    "Emulator exited with SIGABRT during initial pinned microG Core installation",
+    "Client installation timed out after 600 seconds"
+  ],
+  "crash": {
+    "signal": 6,
+    "thread_id": 27077,
+    "abort_literal": "bad_function_call was thrown in -fno-exceptions mode",
+    "frames": [
+      "grpc::internal::CallbackWithSuccessTag::Proceed(bool)",
+      "grpc_event_engine::experimental::WorkStealingThreadPool::ThreadState::Step()"
+    ],
+    "minidump_sha256": "010adbce83156cf8ea390c0219e365095f5bbd0b06e4755e6aa659bbb73a6c4d"
+  },
+  "followup": "Legacy QEMU WiFi backend retry in progress; not yet verified. Recovered a stale AVD lock whose recorded PID was an unreaped zombie. No system image or APK signature verification was bypassed."
+}

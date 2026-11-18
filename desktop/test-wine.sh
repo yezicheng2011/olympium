@@ -13,7 +13,7 @@
 # system cannot run are refused before Wine starts, and checks the compositor
 # built without Xwayland.
 #
-# Needs wine, Xwayland, and x86_64-w64-mingw32-gcc. The 32-bit part also needs
+# Needs wine, Xwayland, XCB/XFixes headers and x86_64-w64-mingw32-gcc. The 32-bit part also needs
 # wine32 and i686-w64-mingw32-gcc and says so when they are missing. This is a host test on the
 # build machine. It is not a boot of the ISO, and its times are not the ISO's.
 # The stand-in for the olympium command below answers classify and plan the
@@ -26,7 +26,7 @@ for tool in /usr/bin/wine /usr/bin/wineserver Xwayland x86_64-w64-mingw32-gcc; d
 		exit 77
 	fi
 done
-make dev-compositor dev-install desk-note desk-paste >/dev/null || exit 1
+make dev-compositor dev-install dev-clip-helper desk-note desk-paste >/dev/null || exit 1
 ROOT=$(mktemp -d /tmp/test-wine.XXXXXX)
 trap '[ -n "${TEST_WINE_KEEP:-}" ] && mkdir -p "$TEST_WINE_KEEP" && cp "$ROOT"/*.log "$TEST_WINE_KEEP"/ 2>/dev/null; kill $(cat "$ROOT/comp.pid" 2>/dev/null) 2>/dev/null; WINEPREFIX=$ROOT/desk/wine wineserver -k 2>/dev/null; rm -rf "$ROOT"' EXIT
 x86_64-w64-mingw32-gcc -mwindows -O2 -o "$ROOT/desk-win.exe" desk-win.c || exit 1

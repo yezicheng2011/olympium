@@ -1,0 +1,18 @@
+diff --git a/AppKit/NSWindow.m b/AppKit/NSWindow.m
+index baa2c5a..b7d0102 100644
+--- a/AppKit/NSWindow.m
++++ b/AppKit/NSWindow.m
+@@ -1556,6 +1556,13 @@ static BOOL _allowsAutomaticWindowTabbing;
+ }
+
+ - (void) setWindowController: (NSWindowController *) value {
++    // Route unhandled view events through the window controller. Keep a
++    // responder explicitly installed by the application.
++    NSWindowController *previous = NS_EXTRA(NSWindow, self)->_windowController;
++    NSResponder *next = [self nextResponder];
++    if (next == nil || next == previous)
++        [self setNextResponder: value];
++
+     NS_EXTRA(NSWindow, self)->_windowController = value;
+     /*
+       Cocoa does not setReleasedWhenClosed: NO when setWindowController: is

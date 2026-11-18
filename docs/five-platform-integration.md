@@ -20,11 +20,11 @@ This fetches the exact commits in `image/compat-sources.tsv` into the ignored `b
 
 | Platform | Verified | Still unverified |
 | --- | --- | --- |
-| Linux | Desktop builds; native GTK Install/search/Launchpad interactions pass | New ISO boot and GPU performance |
-| Windows | Wine 9.0 64-bit application startup, clipboard in both directions, document/shared-folder access, 26 X window unmap/remap/destroy cycles, and a compositor build without Xwayland | 32-bit Wine; arbitrary Windows applications; the previously reported non-reproducible heap-corruption incident |
-| macOS | Real Cocoa Mach-O compiled; official Darling GUI installed in full Ubuntu VM; local `.app` import and launcher generation under Landlock; program enters main and creates NSApplication | Persistent Cocoa window and button callback: program exits during window initialization; third-party GUI applications |
-| Android | APK bytes verified; Fossify Calculator 1.4.0 on API 28; API 29 x86 independent Wayland window and host-pointer-driven 2+3=5, repeated after scripted relaunch, with screenshot/UI evidence | Production APK install/launcher integration; reliable cold boot (API 28 repeat failed); clipboard/shared files; ARM/arbitrary APKs and native performance |
-| OpenHarmony | Official Eclipse Oniro 6.1 image booted; HDC connected; OS version and bundle list read | Calculator foreground/UI/input: launch was refused while screen locked; HAP installation and desktop integration |
+| Linux | Native desktop installer, search and Launchpad. Latest headless sample rendered zero frames in four idle seconds. | Shipping ISO boot and hardware GPU measurements |
+| Windows | Wine 9.0 x86_64 startup, bidirectional text clipboard, document/shared folder access, and 20 real titlebar closes with normal process exits | 32-bit Wine in this environment, the original heap-corruption incident, and a broader application set |
+| macOS | Source-built Darling ran the publisher's Intel PikoPixel through drawing, native file save/reopen, and close confirmation. Hex Fiend read, edited, saved and reopened a binary file. A separate Cocoa fixture exchanged plain text with GTK in both directions. | Image and file clipboard, hardware GPU performance and broader apps |
+| Android | API 37 Fossify Calculator install, icon, independent window and input. Separate KVM runs verify two boots and microG signature queries and Common broker RPC. | ARM-only execution, account/push/maps and broader Play services compatibility |
+| OpenHarmony | SDK 6.1 signed HAP installation and application input in KVM. Calculator also passed host-window input and relaunch. Configured-SDK HAP import, icon and launcher are implemented. | KVM acceptance of the new desktop installer route, runtime provisioning, arbitrary HAP windows and commercial HarmonyOS |
 
 The Mac fixture suite still fails its two world-writable-directory confinement assertions on this cloud runtime's `nobody` fallback. Those assertions are not disabled. Its separate fallback checks and the functional installation/window checks pass. Those Linux windows are not Mac application execution.
 
@@ -34,12 +34,19 @@ On the same cloud machine, a five-second no-client 1280x800 headless/pixman samp
 
 ## Remaining implementation
 
-Waydroid needs a running Android image, Linux Binder support and its container/session services. The present cloud machine exposes neither Binder devices nor binderfs. Source downloads cannot add that host-kernel capability. An image with a suitable kernel, or a full-system VM, is needed for execution tests. KVM is not exposed here; software VM tests would not establish near-native performance.
+The managed Android image is x86_64. The installer now reports the native
+ABIs required by an APK when the selected Android device cannot run them.
+ARM-only acceptance needs a guest reporting the matching ABI and a real
+native app run. The microG profile still needs real app coverage beyond its
+tested Common broker.
 
-Darling GUI needs a successful Cocoa application execution test. Official GUI packages were acquired, and a source build was paused after partial compilation once those packages were available. Neither route has produced a verified Mac GUI window here. The current CLI path and an executable named `darling` are insufficient evidence. Its namespace/container setup must also work on the target Linux installation. See the [upstream build instructions](https://docs.darlinghq.org/build-instructions.html).
+The OpenHarmony desktop runtime uses an already running owned SDK guest.
+Its desktop bridge forwards primary clicks and displays the app's region.
+The new installation path needs its own hardware acceptance run. SDK
+provisioning, keyboard and drag support, and commercial app compatibility
+remain separate implementation targets.
 
-The selected OpenHarmony validation target is the official Eclipse Oniro 6.1 x86_64 QEMU image, with SDK/HDC 6.1.0.31. It still needs an unlocked, stable GUI and a successful HAP installation/ability execution test. OpenHarmony results must not be represented as compatibility with every commercial HarmonyOS application or service.
-
-See [runtime-validation-handoff.md](runtime-validation-handoff.md) for the exact checkpoint, experiment artifacts and remaining acceptance tests.
-
-After each engine runs, it still needs installation records, launcher entries, independent windows, input, clipboard, shared files, lifecycle/error handling and CPU-architecture checks integrated into this desktop. None of these engines is enabled merely by fetching its source, and the ISO build has not been changed to silently include unvalidated runtimes.
+The release still needs a single ISO boot, a multi-platform app matrix and
+measured startup, input latency and GPU behavior on the target hardware.
+See [runtime-validation-handoff.md](runtime-validation-handoff.md) for the
+exact validation checkpoint and evidence.

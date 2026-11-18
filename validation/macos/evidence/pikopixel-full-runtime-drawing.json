@@ -1,0 +1,72 @@
+{
+  "application": "PikoPixel 1.0 BETA10",
+  "publisher_dmg": "https://twilightedge.com/downloads/PikoPixel.1.0-b10.dmg",
+  "publisher_dmg_sha256": "3fa29b5a3899c9a13018c791399225f7dd8ed0e6c4a02a117867f4963f048904",
+  "unmodified_macho_sha256": "74eadcc30176a9fddd811681e71eb2ef346eeac37858abc8c501d15ded756391",
+  "darling_source_commit": "3fcd2e1aa85079789d19d82415695bdecc512241",
+  "cocotron_source_commit": "0ee27af8b6b1622e11c4f15db1cad210baae2db1",
+  "runtime": "Full source-built x86_64 Darling, Ubuntu 24.04 QEMU TCG guest, native Wayland with software rendering",
+  "components": [
+    "cli",
+    "gui_stubs"
+  ],
+  "runtime_binary_sha256": {
+    "darlingserver": "3feffe929edf3f51e7762856b0847ec241f637e0b93dc5288573b5d6e319ad6d",
+    "libdispatch.dylib": "dc6135224f74e088ba4f7fcb6480f22bc65febe17c357dc21f814e98daf29b81",
+    "AppKit": "9afa5b78e5cc9f13256d9c8fe8208a422af89182b8c5a63df3e4f7f6fc0fd7f4",
+    "Onyx2D": "2f4fa5c2b1868f7d25b20f849febad982baeca929ed1d0369faad35c9932685f"
+  },
+  "source_patch_sha256": {
+    "0001-appkit-color-space-icc-profile.patch": "2187d5f806b670265efe101eef4f0ec7aefd296d34bc3fb70cf7936e088d870b",
+    "0002-appkit-nib-custom-view-placeholder.patch": "9895363d0aebfb1311e1555db1cbffd1d75232b3075450c7e83d9f59765a9120",
+    "darlingserver/0001-reload-worker-thread-after-suspension.patch": "c126a7705856578a6106cf1eef646aa16c829264dcad2bd0d6e1bcba4cbce7f9",
+    "libdispatch/0001-disable-internal-memory-pressure-observer.patch": "bde58333ffdcf2532e714a5858fb5487e3445d5c534a78402106c4760c1cfe20",
+    "0003-appkit-empty-alternate-button-title.patch": "e0972b47537600cbc78954fff25ed50a1c69ee3cc7f6517464d1f95416f1ee9f",
+    "0004-appkit-window-controller-responder.patch": "2b89280e0ea9a764ea7c11a890a43d0e035ee65bfbcae8e5b17b442bb29e3d44",
+    "0005-appkit-bitmap-representation.patch": "ddbbe9126be746606aec6052ad54996c321fba077cb3f8d3ff99037432dc1649"
+  },
+  "desktop_install_verified": true,
+  "observed_document_title": "Untitled 1 (64x64) (8x)",
+  "output_size": [
+    1280,
+    720
+  ],
+  "input": "Virtual pointer feeding Olympium compositor seat events",
+  "window_closed_from_titlebar": true,
+  "installer_relaunch_started_new_process": true,
+  "first_process_still_running_after_window_close": true,
+  "post_draw_cli_smoke_exit": 0,
+  "pixel_change": [
+    {
+      "before": "pikopixel-full-runtime-canvas.png",
+      "after": "pikopixel-full-runtime-stroke.png",
+      "crop_xyxy": [
+        437,
+        151,
+        539,
+        255
+      ],
+      "changed_from_light_to_dark": 2129
+    },
+    {
+      "before": "pikopixel-full-runtime-reopened-canvas.png",
+      "after": "pikopixel-full-runtime-reopened-stroke.png",
+      "crop_xyxy": [
+        452,
+        202,
+        509,
+        221
+      ],
+      "changed_from_light_to_dark": 421
+    }
+  ],
+  "pixel_change_rule": "Largest RGB channel was >160 before input and <25 afterward. Both crops exclude the after-image cursor.",
+  "closed_window_screenshot": "pikopixel-full-runtime-closed.png",
+  "untested": [
+    "saving changes",
+    "clipboard",
+    "native process quit",
+    "GPU rendering",
+    "shipping image"
+  ]
+}

@@ -24,6 +24,13 @@
 # own applications are licensed for Apple hardware and are not what this is
 # for.
 set -u
+if [ "${OLYMPIUM_MAC_SOFTWARE:-0}" = 1 ]; then
+	# Old Darling's native bridge cannot register Mesa worker threads. A
+	# single-threaded rasterizer also works without a GPU in a live session.
+	export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=softpipe
+	export LP_NUM_THREADS=0 GALLIUM_THREAD=0 mesa_glthread=false
+	export MESA_SHADER_CACHE_DISABLE=true
+fi
 if [ "${1:-}" = "--check" ]; then
 	command -v darling >/dev/null 2>&1
 	exit $?

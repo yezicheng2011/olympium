@@ -1,0 +1,23 @@
+{
+  "application": "Hex Fiend",
+  "version": "2.3.0",
+  "architecture": "x86_64",
+  "publisher_url": "https://github.com/HexFiend/HexFiend/releases/download/v2.3.0/Hex.Fiend.app.zip",
+  "archive_size": 959428,
+  "archive_sha256": "0e0a683971c872ee734af2a3440f1f2abb8d442609077bd5c3e212ab3b5439f7",
+  "executable_sha256": "435b6d025868cc1e8bdc0e0b9551bf0aaef0a4b83c2f4a4616898a847f09ffd5",
+  "runtime": "Darling official 0.1.20260609~noble",
+  "import_verified": true,
+  "app_gui_verified": false,
+  "app_input_verified": false,
+  "default_launch_error": "Sparkle requires _OBJC_EHTYPE_id from WebKit; symbol not exported",
+  "diagnostic_flat_namespace_error": "DARegisterDiskAppearedCallback not found",
+  "diagnostic_flat_namespace_shipped": false,
+  "failure_notice_verified": true,
+  "failure_notice_app_id": "dev-install",
+  "failure_notice_screenshot": "hexfiend-failure-notice.png",
+  "notes": [
+    "The screenshot shows the native desktop error dialog, not a working Hex Fiend window.",
+    "The app binary was not patched; missing framework APIs remain unresolved."
+  ]
+}

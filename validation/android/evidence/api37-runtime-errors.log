@@ -1,0 +1,17 @@
+
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: AsyncTask #1
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke virtual method 'android.os.ZygoteProcess android.os.ChildZygoteProcess.getZygoteProcessAsManaged()' on a null object reference
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at android.webkit.WebViewZygote.getProcess(WebViewZygote.java:58)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at com.android.server.webkit.SystemImpl.ensureZygoteStarted(SystemImpl.java:255)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at com.android.server.webkit.WebViewUpdateServiceImpl2.startZygoteWhenReady(WebViewUpdateServiceImpl2.java:254)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at com.android.server.webkit.WebViewUpdateServiceImpl2.$r8$lambda$XXuU2jy5ieCy09in8MCscEXoIck(WebViewUpdateServiceImpl2.java:0)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at com.android.server.webkit.WebViewUpdateServiceImpl2$$ExternalSyntheticLambda0.run(R8$$SyntheticClass:0)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1100)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+11-17 08:30:59.552  7447  7869 E AndroidRuntime: 	at java.lang.Thread.run(Thread.java:1572)
+11-17 08:31:12.576  7920  7920 E AndroidRuntime: FATAL EXCEPTION: main
+11-17 08:31:12.576  7920  7920 E AndroidRuntime: PID: 7920
+11-17 08:31:12.576  7920  7920 E AndroidRuntime: DeadSystemException: The system died; earlier logs will point to the root cause
+11-17 08:31:12.664  7847  7847 E AndroidRuntime: FATAL EXCEPTION: main
+11-17 08:31:12.664  7847  7847 E AndroidRuntime: Process: com.android.systemui, PID: 7847
+11-17 08:31:12.664  7847  7847 E AndroidRuntime: DeadSystemException: The system died; earlier logs will point to the root cause

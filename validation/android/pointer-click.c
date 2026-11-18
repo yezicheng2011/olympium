@@ -37,11 +37,13 @@ static unsigned number(const char *arg) {
     return value;
 }
 int main(int argc, char **argv) {
-    if (argc < 5 || argc % 2 != 1) {
-        fprintf(stderr, "usage: %s WIDTH HEIGHT X Y [X Y ...]\n", argv[0]);
+    int drag = argc > 1 && !strcmp(argv[1], "--drag");
+    int first = 3 + drag;
+    if (argc - first < (drag ? 4 : 2) || (argc - first) % 2) {
+        fprintf(stderr, "usage: %s [--drag] WIDTH HEIGHT X Y [X Y ...]\n", argv[0]);
         return 2;
     }
-    unsigned width = number(argv[1]), height = number(argv[2]);
+    unsigned width = number(argv[1 + drag]), height = number(argv[2 + drag]);
     if (!width || !height) return 2;
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { perror("wl_display_connect"); return 1; }
@@ -54,17 +56,20 @@ int main(int argc, char **argv) {
     }
     struct zwlr_virtual_pointer_v1 *pointer =
         zwlr_virtual_pointer_manager_v1_create_virtual_pointer(manager, NULL);
-    for (int i = 3; i < argc; i += 2) {
+    for (int i = first; i < argc; i += 2) {
         unsigned x = number(argv[i]), y = number(argv[i+1]);
         if (x >= width || y >= height) return 2;
         zwlr_virtual_pointer_v1_motion_absolute(pointer, now(), x, y, width, height);
         zwlr_virtual_pointer_v1_frame(pointer);
         if (wl_display_roundtrip(display) < 0) return 1;
         usleep(150000);
-        zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
-        zwlr_virtual_pointer_v1_frame(pointer);
-        if (wl_display_roundtrip(display) < 0) return 1;
-        usleep(150000);
+        if (!drag || i == first) {
+            zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+            zwlr_virtual_pointer_v1_frame(pointer);
+            if (wl_display_roundtrip(display) < 0) return 1;
+            usleep(150000);
+        }
+        if (drag && i + 2 < argc) continue;
         zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
         zwlr_virtual_pointer_v1_frame(pointer);
         if (wl_display_roundtrip(display) < 0) return 1;

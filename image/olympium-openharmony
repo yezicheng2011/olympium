@@ -1,0 +1,237 @@
+#!/usr/bin/python3
+"""Install single-entry HAPs into an explicitly configured OpenHarmony SDK session."""
+
+import argparse
+import contextlib
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+import zipfile
+
+BUNDLE = re.compile(r'[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+')
+IDENTIFIER = re.compile(r'[A-Za-z_][A-Za-z0-9_.]*')
+MAX_METADATA = 512 * 1024
+MAX_ICON = 1024 * 1024
+
+
+def digest(path):
+    with path.open('rb') as source:
+        return hashlib.file_digest(source, 'sha256').hexdigest()
+
+
+def read_member(archive, name, limit):
+    member = archive.getinfo(name)
+    if member.file_size > limit:
+        raise ValueError(f'HAP member is too large: {name}')
+    return archive.read(member)
+
+
+def package_info(path, root):
+    if not path.is_file():
+        raise ValueError('Expected a regular HAP file.')
+    with zipfile.ZipFile(path) as archive:
+        manifest = json.loads(read_member(archive, 'module.json', MAX_METADATA))
+        app, module = manifest['app'], manifest['module']
+        bundle = app['bundleName']
+        ability = module['mainElement']
+        if (len(bundle) > 128 or not BUNDLE.fullmatch(bundle) or len(ability) > 128 or
+                not IDENTIFIER.fullmatch(ability) or module.get('type') != 'entry' or
+                not any(a.get('name') == ability and a.get('exported') is True
+                        for a in module['abilities'])):
+            raise ValueError('Expected an entry HAP with an exported main ability.')
+        label = app.get('label', '')
+        if not label or label.startswith('$'):
+            label = path.stem if path.stem != bundle else bundle
+        label = ''.join(c for c in ' '.join(label.split()) if c >= ' ' and c != '\x7f')
+        label = label.encode()[:120].decode(errors='ignore')
+        identifier = 'oh-' + hashlib.sha256(bundle.encode()).hexdigest()[:16]
+        sha = digest(path)
+        icon = ''
+        match = re.fullmatch(r'\$media:([A-Za-z0-9_]+)', app.get('icon', ''))
+        if match:
+            name = f'resources/base/media/{match[1]}.png'
+            try:
+                data = read_member(archive, name, MAX_ICON)
+            except (KeyError, ValueError):
+                data = b''
+            if (data[:16] == b'\x89PNG\r\n\x1a\n\0\0\0\rIHDR' and
+                    0 < int.from_bytes(data[16:20], 'big') <= 1024 and
+                    0 < int.from_bytes(data[20:24], 'big') <= 1024):
+                icons = root / 'icons'
+                icons.mkdir(mode=0o700, parents=True, exist_ok=True)
+                icon = str(icons / f'{identifier}-{sha[:16]}.png')
+                with tempfile.NamedTemporaryFile(dir=icons, delete=False) as handle:
+                    handle.write(data)
+                os.replace(handle.name, icon)
+    return dict(ok=True, id=identifier, package=bundle, ability=ability,
+                name=label or bundle, path=str(path), sha=sha, icon=icon)
+
+
+class Session:
+    def __init__(self):
+        config = Path(os.environ.get('OLYMPIUM_OPENHARMONY_SESSION') or
+                      Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid()))) /
+                      'olympium-openharmony/session.json')
+        try:
+            info = config.stat()
+        except FileNotFoundError:
+            raise ValueError('Start and configure a local OpenHarmony SDK session first.') from None
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError('The SDK session descriptor must be private to the desktop user.')
+        self.config = config.resolve()
+        values = json.loads(config.read_text())
+        self.hdc = Path(values['hdc'])
+        self.qmp = Path(values['qmp'])
+        self.target = values['target']
+        if (not self.hdc.is_absolute() or not os.access(self.hdc, os.X_OK) or
+                not self.qmp.is_absolute() or not self.qmp.is_socket() or
+                self.qmp.stat().st_uid != os.getuid() or
+                not re.fullmatch(r'127\.0\.0\.1:[1-9][0-9]{0,4}', self.target) or
+                int(self.target.split(':')[1]) > 65535):
+            raise ValueError('Expected a local SDK emulator, QMP socket and HDC executable.')
+
+    def command(self, *words, timeout=30, target=True):
+        prefix = [str(self.hdc), '-t', self.target] if target else [str(self.hdc)]
+        result = subprocess.run(prefix + list(map(str, words)), text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        if result.returncode:
+            raise ValueError(f'SDK command failed: {result.stdout.strip()[:240]}')
+        return result.stdout
+
+    def shell(self, *words, timeout=30):
+        return self.command('shell', *words, timeout=timeout)
+
+    def connect(self):
+        self.command('tconn', self.target, target=False, timeout=15)
+        if self.target not in self.command('list', 'targets', target=False, timeout=15).split():
+            raise ValueError('The OpenHarmony SDK guest is not connected.')
+
+    def bounds(self, bundle):
+        remote = f'/data/local/tmp/olympium-{uuid.uuid4().hex}.json'
+        try:
+            with tempfile.TemporaryDirectory(prefix='olympium-oh-layout-') as directory:
+                path = Path(directory) / 'layout.json'
+                self.shell('uitest', 'dumpLayout', '-p', remote, timeout=30)
+                self.command('file', 'recv', remote, path)
+                todo = [json.loads(path.read_text())]
+                while todo:
+                    node = todo.pop()
+                    attrs = node.get('attributes', {})
+                    if (attrs.get('bundleName') == bundle and attrs.get('type') == 'root'
+                            and attrs.get('visible') == 'true'):
+                        coords = list(map(int, re.findall(r'-?\d+', attrs.get('bounds', ''))))
+                        if (len(coords) == 4 and 0 <= coords[0] < coords[2] <= 360 and
+                                0 <= coords[1] < coords[3] <= 720):
+                            return coords
+                    todo.extend(reversed(node.get('children', [])))
+        finally:
+            with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
+                self.shell('rm', '-f', remote, timeout=5)
+        return None
+
+
+def install(session, source, root):
+    if not source.is_file():
+        raise ValueError('Expected a regular HAP file.')
+    (root / 'openharmony').mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.install-', dir=root / 'openharmony') as directory:
+        staged = Path(directory) / source.name
+        shutil.copyfile(source, staged)
+        info = package_info(staged, root)
+        bundle = info['package']
+        saved = root / 'openharmony' / f'{bundle}.hap'
+        if saved.exists() and digest(saved) != info['sha']:
+            raise ValueError('This bundle is already in the library with different contents.')
+        remote = f'/data/local/tmp/olympium-{uuid.uuid4().hex}.hap'
+        try:
+            installed = session.shell('bm', 'dump', '-n', bundle)
+            if bundle in installed and info['ability'] in installed and saved.exists():
+                return dict(info, path=str(saved))
+            session.command('file', 'send', staged, remote, timeout=120)
+            result = session.shell('bm', 'install', '-p', remote, timeout=120)
+            if 'install bundle successfully' not in result.lower():
+                raise ValueError('Bundle Manager rejected the HAP: ' + result.strip()[:240])
+            os.replace(staged, saved)
+        finally:
+            session.shell('rm', '-f', remote)
+        return dict(info, path=str(saved))
+
+
+def launch(session, bundle, root, title):
+    saved = root / 'openharmony' / f'{bundle}.hap'
+    info = package_info(saved, root)
+    if info['package'] != bundle:
+        raise ValueError('Library HAP package does not match its launcher.')
+    result = session.shell('aa', 'start', '-a', info['ability'], '-b', bundle)
+    if 'start ability successfully' not in result.lower():
+        raise ValueError('Ability Manager could not open the application: ' + result.strip()[:240])
+    try:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            try:
+                bounds = session.bounds(bundle)
+            except (FileNotFoundError, json.JSONDecodeError, subprocess.TimeoutExpired):
+                bounds = None
+            if bounds:
+                break
+            time.sleep(1)
+        else:
+            raise ValueError('The guest did not show an application-owned window.')
+        subprocess.run([sys.executable, Path(__file__).with_name('openharmony_window.py'),
+                        '--qmp', str(session.qmp), '--hdc', str(session.hdc), '--target', session.target,
+                        '--title', title or info['name'], '--bounds', *map(str, bounds)], check=True)
+    finally:
+        session.shell('aa', 'force-stop', bundle)
+        print('OpenHarmony app stopped', flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', choices=['inspect', 'install', 'launch', 'remove'])
+    parser.add_argument('value')
+    parser.add_argument('--root', type=Path, required=True)
+    parser.add_argument('--title')
+    args = parser.parse_args()
+    root = args.root.resolve()
+    try:
+        session = Session()
+        if args.command == 'inspect':
+            print(json.dumps(package_info(Path(args.value), root), ensure_ascii=False))
+            return 0
+        if args.command in ('launch', 'remove') and not BUNDLE.fullmatch(args.value):
+            raise ValueError('Invalid OpenHarmony bundle name.')
+        lock = session.config.with_suffix('.lock')
+        with lock.open('a') as file:
+            try:
+                fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError('Close the active OpenHarmony app before using this SDK session.') from None
+            session.connect()
+            if args.command == 'install':
+                print(json.dumps(install(session, Path(args.value), root), ensure_ascii=False))
+            elif args.command == 'launch':
+                launch(session, args.value, root, args.title)
+            else:
+                result = session.shell('bm', 'uninstall', '-n', args.value, timeout=120)
+                if 'uninstall bundle successfully' not in result.lower():
+                    raise ValueError('Bundle Manager could not remove the application: ' + result.strip()[:240])
+                (root / 'openharmony' / f'{args.value}.hap').unlink(missing_ok=True)
+        return 0
+    except (OSError, ValueError, TypeError, AttributeError, KeyError, zipfile.BadZipFile,
+            subprocess.SubprocessError) as error:
+        print(json.dumps(dict(ok=False, message=str(error)[:500])), file=sys.stdout)
+        return 3
+
+
+if __name__ == '__main__':
+    sys.exit(main())

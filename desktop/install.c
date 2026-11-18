@@ -108,6 +108,20 @@ static const char *runtime_bin(void) {
 	return NULL;
 }
 
+static const char *mobile_runtime(int openharmony) {
+	const char *env = getenv(openharmony ? "OLYMPIUM_OPENHARMONY_RUNTIME" : "OLYMPIUM_ANDROID_RUNTIME");
+	if (env != NULL && env[0] == '/' && access(env, X_OK) == 0) {
+		return env;
+	}
+	const char *installed = openharmony ? "/usr/libexec/dev-desktop/olympium-openharmony"
+		: "/usr/libexec/dev-desktop/olympium-android";
+	return access(installed, X_OK) == 0 ? installed : NULL;
+}
+
+static const char *android_runtime(void) {
+	return mobile_runtime(0);
+}
+
 static int capture(char *const argv[], char *out, size_t outlen) {
 	int fds[2];
 	if (pipe(fds) != 0) {
@@ -532,6 +546,14 @@ static int review_mac(struct review *r) {
 static void decide(struct review *r) {
 	r->launchable = 0;
 	r->action = "refuse";
+	if (strcmp(r->kind, "android_apk") == 0 && strcmp(r->engine, "android") == 0) {
+		r->action = r->plan_ok ? "android" : "review";
+		return;
+	}
+	if (strcmp(r->kind, "openharmony_hap") == 0 && strcmp(r->engine, "openharmony") == 0) {
+		r->action = r->plan_ok ? "openharmony" : "review";
+		return;
+	}
 	if (strncmp(r->kind, "mac_", 4) == 0 && strcmp(r->engine, "mac") == 0) {
 		/* Install is offered when there is an application in it. Launch is
 		 * decided later, for each application, once it has been unpacked. */
@@ -741,6 +763,42 @@ static int fill_review(const char *path, struct review *r) {
 		snprintf(r->file, sizeof r->file, "%s", path);
 	}
 	base_name(r->file, r->name, sizeof r->name);
+	const char *extension = strrchr(r->file, '.');
+	int openharmony = extension != NULL && strcasecmp(extension, ".hap") == 0;
+	if (openharmony || (extension != NULL && strcasecmp(extension, ".apk") == 0)) {
+		snprintf(r->guest, sizeof r->guest, "%s", openharmony ? "openharmony" : "android");
+		snprintf(r->kind, sizeof r->kind, "%s", openharmony ? "openharmony_hap" : "android_apk");
+		snprintf(r->engine, sizeof r->engine, "%s", r->guest);
+		snprintf(r->detail, sizeof r->detail, "%s application", openharmony ? "OpenHarmony" : "Android");
+		const char *helper = mobile_runtime(openharmony);
+		if (helper != NULL) {
+			char root[512], text[4096];
+			desk_root(root, sizeof root);
+			char *args[] = {(char *)helper, "inspect", r->file, "--root", root, NULL};
+			if (capture(args, text, sizeof text) == 0 && json_true(text, "ok")) {
+				json_string(text, "name", r->name, sizeof r->name);
+				json_string(text, "package", r->program, sizeof r->program);
+				json_string(text, "id", r->id, sizeof r->id);
+				json_string(text, "icon", r->mac_icon, sizeof r->mac_icon);
+				snprintf(r->mac_first, sizeof r->mac_first, "%s", r->name);
+				r->plan_ok = 1;
+				snprintf(r->message, sizeof r->message,
+					"Install adds this app to %s and Launchpad. Open starts its own desktop window.",
+					openharmony ? "the configured OpenHarmony SDK" : "Android");
+				if (!openharmony && json_true(text, "needs_runtime_download")) {
+					snprintf(r->message, sizeof r->message,
+						"Android support needs a one-time download (about 1.4 GB). "
+						"Install sets it up and adds this app to Launchpad.");
+				}
+			} else {
+				json_string(text, "message", r->message, sizeof r->message);
+			}
+		} else {
+			snprintf(r->message, sizeof r->message, "The %s runtime is not installed.", openharmony ? "OpenHarmony" : "Android");
+		}
+		decide(r);
+		return 0;
+	}
 	/* Mac files are read here and are not sent to the Olympium runtime. Its
 	 * answer for them is a refusal, and that refusal is left as it is. */
 	if (review_mac(r)) {
@@ -850,12 +908,19 @@ static int write_launcher_for(const struct rec *rec, const char *icon, int pin) 
 		return -1;
 	}
 	fprintf(f, "#!/bin/sh\n");
-	fprintf(f, "export OLYMPIUM_DESK_HOME='%s'\n", root);
+	char *quoted_root = g_shell_quote(root);
+	fprintf(f, "export OLYMPIUM_DESK_HOME=%s\n", quoted_root);
+	g_free(quoted_root);
 	const char *bin = runtime_bin();
 	if (bin != NULL) {
-		fprintf(f, "export OLYMPIUM_BIN='%s'\n", bin);
+		char *quoted_bin = g_shell_quote(bin);
+		fprintf(f, "export OLYMPIUM_BIN=%s\n", quoted_bin);
+		g_free(quoted_bin);
 	}
-	fprintf(f, "exec '%s' launch '%s' \"$@\"\n", self, rec->id);
+	char *quoted_self = g_shell_quote(self), *quoted_id = g_shell_quote(rec->id);
+	fprintf(f, "exec %s launch %s \"$@\"\n", quoted_self, quoted_id);
+	g_free(quoted_self);
+	g_free(quoted_id);
 	fclose(f);
 	chmod(wrap, 0755);
 	apps_dir(apps, sizeof apps);
@@ -865,7 +930,18 @@ static int write_launcher_for(const struct rec *rec, const char *icon, int pin) 
 	if (f == NULL) {
 		return -1;
 	}
-	fprintf(f, "[Desktop Entry]\nType=Application\nName=%s\nExec=%s\n", rec->name, wrap);
+	fprintf(f, "[Desktop Entry]\nType=Application\nName=%s\nExec=/bin/sh \"", rec->name);
+	/* Use a fixed interpreter: GIO checks the first executable before
+	 * expanding %% field codes in a path. Pass our wrapper as its argument.
+	 * Quote that path, then encode the desktop-entry string layer.
+	 * Percent signs are field codes even inside a quoted Exec argument. */
+	for (const char *p = wrap; *p; p++) {
+		if (*p == '\\' || *p == '"' || *p == '$' || *p == '`') fputs("\\\\", f);
+		if (*p == '\\') fputs("\\\\", f);
+		else if (*p == '%') fputs("%%", f);
+		else fputc(*p, f);
+	}
+	fputs("\"\n", f);
 	fprintf(f, "Terminal=false\nNoDisplay=false\n");
 	if (icon != NULL && icon[0] != '\0') {
 		fprintf(f, "Icon=%s\n", icon);
@@ -1578,9 +1654,59 @@ static int import_mac(const struct review *r) {
 	return 0;
 }
 
-static int cmd_import(const char *path, const char *ext, int consent) {
+static int cmd_import_mode(const char *path, const char *ext, int consent, int update_only) {
 	struct review r;
 	fill_review(path, &r);
+	if (update_only && strcmp(r.action, "android") != 0) {
+		fprintf(stderr, "dev-install: managed update is currently available for Android APKs\n");
+		return 3;
+	}
+	int openharmony = strcmp(r.action, "openharmony") == 0;
+	if (openharmony || strcmp(r.action, "android") == 0) {
+		if (!consent) {
+			fprintf(stderr, "dev-install: refused to install without consent\n");
+			return 2;
+		}
+		const char *helper = mobile_runtime(openharmony);
+		char root[512], text[4096] = "";
+		desk_root(root, sizeof root);
+		struct rec recs[REC_MAX];
+		int n = load_recs(recs, REC_MAX), slot = n;
+		for (int i = 0; i < n; i++) {
+			if (strcmp(recs[i].id, r.id) == 0) { slot = i; break; }
+		}
+		if (slot == n && n >= REC_MAX) {
+			fprintf(stderr, "dev-install: library is full\n");
+			return 1;
+		}
+		printf("progress 1/3 read\n");
+		printf("progress 2/3 install\n");
+		fflush(stdout);
+		char *args[] = {(char *)helper, update_only ? "update" : "install", r.file, "--root", root, NULL};
+		if (helper == NULL || capture(args, text, sizeof text) != 0 || !json_true(text, "ok")) {
+			char reason[1024] = "";
+			json_string(text, "message", reason, sizeof reason);
+			fprintf(stderr, "dev-install: not installed: %s\n",
+				reason[0] ? reason : "Application installation failed");
+			return 3;
+		}
+		struct rec rec = {0};
+		char icon[1024] = "";
+		json_string(text, "id", rec.id, sizeof rec.id);
+		json_string(text, "name", rec.name, sizeof rec.name);
+		json_string(text, "path", rec.path, sizeof rec.path);
+		json_string(text, "sha", rec.sha, sizeof rec.sha);
+		json_string(text, "package", rec.program, sizeof rec.program);
+		json_string(text, "icon", icon, sizeof icon);
+		snprintf(rec.guest, sizeof rec.guest, "%s", r.guest);
+		snprintf(rec.kind, sizeof rec.kind, "%s", r.kind);
+		snprintf(rec.launch, sizeof rec.launch, "%s", r.action);
+		recs[slot] = rec;
+		if (slot == n) n++;
+		if (save_recs(recs, n) != 0 || write_launcher_for(&rec, icon, 0) != 0) return 1;
+		printf("id=%s\nlaunch=%s\nprogress 3/3 done\n", rec.id, rec.launch);
+		return 0;
+	}
 	if (strcmp(r.action, "mac") == 0) {
 		if (!consent) {
 			fprintf(stderr, "dev-install: refused to install without consent\n");
@@ -1740,6 +1866,41 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 	return 0;
 }
 
+static int cmd_import(const char *path, const char *ext, int consent) {
+	return cmd_import_mode(path, ext, consent, 0);
+}
+
+static int cmd_rollback(const char *id, int consent) {
+	if (!consent) {
+		fprintf(stderr, "dev-install: rollback requires consent\n");
+		return 2;
+	}
+	static struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX), at = -1;
+	for (int i = 0; i < n; i++) {
+		if (strcmp(recs[i].id, id) == 0) { at = i; break; }
+	}
+	if (at < 0 || strcmp(recs[at].launch, "android") != 0) {
+		fprintf(stderr, "dev-install: no managed Android app with this ID\n");
+		return 3;
+	}
+	char root[512], text[4096] = "", path[1024] = "";
+	desk_root(root, sizeof root);
+	const char *helper = android_runtime();
+	char *args[] = {(char *)helper, "rollback", recs[at].program, "--root", root, NULL};
+	if (helper == NULL || capture(args, text, sizeof text) != 0 || !json_true(text, "ok")) {
+		char reason[1024] = "";
+		json_string(text, "message", reason, sizeof reason);
+		fprintf(stderr, "dev-install: rollback failed: %s\n", reason[0] ? reason : "Android rollback failed");
+		return 3;
+	}
+	json_string(text, "path", path, sizeof path);
+	if (path[0] == '\0') return 3;
+	/* The backend retains reviewed APKs and treats an identical import as a
+	 * no-op. Reuse import to refresh the existing library row, icon and wrapper. */
+	return cmd_import(path, NULL, 1);
+}
+
 /* Tells the person why nothing opened. A launch from Launchpad or the dock
  * has no terminal, so without this a refusal would look like nothing
  * happening at all. OLYMPIUM_NO_DIALOG keeps a script from waiting on it. */
@@ -1859,9 +2020,14 @@ static int launch_mac(const struct rec *rec, int argc, char **argv) {
 		args[k++] = argv[i];
 	}
 	args[k] = NULL;
-	execv(args[0], args);
-	perror(args[0]);
-	return 127;
+	int status = run_wait(args);
+	if (status != 0) {
+		snprintf(text, sizeof text,
+			"%s could not run with the installed Mac runtime (exit %d). "
+			"The application stays in Applications.", rec->name, status);
+		show_notice(rec->name, text, icon);
+	}
+	return status < 0 ? 127 : status;
 }
 
 /* Takes an installed Mac application away again: the application itself, its
@@ -1881,13 +2047,20 @@ static int cmd_remove(const char *id) {
 		fprintf(stderr, "dev-install: unknown id %s\n", id);
 		return 1;
 	}
-	if (strcmp(recs[at].launch, "mac") != 0) {
+	int openharmony = strcmp(recs[at].launch, "openharmony") == 0;
+	int android = strcmp(recs[at].launch, "android") == 0;
+	if (!openharmony && !android && strcmp(recs[at].launch, "mac") != 0) {
 		fprintf(stderr, "dev-install: %s is not a Mac application; it was not removed\n", recs[at].name);
 		return 3;
 	}
 	char root[512];
 	char apps_root[640];
 	desk_root(root, sizeof root);
+	if (android || openharmony) {
+		const char *helper = mobile_runtime(openharmony);
+		char *args[] = {(char *)helper, "remove", recs[at].program, "--root", root, NULL};
+		if (helper == NULL || run_wait(args) != 0) return 3;
+	} else {
 	snprintf(apps_root, sizeof apps_root, "%s/mac/Applications/", root);
 	size_t prefix = strlen(apps_root);
 	if (strncmp(recs[at].path, apps_root, prefix) != 0 || strchr(recs[at].path + prefix, '/') != NULL ||
@@ -1896,13 +2069,14 @@ static int cmd_remove(const char *id) {
 		fprintf(stderr, "dev-install: %s is not under %s; it was not removed\n", recs[at].path, apps_root);
 		return 3;
 	}
-	char icon[1024];
-	mac_icon_of(&recs[at], icon, sizeof icon);
 	char *rm[] = {"/bin/rm", "-rf", "--", recs[at].path, NULL};
 	if (run_quiet(rm) != 0) {
 		fprintf(stderr, "dev-install: %s could not be removed\n", recs[at].path);
 		return 1;
 	}
+	}
+	char icon[1024];
+	mac_icon_of(&recs[at], icon, sizeof icon);
 	char path[900];
 	char apps[512];
 	apps_dir(apps, sizeof apps);
@@ -1946,6 +2120,22 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 	}
 	if (is_mac) {
 		return launch_mac(rec, argc, argv);
+	}
+	int openharmony = strcmp(rec->launch, "openharmony") == 0;
+	if (openharmony || strcmp(rec->launch, "android") == 0) {
+		const char *helper = mobile_runtime(openharmony);
+		if (helper == NULL) {
+			show_notice(rec->name, openharmony ? "The OpenHarmony runtime is not installed." : "The Android runtime is not installed.", NULL);
+			return 3;
+		}
+		char root[512];
+		desk_root(root, sizeof root);
+		char *args[] = {(char *)helper, "launch", rec->program, "--root", root, NULL};
+		char *oh_args[] = {(char *)helper, "launch", rec->program, "--root", root, "--title", rec->name, NULL};
+		int status = run_wait(openharmony ? oh_args : args);
+		if (status != 0) show_notice(rec->name, openharmony ? "OpenHarmony could not open this app. Check the SDK session."
+			: "Android could not open this app. Check the Android runtime and try again.", NULL);
+		return status;
 	}
 	if (strcmp(rec->launch, "wine") == 0) {
 		struct review again;
@@ -2120,11 +2310,16 @@ static char g_ext[32];
 static GPid g_child;
 static int g_child_running;
 static int g_child_stopped;
-static char g_mac_id[80];
+static char g_installed_id[80];
 static char g_child_error[400];
 
 static int is_mac_review(void) {
 	return strcmp(g_review.action, "mac") == 0;
+}
+
+static int is_async_review(void) {
+	return is_mac_review() || strcmp(g_review.action, "android") == 0 ||
+		strcmp(g_review.action, "openharmony") == 0;
 }
 
 static void on_consent(GtkToggleButton *button, gpointer data) {
@@ -2133,8 +2328,8 @@ static void on_consent(GtkToggleButton *button, gpointer data) {
 	int allow = on && (strcmp(g_review.action, "import") == 0 ||
 		strcmp(g_review.action, "keep") == 0 || strcmp(g_review.action, "install") == 0 ||
 		strcmp(g_review.action, "rpm") == 0 || strcmp(g_review.action, "wine") == 0 ||
-		is_mac_review());
-	gtk_widget_set_sensitive(g_import, allow || g_child_running);
+		is_async_review());
+	gtk_widget_set_sensitive(g_import, g_child_running ? is_mac_review() : allow);
 }
 
 static gboolean on_child_line(GIOChannel *channel, GIOCondition condition, gpointer data) {
@@ -2157,8 +2352,8 @@ static gboolean on_child_line(GIOChannel *channel, GIOCondition condition, gpoin
 					: strcmp(what, "check") == 0 ? "Checking"
 					: strcmp(what, "install") == 0 ? "Moving into Applications" : "Done";
 				gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), label);
-			} else if (strncmp(line, "id=", 3) == 0 && g_mac_id[0] == '\0') {
-				snprintf(g_mac_id, sizeof g_mac_id, "%s", line + 3);
+			} else if (strncmp(line, "id=", 3) == 0 && g_installed_id[0] == '\0') {
+				snprintf(g_installed_id, sizeof g_installed_id, "%s", line + 3);
 			}
 			g_free(line);
 			line = NULL;
@@ -2191,8 +2386,9 @@ static void on_child_done(GPid pid, gint status, gpointer data) {
 		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 1);
 		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), "Installed");
 		gtk_label_set_text(GTK_LABEL(g_status),
-			"Installed in Applications. It is in Launchpad. Open starts it.");
-		gtk_widget_set_sensitive(g_launch, g_mac_id[0] != '\0');
+			is_mac_review() ? "Installed in Applications. It is in Launchpad. Open starts it."
+			: "Installed. It is in Launchpad. Open starts it.");
+		gtk_widget_set_sensitive(g_launch, g_installed_id[0] != '\0');
 	} else {
 		char text[480];
 		snprintf(text, sizeof text, "Not installed%s%s", g_child_error[0] != '\0' ? ": " : ".",
@@ -2210,7 +2406,7 @@ static void child_own_group(gpointer data) {
 	setpgid(0, 0);
 }
 
-static void start_mac_install(void) {
+static void start_async_install(void) {
 	char self[512];
 	ssize_t len = readlink("/proc/self/exe", self, sizeof self - 1);
 	if (len < 0) {
@@ -2222,7 +2418,7 @@ static void start_mac_install(void) {
 	gint out_fd = -1;
 	gint err_fd = -1;
 	GError *error = NULL;
-	g_mac_id[0] = '\0';
+	g_installed_id[0] = '\0';
 	g_child_error[0] = '\0';
 	g_child_stopped = 0;
 	if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, child_own_group,
@@ -2243,24 +2439,27 @@ static void start_mac_install(void) {
 	g_io_channel_unref(out);
 	g_io_channel_unref(err);
 	g_child_watch_add(g_child, on_child_done, NULL);
-	gtk_button_set_label(GTK_BUTTON(g_import), "Stop");
+	gtk_button_set_label(GTK_BUTTON(g_import), is_mac_review() ? "Stop" : "Installing…");
+	gtk_widget_set_sensitive(g_import, is_mac_review());
 	gtk_widget_set_sensitive(g_check, FALSE);
 	gtk_widget_set_sensitive(g_launch, FALSE);
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 0.02);
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar), "Reading");
-	gtk_label_set_text(GTK_LABEL(g_status), "Installing. Nothing from the file is run.");
+	gtk_label_set_text(GTK_LABEL(g_status), is_mac_review()
+		? "Installing. Nothing from the file is run." : "Installing in Android. This may take a moment.");
 }
 
 static void on_import(GtkButton *button, gpointer data) {
 	(void)button;
 	(void)data;
-	if (is_mac_review()) {
+	if (is_async_review()) {
 		if (g_child_running) {
+			if (!is_mac_review()) return;
 			g_child_stopped = 1;
 			kill(-g_child, SIGTERM);
 			return;
 		}
-		start_mac_install();
+		start_async_install();
 		return;
 	}
 	int code = cmd_import(g_review.file, g_ext[0] ? g_ext : NULL, 1);
@@ -2278,14 +2477,14 @@ static void on_import(GtkButton *button, gpointer data) {
 static void on_launch(GtkButton *button, gpointer data) {
 	(void)button;
 	(void)data;
-	if (is_mac_review()) {
-		if (g_mac_id[0] == '\0') {
+	if (is_async_review()) {
+		if (g_installed_id[0] == '\0') {
 			gtk_label_set_text(GTK_LABEL(g_status), "Nothing to open.");
 			return;
 		}
 		pid_t pid = fork();
 		if (pid == 0) {
-			execl("/proc/self/exe", "dev-install", "launch", g_mac_id, (char *)NULL);
+			execl("/proc/self/exe", "dev-install", "launch", g_installed_id, (char *)NULL);
 			_exit(127);
 		}
 		gtk_label_set_text(GTK_LABEL(g_status), "Opening.");
@@ -2309,7 +2508,8 @@ static void on_launch(GtkButton *button, gpointer data) {
 }
 
 static GtkWidget *build_window(const struct review *r) {
-	int mac = strncmp(r->kind, "mac_", 4) == 0;
+	int openharmony = strcmp(r->kind, "openharmony_hap") == 0;
+	int mac = strncmp(r->kind, "mac_", 4) == 0 || strcmp(r->kind, "android_apk") == 0 || openharmony;
 	GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(win), "Install");
 	/* The compositor draws the title bar and the window controls. Without
@@ -2380,7 +2580,8 @@ static GtkWidget *build_window(const struct review *r) {
 	}
 	int can_import = strcmp(r->action, "import") == 0 || strcmp(r->action, "keep") == 0 ||
 		strcmp(r->action, "install") == 0 || strcmp(r->action, "rpm") == 0 ||
-		strcmp(r->action, "wine") == 0 || strcmp(r->action, "mac") == 0;
+		strcmp(r->action, "wine") == 0 || strcmp(r->action, "mac") == 0 || strcmp(r->action, "android") == 0 ||
+		strcmp(r->action, "openharmony") == 0;
 	g_bar = gtk_progress_bar_new();
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(g_bar), 0);
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(g_bar),
@@ -2389,7 +2590,9 @@ static GtkWidget *build_window(const struct review *r) {
 	gtk_box_pack_start(GTK_BOX(box), g_bar, FALSE, FALSE, 0);
 	if (mac) {
 		g_check = gtk_check_button_new_with_label(can_import
-			? "Install into Applications. It will not run until it is opened."
+			? (strcmp(r->kind, "android_apk") == 0 ? "Install Android support and this app. Add it to Launchpad."
+			: openharmony ? "Install in the configured OpenHarmony SDK and add to Launchpad."
+			: "Install into Applications. It will not run until it is opened.")
 			: "Install stays off. There is no application in this file.");
 	} else {
 		g_check = gtk_check_button_new_with_label(
@@ -2430,7 +2633,7 @@ static gboolean auto_report(gpointer data) {
 		return TRUE;
 	}
 	printf("auto: %s\n", gtk_label_get_text(GTK_LABEL(g_status)));
-	printf("auto_id: %s\n", g_mac_id[0] != '\0' ? g_mac_id : "none");
+	printf("auto_id: %s\n", g_installed_id[0] != '\0' ? g_installed_id : "none");
 	fflush(stdout);
 	gtk_main_quit();
 	return FALSE;
@@ -2446,7 +2649,7 @@ static gboolean auto_stop(gpointer data) {
 
 static gboolean auto_press(gpointer data) {
 	const char *mode = data;
-	if (!is_mac_review()) {
+	if (!is_async_review()) {
 		printf("auto: not a Mac file with an application\n");
 		gtk_main_quit();
 		return FALSE;
@@ -2572,6 +2775,8 @@ static void usage(void) {
 	fprintf(stderr,
 		"usage: dev-install inspect FILE\n"
 		"       dev-install import --consent FILE [--mime EXT]\n"
+		"       dev-install update --consent APK\n"
+		"       dev-install rollback --consent ID\n"
 		"       dev-install launch ID [ARG...]\n"
 		"       dev-install remove ID\n"
 		"       dev-install open [--no-ui] FILE\n"
@@ -2593,7 +2798,7 @@ int main(int argc, char **argv) {
 		print_review(&r);
 		return 0;
 	}
-	if (strcmp(argv[1], "import") == 0) {
+	if (strcmp(argv[1], "import") == 0 || strcmp(argv[1], "update") == 0) {
 		int consent = 0;
 		const char *file = NULL;
 		const char *ext = NULL;
@@ -2610,7 +2815,17 @@ int main(int argc, char **argv) {
 			usage();
 			return 2;
 		}
-		return cmd_import(file, ext, consent);
+		return cmd_import_mode(file, ext, consent, strcmp(argv[1], "update") == 0);
+	}
+	if (strcmp(argv[1], "rollback") == 0) {
+		int consent = 0;
+		const char *id = NULL;
+		for (int i = 2; i < argc; i++) {
+			if (strcmp(argv[i], "--consent") == 0) consent = 1;
+			else if (id == NULL) id = argv[i];
+		}
+		if (id == NULL) { usage(); return 2; }
+		return cmd_rollback(id, consent);
 	}
 	if (strcmp(argv[1], "launch") == 0 && argc >= 3) {
 		return cmd_launch(argv[2], argc - 3, argv + 3);

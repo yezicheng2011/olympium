@@ -1,0 +1,14 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6e4f4ff..c5fe052 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -7,6 +7,9 @@ endif(COMMAND cmake_policy)
+ enable_language(C CXX)
+
+ add_definitions(-Dtypeof=__typeof__ -ggdb -O0)
++# Darling's kqueue does not implement the optional memorystatus filter.
++# Like the simulator, leave libdispatch's internal pressure observer off.
++add_definitions(-DDISPATCH_USE_MEMORYPRESSURE_SOURCE=0)
+ add_definitions(-DPRIVATE -D__PTHREAD_EXPOSE_INTERNALS__ -D__BLOCKS__ -DDISPATCH_USE_DTRACE=0 -DNeXT_RUNTIME=1 -DNS_RETURNS_INNER_POINTER=
+ 	-DDISPATCH_USE_INTERNAL_WORKQUEUE=0
+ 	-DDISPATCH_USE_KEVENT_WORKQUEUE=0

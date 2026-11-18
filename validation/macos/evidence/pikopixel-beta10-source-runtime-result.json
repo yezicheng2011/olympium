@@ -1,0 +1,28 @@
+{
+  "application": "PikoPixel 1.0 BETA10",
+  "publisher_dmg": "https://twilightedge.com/downloads/PikoPixel.1.0-b10.dmg",
+  "publisher_dmg_sha256": "3fa29b5a3899c9a13018c791399225f7dd8ed0e6c4a02a117867f4963f048904",
+  "unmodified_macho_sha256": "74eadcc30176a9fddd811681e71eb2ef346eeac37858abc8c501d15ded756391",
+  "darling_source_commit": "3fcd2e1aa85079789d19d82415695bdecc512241",
+  "cocotron_source_commit": "0ee27af8b6b1622e11c4f15db1cad210baae2db1",
+  "appkit_sha256": "4825add8eba056bdb6e9a2e7f3d9ee172c67a6f21f15ca355b6b01b366b98e5f",
+  "source_patches": {
+    "0001-appkit-color-space-icc-profile.patch": "2187d5f806b670265efe101eef4f0ec7aefd296d34bc3fb70cf7936e088d870b",
+    "0002-appkit-nib-custom-view-placeholder.patch": "9895363d0aebfb1311e1555db1cbffd1d75232b3075450c7e83d9f59765a9120"
+  },
+  "test_runtime": "Official Darling 0.1.20260609~noble with a separate source-built framework path, Ubuntu 24.04 TCG guest",
+  "selected_backend": "Darling native Wayland backend",
+  "desktop_install_verified": true,
+  "rendered_new_image_dialog": true,
+  "desktop_pointer_document_creation_verified": true,
+  "observed_document_title": "Untitled 1 (64x64) (8x)",
+  "drawing_verified": false,
+  "document_canvas_state": "gray after creating the image",
+  "process_exited_with_error_after_document_creation": true,
+  "relaunch_stability_verified": false,
+  "full_source_runtime_verified": false,
+  "screenshots": [
+    "pikopixel-new-image.png",
+    "pikopixel-document-created.png"
+  ]
+}

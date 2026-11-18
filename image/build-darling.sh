@@ -6,7 +6,7 @@
 # tree was run against, and stages the result where the image build looks for
 # it. Darling is the open-source project that runs macOS programs on Linux. It
 # is a separate program under GPL-3.0, with parts under other licenses. Its
-# source is not in this tree and is not changed by it.
+# source is fetched separately and the compatibility patches live here.
 #
 #   image/build-darling.sh
 #
@@ -16,17 +16,41 @@
 #
 # "cli" is the loader, the server, the system libraries, and the command-line
 # programs. It runs command-line Mach-O programs. It has no AppKit, so it does
-# not open a graphical Mac application; that needs Darling's "gui" components,
-# which this script can be asked for and which were not built or run here.
+# not open a graphical Mac application. Use DARLING_COMPONENTS='cli;gui'
+# to build AppKit and its framework dependencies.
 #
 # On the build machine, an x86_64 computer with four processors and Ubuntu
 # 24.04, the clone with its 157 submodules was 5 GB, the build was 15,457
 # steps and about 20 minutes, and the staged result was 293 MB. x86_64 only.
 set -euo pipefail
+umask 022
 PIN=3fcd2e1aa85079789d19d82415695bdecc512241
 SRC=${DARLING_SRC:-/var/tmp/darling-src}
 OUT=${DARLING_OUT:-/var/tmp/darling-out}
 COMPONENTS=${DARLING_COMPONENTS:-cli}
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PATCH_DIR=$SCRIPT_DIR/darling-patches
+PATCHES=()
+DISPATCH_PATCH=libdispatch/0001-disable-internal-memory-pressure-observer.patch
+SERVER_PATCH=darlingserver/0001-reload-worker-thread-after-suspension.patch
+FOUNDATION_PATCH=foundation/0001-discard-pending-undo-actions.patch
+FOUNDATION_ZONE_PATCH=foundation/0002-legacy-non-gc-allocation.patch
+WEBKIT_PATCH=darling/0001-webkit-reexport-legacy-objc-runtime.patch
+normalized_components=${COMPONENTS,,}
+normalized_components=${normalized_components//[[:space:]]/}
+normalized_components=${normalized_components//,/;}
+case ";${normalized_components};" in
+	*';gui;'*|*';gui_frameworks;'*)
+		# At PIN, AppKit links UniformTypeIdentifiers. Darling enables that
+		# framework through gui_stubs, which gui does not include by itself.
+		COMPONENTS+=";gui_stubs"
+		;;
+esac
+case ";${normalized_components};" in
+	*';gui;'*|*';gui_frameworks;'*|*';gui_stubs;'*|*';stock;'*|*';all;'*)
+		PATCHES=("$PATCH_DIR"/*.patch)
+		;;
+esac
 
 missing=""
 for tool in git cmake ninja clang bison flex pkg-config python3; do
@@ -55,12 +79,40 @@ git -C "$SRC" fetch -q --depth 1 origin "$PIN"
 git -C "$SRC" checkout -q FETCH_HEAD
 git -C "$SRC" submodule update --init --recursive --depth 1 --jobs 2
 
+apply_patches() {
+	local submodule=$1
+	local patch
+	shift
+	for patch in "$@"; do
+		if ! git -C "$submodule" apply --reverse --check "$patch" >/dev/null 2>&1; then
+			git -C "$submodule" apply --check "$patch"
+			git -C "$submodule" apply "$patch"
+		fi
+	done
+}
+
+apply_patches "$SRC/src/external/libdispatch" "$PATCH_DIR/$DISPATCH_PATCH"
+apply_patches "$SRC/src/external/darlingserver" "$PATCH_DIR/$SERVER_PATCH"
+apply_patches "$SRC/src/external/foundation" "$PATCH_DIR/$FOUNDATION_PATCH" "$PATCH_DIR/$FOUNDATION_ZONE_PATCH"
+if [ "${#PATCHES[@]}" -gt 0 ]; then
+	apply_patches "$SRC" "$PATCH_DIR/$WEBKIT_PATCH"
+	apply_patches "$SRC/src/external/cocotron" "${PATCHES[@]}"
+fi
+
 mkdir -p "$SRC/build"
 cd "$SRC/build"
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPONENTS="$COMPONENTS" -DCMAKE_INSTALL_PREFIX=/usr/local ..
 ninja
 rm -rf "$OUT"
 DESTDIR="$OUT" ninja install
+# Groff's install rule preserves checkout modes, including the guest /usr
+# directory. Make the staged system files accessible to guest app users.
+guest_root="$OUT/usr/local/libexec/darling"
+guest_usr="$guest_root/usr"
+if [ -d "$guest_usr" ] && [ ! -L "$guest_usr" ]; then
+	chmod -R a+rX "$guest_usr"
+fi
+chmod -R go-w "$guest_root"
 
 # What the image needs beside the programs: the license, and what was built.
 install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
@@ -68,7 +120,13 @@ install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
 	echo "Darling, https://github.com/darlinghq/darling"
 	echo "commit $PIN"
 	echo "components $COMPONENTS"
-	echo "built without source changes by image/build-darling.sh"
+	echo "built by image/build-darling.sh"
+	echo "Core runtime patch SHA256:"
+	(cd "$PATCH_DIR" && sha256sum -- "$DISPATCH_PATCH" "$SERVER_PATCH" "$FOUNDATION_PATCH" "$FOUNDATION_ZONE_PATCH")
+	if [ "${#PATCHES[@]}" -gt 0 ]; then
+		echo "GUI patch SHA256:"
+		(cd "$PATCH_DIR" && sha256sum -- "$WEBKIT_PATCH" ./*.patch)
+	fi
 	echo "license GPL-3.0 for Darling itself; each submodule keeps its own,"
 	echo "including the Apple Public Source License for the parts Apple published"
 	echo

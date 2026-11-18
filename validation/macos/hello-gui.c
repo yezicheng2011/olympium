@@ -13,6 +13,9 @@ extern signed char class_addMethod(Class, SEL, void (*)(void), const char *);
 extern void objc_msgSend(void);
 extern int printf(const char *, ...);
 extern int fflush(void *);
+extern char *getenv(const char *);
+extern unsigned int sleep(unsigned int);
+#define TRACE(message) do { printf("Cocoa validation: %s\n", message); fflush(0); } while (0)
 
 static id window, label;
 static id send0(id object, const char *name) {
@@ -57,25 +60,38 @@ int main(void) {
         printf("Cocoa validation: application/window initialization failed\n");
         return 3;
     }
+    TRACE("NSWindow created");
     object_arg(window, "setTitle:", string("Olympium Mac GUI"));
+    TRACE("window title set");
     label = control("NSTextField", (Rect){{30, 140}, {400, 30}});
+    TRACE("text field created");
     object_arg(label, "setStringValue:", string("Real Mach-O application using Cocoa"));
     number_arg(label, "setEditable:", 0);
     number_arg(label, "setBezeled:", 0);
     number_arg(label, "setDrawsBackground:", 0);
     object_arg(send0(window, "contentView"), "addSubview:", label);
+    TRACE("text field attached");
     Class klass = objc_allocateClassPair(objc_getClass("NSObject"), "OlympiumValidationController", 0);
     class_addMethod(klass, sel_registerName("didClick:"), (void (*)(void))clicked, "v@:@");
     objc_registerClassPair(klass);
     id controller = send0(send0(klass, "alloc"), "init");
     id button = control("NSButton", (Rect){{120, 60}, {220, 40}});
+    TRACE("button created");
     object_arg(button, "setTitle:", string("Verify Cocoa input"));
     object_arg(button, "setTarget:", controller);
     object_arg(button, "setAction:", sel_registerName("didClick:"));
     object_arg(send0(window, "contentView"), "addSubview:", button);
+    TRACE("button attached");
     send0(window, "center");
+    TRACE("window centered");
+    if (getenv("OLYMPIUM_COCOA_DIAGNOSTIC_PAUSE")) {
+        TRACE("diagnostic pause before first display");
+        sleep(20);
+    }
     object_arg(window, "makeKeyAndOrderFront:", 0);
+    TRACE("window ordered front");
     number_arg(app, "activateIgnoringOtherApps:", 1);
+    TRACE("application activated");
     printf("Cocoa validation: entering application event loop\n");
     fflush(0);
     send0(app, "run");

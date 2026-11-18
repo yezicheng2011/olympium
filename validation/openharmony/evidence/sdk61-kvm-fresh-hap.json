@@ -1,0 +1,15 @@
+{
+  "fresh_hap_install_verified": true,
+  "fresh_hap_input_verified": true,
+  "fresh_hap_sha256": "8316adf8be40be4198bb9b39dd2f32b3feb495df86ba40b01987e59866701b13",
+  "fresh_hap_absent_before_install": true,
+  "fresh_hap_gui_verified": true,
+  "ci_run": "https://github.com/yezicheng2011/bbb/actions/runs/44233740169",
+  "source_commit": "b993d69",
+  "guest_release": "OpenHarmony 6.1.0.31",
+  "kvm_verified": true,
+  "test_bundle": "org.olympium.validation.hap",
+  "publisher_sdk_test_signer": true,
+  "click_result": "Fresh HAP input received",
+  "screenshot": "sdk61-kvm-fresh-hap-input.png"
+}

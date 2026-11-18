@@ -116,7 +116,10 @@ def main():
             raise RuntimeError('Activity launch did not return Status: ok')
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
-            windows = run('shell', 'dumpsys', 'window', 'windows', timeout=45)
+            # Modern Android prints per-display focus outside the windows-only
+            # subsection. Read the complete dump and retain failure evidence.
+            windows = run('shell', 'dumpsys', 'window', timeout=45)
+            (args.output / 'windows.txt').write_bytes(windows)
             lines = [line for line in windows.decode(errors='replace').splitlines()
                      if 'mCurrentFocus=' in line]
             if any(args.package + '/' in line and 'Not Responding' not in line for line in lines):
@@ -124,7 +127,6 @@ def main():
             time.sleep(3)
         else:
             raise RuntimeError('The requested app did not own the foreground window')
-        (args.output / 'windows.txt').write_bytes(windows)
         def ui():
             # UiAutomator can return exit 0 with no root node during an
             # accessibility transition. Restart the client, never reuse XML.

@@ -1,5 +1,6 @@
-Validation layer requested but not available. Ignoring...
-Cocoa validation: main entered
-Cocoa validation: NSApplication=0x722b82407fe0
-Failed to create /Users for shader cache (Permission denied)---disabling.
-exit=0
+Cocoa validation: window ordered front
+2026-11-17 07:40:11.310 HelloGui[248:3e8] -[NSApplication activateIgnoringOtherApps:] unimplemented in /home/runner/work/darling/darling/src/external/cocotron/AppKit/NSApplication.m at 929
+Cocoa validation: application activated
+Cocoa validation: entering application event loop
+00:00:35.050 [INFO] [compositor.c:4506] window mapped: Olympium Mac GUI (app HelloGui)
+6291462

@@ -1,0 +1,67 @@
+name: OpenHarmony managed GUI
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'codex/**']
+    paths:
+      - '.github/workflows/openharmony-managed.yml'
+      - 'validation/openharmony/*.py'
+      - 'image/olympium-openharmony'
+      - 'image/openharmony_window.py'
+      - 'validation/openharmony/*.cpp'
+      - 'validation/openharmony/*.c'
+      - 'validation/openharmony/sources.json'
+      - 'validation/openharmony/fresh-hap/**'
+      - 'validation/runtime-artifacts.json'
+      - 'desktop/*.c'
+      - 'desktop/*.h'
+      - 'desktop/Makefile'
+      - 'validation/android/pointer-click.c'
+      - 'validation/android/virtual-pointer.xml'
+permissions:
+  contents: read
+concurrency:
+  group: openharmony-managed-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kvm-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare KVM and compiler dependencies
+        timeout-minutes: 6
+        run: |
+          test -c /dev/kvm
+          apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends acl qemu-system-x86 e2fsprogs git python3-pil libusb-1.0-0 default-jre-headless \
+            gir1.2-gtk-3.0 python3-gi libgtk-3-dev grim libwlroots-dev libwayland-dev libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev libxkbcommon-dev libdrm-dev libpixman-1-dev
+          sudo usermod -aG kvm "$(id -un)"
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          sudo install -d -o "$(id -un)" /run/dev-desktop
+      - name: Build the desktop and test pointer
+        run: |
+          make -C desktop dev-compositor-input-test dev-install
+          mkdir -p build/openharmony-input
+          wayland-scanner client-header validation/android/virtual-pointer.xml build/openharmony-input/virtual-pointer-client.h
+          wayland-scanner private-code validation/android/virtual-pointer.xml build/openharmony-input/virtual-pointer-protocol.c
+          cc -O2 -Ibuild/openharmony-input validation/android/pointer-click.c \
+            build/openharmony-input/virtual-pointer-protocol.c -o build/openharmony-input/pointer-click \
+            $(pkg-config --cflags --libs wayland-client)
+      - name: Verify app window, calculation and relaunch
+        run: |
+          sudo -u "$(id -un)" -g kvm -- /usr/bin/python3 validation/openharmony/managed-gui.py \
+            --work "$RUNNER_TEMP/oh-managed" --output build/openharmony-managed-report \
+            --desktop-pointer build/openharmony-input/pointer-click --fresh-hap
+      - name: Save actual verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: openharmony-managed-report
+          path: build/openharmony-managed-report
+          if-no-files-found: ignore
+          retention-days: 14

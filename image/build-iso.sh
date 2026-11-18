@@ -225,7 +225,7 @@ stage_desktop() {
 	mount_chroot
 	# install-to-disk needs sfdisk (fdisk) and grub-install (grub2-common).
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
-		parted dosfstools kmod fdisk grub2-common
+		parted dosfstools kmod fdisk grub2-common python3 python3-gi gir1.2-gtk-3.0 aapt adb desktop-file-utils shared-mime-info librsvg2-common
 	# The shell, Files, and Settings are set in the Ubuntu typeface. Without it
 	# Pango falls back to another face and every label changes width.
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends fonts-ubuntu
@@ -251,6 +251,26 @@ stage_desktop() {
 		"$REPO/image/driver-report" "$REPO/image/driver-install" \
 		"$REPO/image/install-sample.sh" \
 		"$ROOT/usr/libexec/dev-desktop/"
+	install -m 755 "$REPO/image/olympium-android" "$REPO/image/olympium-openharmony" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 644 "$REPO/image/openharmony_window.py" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 755 "$REPO/image/Xwayland-software" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 644 "$REPO/image/android_window.py" "$REPO/image/android_icon.py" \
+		"$REPO/image/android_runtime.py" "$REPO/image/android_framework.py" "$REPO/image/android-runtime-pins.json" \
+		"$ROOT/usr/libexec/dev-desktop/"
+	if [ "$ARCH" = amd64 ]; then
+		DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
+			default-jre-headless libsmali-java
+		# Build-time SDK/JDK stay outside the image. Only the tiny support assets
+		# and their attribution enter the installed runtime.
+		python3 "$REPO/image/build-android-support.py" --output "$REPO/build/android-support-assets"
+		install -d "$ROOT/usr/libexec/dev-desktop/android-compat"
+		install -m 644 "$REPO/build/android-support-assets/"{helper.dex,mount-helper,health.apk,profile.json,assets.json,LICENSE,musl-LICENSE} \
+			"$ROOT/usr/libexec/dev-desktop/android-compat/"
+	fi
+	install -D -m 644 "$REPO/image/dev-install.desktop" "$ROOT/usr/share/applications/dev-install.desktop"
+	install -D -m 644 "$REPO/image/olympium-hap.xml" "$ROOT/usr/share/mime/packages/olympium-hap.xml"
+	chroot "$ROOT" update-mime-database /usr/share/mime
+	chroot "$ROOT" update-desktop-database /usr/share/applications
 	# A Mac runtime, when one was staged by image/build-darling.sh and asked for.
 	if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
 		bash "$REPO/image/install-darling.sh" "$ROOT"
@@ -404,6 +424,7 @@ EOF
 [Default Applications]
 text/html=firefox.desktop
 application/xhtml+xml=firefox.desktop
+application/x-olympium-hap=dev-install.desktop
 x-scheme-handler/http=firefox.desktop
 x-scheme-handler/https=firefox.desktop
 x-scheme-handler/ftp=firefox.desktop

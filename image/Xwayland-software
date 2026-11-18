@@ -1,0 +1,3 @@
+#!/bin/sh
+# Darling isolates SysV IPC; software X11 clients must use socket image copies.
+exec /usr/bin/Xwayland -extension MIT-SHM "$@"

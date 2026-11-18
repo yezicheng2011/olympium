@@ -1,0 +1,36 @@
+diff --git a/include/Foundation/NSZone.h b/include/Foundation/NSZone.h
+index 97332b0..01ce35f 100644
+--- a/include/Foundation/NSZone.h
++++ b/include/Foundation/NSZone.h
+@@ -11,6 +11,8 @@ FOUNDATION_EXPORT void NSRecycleZone(NSZone *zone);
+ FOUNDATION_EXPORT void NSSetZoneName(NSZone *zone, NSString *name);
+ FOUNDATION_EXPORT NSString *NSZoneName(NSZone *zone);
+ FOUNDATION_EXPORT NSZone *NSZoneFromPointer(void *ptr);
++FOUNDATION_EXPORT void *NSAllocateCollectable(NSUInteger size, NSUInteger options);
++FOUNDATION_EXPORT void *NSReallocateCollectable(void *ptr, NSUInteger size, NSUInteger options);
+ FOUNDATION_EXPORT void *NSZoneMalloc(NSZone *zone, NSUInteger size);
+ FOUNDATION_EXPORT void *NSZoneCalloc(NSZone *zone, NSUInteger numElems, NSUInteger byteSize);
+ FOUNDATION_EXPORT void *NSZoneRealloc(NSZone *zone, void *ptr, NSUInteger size);
+diff --git a/src/NSZone.m b/src/NSZone.m
+index f869fac..2bd203a 100644
+--- a/src/NSZone.m
++++ b/src/NSZone.m
+@@ -82,6 +82,18 @@ void NSZoneFree(NSZone *zone, void *ptr)
+     malloc_zone_free((malloc_zone_t *)zone, ptr);
+ }
+
++// Darling uses reference counting and has no Objective-C collector.
++void *NSAllocateCollectable(NSUInteger size, NSUInteger options)
++{
++    (void)options;
++    return calloc(1, size);
++}
++
++void *NSReallocateCollectable(void *ptr, NSUInteger size, NSUInteger options)
++{
++    return ptr == NULL ? NSAllocateCollectable(size, options) : realloc(ptr, size);
++}
++
+ NSUInteger NSPageSize(void)
+ {
+     return PAGE_SIZE;
