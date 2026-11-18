@@ -27,6 +27,9 @@ PIN=3fcd2e1aa85079789d19d82415695bdecc512241
 SRC=${DARLING_SRC:-/var/tmp/darling-src}
 OUT=${DARLING_OUT:-/var/tmp/darling-out}
 COMPONENTS=${DARLING_COMPONENTS:-cli}
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PATCH_DIR=$SCRIPT_DIR/darling-patches
+PATCHES=()
 normalized_components=${COMPONENTS,,}
 normalized_components=${normalized_components//[[:space:]]/}
 normalized_components=${normalized_components//,/;}
@@ -35,6 +38,11 @@ case ";${normalized_components};" in
 		# At PIN, AppKit links UniformTypeIdentifiers. Darling enables that
 		# framework through gui_stubs, which gui does not include by itself.
 		COMPONENTS+=";gui_stubs"
+		;;
+esac
+case ";${normalized_components};" in
+	*';gui;'*|*';gui_frameworks;'*|*';gui_stubs;'*|*';stock;'*|*';all;'*)
+		PATCHES=("$PATCH_DIR"/*.patch)
 		;;
 esac
 
@@ -64,6 +72,13 @@ fi
 git -C "$SRC" fetch -q --depth 1 origin "$PIN"
 git -C "$SRC" checkout -q FETCH_HEAD
 git -C "$SRC" submodule update --init --recursive --depth 1 --jobs 2
+if [ "${#PATCHES[@]}" -gt 0 ]; then
+	cocotron=$SRC/src/external/cocotron
+	if ! git -C "$cocotron" apply --reverse --check "${PATCHES[@]}" >/dev/null 2>&1; then
+		git -C "$cocotron" apply --check "${PATCHES[@]}"
+		git -C "$cocotron" apply "${PATCHES[@]}"
+	fi
+fi
 
 mkdir -p "$SRC/build"
 cd "$SRC/build"
@@ -78,7 +93,11 @@ install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
 	echo "Darling, https://github.com/darlinghq/darling"
 	echo "commit $PIN"
 	echo "components $COMPONENTS"
-	echo "built without source changes by image/build-darling.sh"
+	echo "built by image/build-darling.sh"
+	if [ "${#PATCHES[@]}" -gt 0 ]; then
+		echo "AppKit patch SHA256:"
+		(cd "$PATCH_DIR" && sha256sum -- ./*.patch)
+	fi
 	echo "license GPL-3.0 for Darling itself; each submodule keeps its own,"
 	echo "including the Apple Public Source License for the parts Apple published"
 	echo

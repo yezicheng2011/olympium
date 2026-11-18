@@ -1,0 +1,47 @@
+diff --git a/AppKit/NSColorSpace.m b/AppKit/NSColorSpace.m
+index e217dd9..6b82431 100644
+--- a/AppKit/NSColorSpace.m
++++ b/AppKit/NSColorSpace.m
+@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+
+ #import <AppKit/NSColorSpace.h>
++#import <Foundation/NSData.h>
+ #import <Foundation/NSRaise.h>
+
+ // not sure where these belong
+@@ -100,6 +101,14 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
+     [super dealloc];
+ }
+
++- (NSData *) ICCProfileData {
++    if (_cgColorSpace == NULL)
++        return nil;
++
++    CFDataRef profile = CGColorSpaceCopyICCData(_cgColorSpace);
++    return [(NSData *)profile autorelease];
++}
++
+ - (CGColorSpaceRef) CGColorSpace {
+     return _cgColorSpace;
+ }
+diff --git a/AppKit/include/AppKit/NSColorSpace.h b/AppKit/include/AppKit/NSColorSpace.h
+index 7caf51d..ef85361 100644
+--- a/AppKit/include/AppKit/NSColorSpace.h
++++ b/AppKit/include/AppKit/NSColorSpace.h
+@@ -31,6 +31,8 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
+     NSColorSpaceModelPatterned,
+ };
+
++@class NSData;
++
+ @interface NSColorSpace : NSObject {
+     CGColorSpaceRef _cgColorSpace;
+ }
+@@ -47,5 +49,6 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
+ - initWithCGColorSpace: (CGColorSpaceRef) cgColorSpace;
+
+ - (CGColorSpaceRef) CGColorSpace;
++- (NSData *) ICCProfileData;
+
+ @end
