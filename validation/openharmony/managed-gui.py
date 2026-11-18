@@ -4,6 +4,7 @@ import argparse
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import socket
@@ -18,6 +19,8 @@ from android_runtime import sparse_copy
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--work', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--desktop-pointer', type=Path,
+                    help='Built Wayland test pointer, enables host window acceptance')
 a = parser.parse_args()
 work, out = a.work.resolve(), a.output.resolve()
 work.mkdir(parents=True, exist_ok=True)
@@ -112,13 +115,122 @@ def app_nodes(tree):
 
 
 def click_node(node):
+    x, y = node_center(node)
+    shell('uitest', 'uiInput', 'click', str(x), str(y))
+
+
+def node_center(node):
     coords = list(map(int, re.findall(r'-?\d+', node.get('bounds', ''))))
     if len(coords) != 4:
         raise RuntimeError('Invalid button bounds')
     x1, y1, x2, y2 = coords
     if not (0 <= x1 < x2 <= 360 and 0 <= y1 < y2 <= 720):
         raise RuntimeError('Button outside physical display')
-    shell('uitest', 'uiInput', 'click', str((x1+x2)//2), str((y1+y2)//2))
+    return (x1 + x2) // 2, (y1 + y2) // 2
+
+
+def calculator_button(tree, ids):
+    for node in app_nodes(tree):
+        if (node.get('type') == 'Button' and node.get('visible') != 'false' and
+                (node.get('id') in ids or node.get('text') in ids)):
+            return node
+    raise RuntimeError('Calculator button absent: ' + repr(ids))
+
+
+def desktop_calculation(tree, screenshot):
+    from PIL import Image
+
+    runtime = work / 'host-wayland'
+    runtime.mkdir(mode=0o700, exist_ok=True)
+    env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY='wayland-0',
+               WLR_BACKENDS='headless', WLR_RENDERER='pixman', DEV_DESK_HEADLESS='1',
+               GDK_BACKEND='wayland', OLYMPIUM_DESK_HOME=str(work / 'host-library'))
+    app = app_nodes(tree)[0]
+    bounds = list(map(int, re.findall(r'\d+', app['bounds'])))
+    if bounds != [0, 36, 360, 684]:
+        raise RuntimeError('Unexpected calculator content bounds')
+    with Image.open(screenshot) as image:
+        guest = image.convert('RGB')
+    # Match two strips inside the keypad while avoiding the host's rounded
+    # window corners. Derive host coordinates from actual displayed content.
+    sample_x, first_y, second_y = 24, 374, 468
+    first = guest.crop((sample_x, first_y, 336, first_y + 1)).tobytes()
+    second = guest.crop((sample_x, second_y, 336, second_y + 1)).tobytes()
+    if len(set(first)) < 3 or len(set(second)) < 3:
+        raise RuntimeError('Cannot locate the calculator keypad on the host')
+
+    def host_frame(name):
+        frame = out / (name + '.png')
+        subprocess.run(['grim', str(frame)], env=env, timeout=10, check=True)
+        with Image.open(frame) as image:
+            return image.convert('RGB')
+
+    def locate():
+        screen = host_frame('host-calculator-opened')
+        width, height = screen.size
+        for row in range(first_y - bounds[1], height - second_y + first_y):
+            line = screen.crop((0, row, width, row + 1)).tobytes()
+            pos = line.find(first)
+            if pos < 0 or pos % 3:
+                continue
+            left = pos // 3 - sample_x
+            sample_row = row + second_y - first_y
+            other = screen.crop((left + sample_x, sample_row, left + 336, sample_row + 1))
+            if other.tobytes() == second:
+                return left, row - first_y, width, height
+        return None
+
+    with ((out / 'host-compositor.log').open('w') as compositor_log,
+          (out / 'host-window.log').open('w') as window_log):
+        compositor = subprocess.Popen([ROOT / 'desktop/dev-compositor-input-test', '-n'],
+                                      env=env, stdout=compositor_log, stderr=subprocess.STDOUT)
+        window = None
+        try:
+            wait_for(lambda: (runtime / 'wayland-0').exists(), 20, 'host Wayland socket')
+            window = subprocess.Popen([sys.executable, ROOT / 'validation/openharmony/app-window.py',
+                                       '--qmp', work / 'window.sock', '--hdc', hdc, '--target', target,
+                                       '--bounds', *map(str, bounds)],
+                                      env=env, stdout=window_log, stderr=subprocess.STDOUT)
+
+            def live_location():
+                if window.poll() is not None:
+                    raise RuntimeError('OpenHarmony Wayland test window exited')
+                return locate()
+
+            offset_x, offset_y, width, height = wait_for(live_location, 30, 'calculator pixels on host')
+            def guest_fields():
+                current = app_nodes(layout('host-pointer-result'))
+                return {n.get('id'): n.get('text') for n in current if n.get('type') == 'Text'}
+
+            cases = (('C', '', ''), ('2', '2', '2'), ('+', '2+', '2'),
+                     ('3', '2+3', '5'), ('=', '5', ''))
+            for button, expression, result in cases:
+                gx, gy = node_center(calculator_button(tree, (button,)))
+                subprocess.run([str(a.desktop_pointer.resolve()), str(width), str(height),
+                                str(gx + offset_x), str(gy + offset_y)],
+                               env=env, timeout=10, check=True)
+
+                def input_observed():
+                    fields = guest_fields()
+                    return fields.get('expression') == expression and fields.get('result') == result
+
+                wait_for(input_observed, 20, f'guest response to host button {button}')
+                if button == '3':
+                    time.sleep(0.5)
+                    host_frame('host-calculator-preview')
+            time.sleep(0.5)
+            host_frame('host-calculator-result')
+            report['desktop_window_verified'] = True
+            report['desktop_pointer_verified'] = True
+        finally:
+            for process in (window, compositor):
+                if process is not None and process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=8)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
 
 
 def calculator(round_name):
@@ -160,12 +272,7 @@ def calculator(round_name):
     report['guest_app_gui_verified'] = True
 
     def click(texts):
-        current = app_nodes(layout(round_name + '-before-click'))
-        candidates = [n for n in current if n.get('type') == 'Button' and
-                      (n.get('id') in texts or n.get('text') in texts) and n.get('visible') != 'false']
-        if not candidates:
-            raise RuntimeError('Calculator button absent: ' + repr(texts))
-        click_node(candidates[-1])
+        click_node(calculator_button(layout(round_name + '-before-click'), texts))
 
     click(('C', 'AC', '清除'))
     before = app_nodes(layout(round_name + '-cleared'))
@@ -207,6 +314,7 @@ def calculator(round_name):
     wait_for(committed_five, 30, 'equals commits five and clears preview')
     capture(round_name + '-result')
     report['input_verified'] = True
+    return tree
 
 
 try:
@@ -245,6 +353,10 @@ try:
                '-device', 'virtio-net-pci,netdev=net0',
                '-object', 'rng-random,id=rng0,filename=/dev/urandom', '-device', 'virtio-rng-pci,rng=rng0',
                '-qmp', f'unix:{monitor},server=on,wait=off', '-serial', 'file:' + str(out / 'serial.log')]
+    if a.desktop_pointer:
+        window_monitor = work / 'window.sock'
+        window_monitor.unlink(missing_ok=True)
+        command += ['-qmp', f'unix:{window_monitor},server=on,wait=off']
     for i, name in enumerate(('updater', 'system', 'vendor')):
         command += ['-drive', f'file={image / (name + ".img")},if=virtio,format=raw,snapshot=on,index={i}']
     command += ['-drive', f'file={userdata},if=virtio,format=raw,index=3']
@@ -350,8 +462,10 @@ try:
     if 'install bundle successfully' not in install.lower():
         raise RuntimeError('Publisher HAP reinstall was not accepted by Bundle Manager')
     report['native_hap_reinstall_verified'] = True
-    calculator('reopened')
+    tree = calculator('reopened')
     report['relaunch_verified'] = True
+    if a.desktop_pointer:
+        desktop_calculation(tree, out / 'reopened-result.png')
 except Exception as error:
     report['error'] = str(error)
     if qmp:
