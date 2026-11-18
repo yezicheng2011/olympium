@@ -114,6 +114,13 @@ still running. Cocoa read `Linux Wayland copy`. Text after the GTK owner
 closed did not pass in the isolated session without the Xwayland clipboard
 helper. See `evidence/cocoa-wayland-clipboard.json`.
 
+An independent Cocoa probe also published a 4×4 image through
+`NSPasteboard setData:forType:`. GTK's image request read the PNG, and a
+direct `image/tiff` request read the TIFF. Both decoded to the expected
+RGBA pixels, including alpha. GTK's generic image request did not pick up
+the TIFF-only offer. PikoPixel's Copy action did not publish a selection
+in the tested document. See `evidence/cocoa-wayland-image-clipboard.json`.
+
 In the full source runtime, the same publisher Hex Fiend 2.3.0 now opens a
 known byte sequence using the default Mach-O two-level namespace. It shows
 the expected hex and text. Drag-selecting byte `4F` updates the inspector to
