@@ -1,0 +1,92 @@
+name: Build Olympium amd64 preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/release-2026-11-18]
+    paths:
+      - '.github/workflows/release-preview.yml'
+      - 'image/build-iso.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  amd64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install image build tools
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y --no-install-recommends \
+            debootstrap squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin \
+            build-essential pkg-config libwlroots-dev libwayland-dev libcairo2-dev libpango1.0-dev \
+            libinput-dev libxkbcommon-dev libdrm-dev libpixman-1-dev libgtk-3-dev \
+            libxcb1-dev libxcb-xfixes0-dev liblzma-dev zlib1g-dev default-jdk-headless \
+            musl-tools qemu-system-x86 acl
+      - name: Build live image and verify contents
+        run: |
+          sudo env OLYMPIUM_WINE=1 bash image/build-iso.sh amd64
+          mkdir -p build/release build/boot-report
+          root=/var/tmp/dev-live/rootfs-amd64
+          iso=build/release/olympium-amd64-preview.iso
+          cp build/dev-live-amd64.iso "$iso"
+          test "$(stat -c %s "$iso")" -lt 2147483648
+          xorriso -indev "$iso" -report_el_torito plain > build/boot-report/boot-catalog.txt 2>&1
+          grep -q 'BIOS' build/boot-report/boot-catalog.txt
+          grep -q 'UEFI' build/boot-report/boot-catalog.txt
+          squash=/var/tmp/dev-live/iso-amd64/live/filesystem.squashfs
+          test -s "$squash"
+          xorriso -osirrox on -indev "$iso" -extract /live/filesystem.squashfs build/boot-report/filesystem.squashfs
+          cmp "$squash" build/boot-report/filesystem.squashfs
+          rm build/boot-report/filesystem.squashfs
+          sudo chroot "$root" dpkg-query -W wine64 wine32:i386 xwayland
+          for path in olympium-android olympium-openharmony android-compat/health.apk android-compat/helper.dex dev-clip-helper; do
+            sudo test -s "$root/usr/libexec/dev-desktop/$path"
+          done
+          sudo cp "$root/usr/share/doc/dev-desktop/sbom.tsv" build/release/package-manifest-amd64.tsv
+          (cd build/release && sha256sum olympium-amd64-preview.iso package-manifest-amd64.tsv > SHA256SUMS)
+      - name: Boot the packaged ISO
+        run: |
+          accel=(-accel tcg)
+          if test -c /dev/kvm; then
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+            accel=(-accel kvm -cpu host)
+          fi
+          qemu-system-x86_64 "${accel[@]}" -m 3072 -smp 2 -vga virtio -display none \
+            -boot d -cdrom build/release/olympium-amd64-preview.iso -no-reboot \
+            -serial file:build/boot-report/serial.log -monitor none &
+          vm_pid=$!
+          trap 'kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 180); do
+            if grep -q 'compositor on WAYLAND_DISPLAY=' build/boot-report/serial.log; then
+              sleep 5
+              kill -0 "$vm_pid"
+              ! grep -qE 'compositor exit|Kernel panic' build/boot-report/serial.log
+              exit 0
+            fi
+            kill -0 "$vm_pid" || break
+            sleep 2
+          done
+          tail -100 build/boot-report/serial.log
+          exit 1
+      - name: Keep ISO boot evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: preview-amd64-boot
+          path: build/boot-report
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Keep the verified ISO and checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: preview-amd64-release
+          path: build/release
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

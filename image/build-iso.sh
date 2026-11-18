@@ -593,6 +593,10 @@ install_drivers
 verify_drivers
 mkdir -p "$WORK"
 stage_runtime
+if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
+	mount_chroot
+	bash "$REPO/image/install-wine.sh" "$ROOT" "$ARCH"
+fi
 stage_desktop
 if [ "$ARCH" = arm64 ]; then
 	# Rebuild the desktop against the arm64 sysroot. The host binaries are amd64.
