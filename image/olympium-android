@@ -101,6 +101,7 @@ def inspect(apk, root):
     icon = apk_icon(apk, badging, aapt, previews / sha)
     sdk = re.search(r"^sdkVersion:'(\d+)'$", badging, re.M)
     return dict(ok=True, package=identity[1], name=name, version=identity[3],
+                version_code=int(identity[2]),
                 id='android-' + hashlib.sha256(identity[1].encode()).hexdigest()[:16],
                 sha=sha, icon=str(icon) if icon else '', min_sdk=int(sdk[1]) if sdk else 1,
                 needs_runtime_download=not (RUNTIME / 'emulator/emulator').is_file()
@@ -312,42 +313,196 @@ def provision_services(serial, root):
     return state
 
 
-def install(apk, root):
+def save_json(path, value):
+    with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as staged:
+        try:
+            json.dump(value, staged, ensure_ascii=False, indent=2)
+            staged.write('\n')
+            staged.flush()
+            os.fsync(staged.fileno())
+            os.replace(staged.name, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            Path(staged.name).unlink(missing_ok=True)
+
+
+def validate_installation(info, dest, package):
+    if info.get('package') != package or not re.fullmatch(r'[0-9a-f]{64}', info.get('sha', '')):
+        raise RuntimeError('Android installation record has changed')
+    expected_id = 'android-' + hashlib.sha256(package.encode()).hexdigest()[:16]
+    if info.get('id') != expected_id:
+        raise RuntimeError('Android application identity has changed')
+    saved = Path(info.get('path', ''))
+    if saved.parent != dest or saved.name != info['sha'] + '.apk' or digest(saved) != info['sha']:
+        raise RuntimeError('Saved APK identity has changed')
+    return info
+
+
+def load_installation(root, package):
+    dest = root / 'android/packages' / package
+    return validate_installation(json.loads((dest / 'installed.json').read_text()), dest, package)
+
+
+def recover_pending_update(root, package, serial):
+    """Reconcile an interrupted operation using only its already reviewed bytes."""
+    dest = root / 'android/packages' / package
+    latest = dest / 'updates/latest.json'
+    if latest.exists():
+        recovery = json.loads(latest.read_text())
+        if recovery.get('status') == 'rolling-back':
+            before = validate_installation(recovery['before'], dest, package)
+            after = validate_installation(recovery['after'], dest, package)
+            if before['serial'] != serial or after['serial'] != serial:
+                raise RuntimeError('Pending rollback belongs to another Android runtime')
+            actual = installed_digest(serial, package)
+            if actual == before['sha']:
+                save_json(dest / 'installed.json', before)
+                recovery['status'] = 'rolled-back'
+            elif actual == after['sha']:
+                recovery['status'] = 'installed'
+            else:
+                raise RuntimeError('Pending rollback does not match the installed APK')
+            save_json(latest, recovery)
+    pending = dest / 'updates/pending.json'
+    if not pending.exists():
+        return
+    transaction = json.loads(pending.read_text())
+    before = validate_installation(transaction['before'], dest, package)
+    after = validate_installation(transaction['after'], dest, package)
+    if before['serial'] != serial or after['serial'] != serial:
+        raise RuntimeError('Pending update belongs to another Android runtime')
+    actual = installed_digest(serial, package)
+    if actual == before['sha']:
+        transaction['status'] = 'not-installed'
+        save_json(pending, transaction)
+        pending.replace(pending.with_name('failed-' + after['sha'] + '.json'))
+    elif actual == after['sha']:
+        save_json(dest / 'installed.json', after)
+        transaction.update(status='installed', rollback_requested=True)
+        save_json(pending.with_name('latest.json'), transaction)
+        pending.unlink()
+    else:
+        raise RuntimeError('Pending update does not match the installed APK; review is required')
+
+
+def install(apk, root, update_only=False):
     info = inspect(apk, root)
-    serial = device(root)
+    dest = root / 'android/packages' / info['package']
+    previous = load_installation(root, info['package']) if (dest / 'installed.json').exists() else None
+    if update_only and previous is None:
+        raise RuntimeError('Updates require an existing managed application')
+    serial = device(root, previous['serial'] if previous else None)
     sdk = int(adb(serial, 'shell', 'getprop', 'ro.build.version.sdk').strip())
     if sdk not in (29, 37) or info['min_sdk'] > sdk:
         raise RuntimeError('This app needs a different Android version; configure the Android 17 runtime')
     if sdk == 37:
         prepare_services(serial, root)
-    dest = root / 'android/packages' / info['package']
     dest.mkdir(parents=True, exist_ok=True)
     with (dest / 'operation.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        recover_pending_update(root, info['package'], serial)
+        previous = load_installation(root, info['package']) if (dest / 'installed.json').exists() else None
+        if update_only and previous is None:
+            raise RuntimeError('The managed application was removed during update preparation')
+        adopting = False
+        if previous:
+            actual = installed_digest(serial, info['package'])
+            if previous['serial'] != serial:
+                raise RuntimeError('Android application belongs to another runtime')
+            if actual != previous['sha']:
+                if not update_only and actual == info['sha']:
+                    # Explicitly importing the currently installed bytes is a
+                    # fresh review, not an unattended publisher-trust update.
+                    previous = None
+                    adopting = True
+                else:
+                    raise RuntimeError('Android application changed outside this installer; review it before updating')
+        if previous:
+            if previous['sha'] == info['sha']:
+                # Reinstalling identical bytes can expire Android's existing
+                # rollback snapshot. Preserve it and avoid unnecessary work.
+                return dict(previous, unchanged=True)
+            if sdk != 37:
+                raise RuntimeError('Managed APK updates currently require the Android 17 runtime')
+            old_code = previous.get('version_code')
+            if old_code is None:
+                old_code = inspect(Path(previous['path']), root)['version_code']
+                previous['version_code'] = old_code
+            if info['version_code'] <= old_code:
+                raise RuntimeError('An update must have a newer Android version code')
+        history = dest / 'updates'
+        transaction = None
         with tempfile.NamedTemporaryFile(dir=dest, suffix='.apk') as staged:
             with apk.open('rb') as source:
                 shutil.copyfileobj(source, staged)
             staged.flush()
             if digest(staged.name) != info['sha']:
                 raise RuntimeError('APK changed while it was copied')
-            result = adb(serial, 'install', '--no-streaming', '-r', staged.name, timeout=600)
-            if 'Success' not in result or installed_digest(serial, info['package']) != info['sha']:
-                raise RuntimeError('Android did not install the selected APK bytes')
             saved = dest / (info['sha'] + '.apk')
             shutil.copyfile(staged.name, saved)
-            info.update(path=str(saved), serial=serial)
+            info.update(path=str(saved), serial=serial, needs_runtime_download=False)
+            if previous:
+                history.mkdir(exist_ok=True)
+                transaction = dict(status='installing', before=previous, after=info)
+                save_json(history / 'pending.json', transaction)
+            flags = ['--enable-rollback', '0'] if previous else []
+            try:
+                result = 'Success' if adopting else adb(serial, 'install', '--no-streaming', '-r', *flags, staged.name, timeout=600)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+                if transaction:
+                    transaction.update(status='failed', error=str(error))
+                    save_json(history / 'pending.json', transaction)
+                raise
+            if 'Success' not in result or installed_digest(serial, info['package']) != info['sha']:
+                raise RuntimeError('Android did not install the selected APK bytes')
             manifest = dest / 'installed.json'
-            temporary = manifest.with_suffix('.tmp')
-            temporary.write_text(json.dumps(info, ensure_ascii=False) + '\n')
-            temporary.replace(manifest)
+            save_json(manifest, info)
+            if transaction:
+                transaction.update(status='installed', after=info, rollback_requested=True)
+                save_json(history / 'latest.json', transaction)
+                (history / 'pending.json').unlink(missing_ok=True)
     return info
+
+
+def rollback(package, root):
+    dest = root / 'android/packages' / package
+    with (dest / 'operation.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        current = load_installation(root, package)
+        serial = device(root, current['serial'])
+        recover_pending_update(root, package, serial)
+        current = load_installation(root, package)
+        history = dest / 'updates/latest.json'
+        transaction = json.loads(history.read_text())
+        if transaction.get('status') == 'rolled-back' and transaction.get('before', {}).get('sha') == current['sha']:
+            if installed_digest(serial, package) != current['sha']:
+                raise RuntimeError('Android application changed after rollback')
+            return dict(current, rolled_back=True, unchanged=True)
+        if transaction.get('status') != 'installed' or transaction.get('after', {}).get('sha') != current['sha']:
+            raise RuntimeError('No managed update is ready for rollback')
+        previous = validate_installation(transaction['before'], dest, package)
+        if installed_digest(serial, package) != current['sha']:
+            raise RuntimeError('Android application changed outside this installer; rollback was refused')
+        transaction['status'] = 'rolling-back'
+        save_json(history, transaction)
+        result = adb(serial, 'shell', 'pm', 'rollback-app', package, timeout=600)
+        if 'Success' not in result or installed_digest(serial, package) != previous['sha']:
+            raise RuntimeError('Android did not restore the previous APK; its installation record was retained')
+        save_json(dest / 'installed.json', previous)
+        transaction['status'] = 'rolled-back'
+        save_json(history, transaction)
+        return dict(previous, rolled_back=True)
 
 
 def main():
     global RUNTIME
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['check', 'inspect', 'install', 'launch', 'remove'])
+    parser.add_argument('command', choices=['check', 'inspect', 'install', 'update', 'rollback', 'recover', 'launch', 'remove'])
     parser.add_argument('value', nargs='?')
     parser.add_argument('--root', type=Path)
     args = parser.parse_args()
@@ -366,21 +521,29 @@ def main():
         RUNTIME = Path(os.environ['OLYMPIUM_ANDROID_SDK']).resolve()
     elif not (RUNTIME / 'emulator/emulator').is_file():
         RUNTIME = root / 'android/runtime'
-    if args.command in ('inspect', 'install'):
+    if args.command in ('inspect', 'install', 'update'):
         if not args.value:
             parser.error('APK path is required')
-        info = inspect(Path(args.value), root) if args.command == 'inspect' else install(Path(args.value), root)
+        info = inspect(Path(args.value), root) if args.command == 'inspect' else install(Path(args.value), root, args.command == 'update')
         print(json.dumps(info, ensure_ascii=False))
         return
     if not args.value or not re.fullmatch(PACKAGE, args.value):
         parser.error('Android package name is required')
+    if args.command == 'rollback':
+        print(json.dumps(rollback(args.value, root), ensure_ascii=False))
+        return
+    if args.command == 'recover':
+        dest = root / 'android/packages' / args.value
+        with (dest / 'operation.lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            current = load_installation(root, args.value)
+            serial = device(root, current['serial'])
+            recover_pending_update(root, args.value, serial)
+            print(json.dumps(load_installation(root, args.value), ensure_ascii=False))
+        return
     dest = root / 'android/packages' / args.value
-    info = json.loads((dest / 'installed.json').read_text())
-    if info['package'] != args.value:
-        raise RuntimeError('Android installation record has changed')
+    info = load_installation(root, args.value)
     saved = Path(info['path'])
-    if saved.parent != dest or saved.name != info['sha'] + '.apk' or digest(saved) != info['sha']:
-        raise RuntimeError('Saved APK identity has changed')
     serial = device(root, info['serial'])
     if installed_digest(serial, args.value) != info['sha']:
         raise RuntimeError('The Android app was changed outside this installer; reinstall it to update the record')
