@@ -286,9 +286,33 @@ try:
     # With this publisher image the launcher can be visible while the lock
     # service still reports locked. Exercise the ordinary user launch path;
     # retain the API discrepancy rather than equating it with unlock success.
-    wait_for(lambda: any(n.get('bundleName') == 'com.ohos.launcher'
-                        for n in nodes(layout('home-after-normal-gesture'))),
-             60, 'ordinary guest launcher after unprotected gesture')
+    def home_ready():
+        tree = layout('home-after-normal-gesture')
+        current = list(nodes(tree))
+        if any(n.get('bundleName') == 'com.ohos.launcher' for n in current):
+            return True
+        if any(n.get('abilityName') == 'com.ohos.systemui.screenlock.ServiceExtAbility'
+               for n in current):
+            # Input must follow an actual ready lock-screen tree. The initial
+            # wake may finish before this surface starts accepting gestures.
+            credential = shell('/data/local/tmp/bootstrap', '--status')
+            if 'credential_configured=0' not in credential:
+                raise RuntimeError('SDK guest is no longer confirmed unprotected')
+            shell('uitest', 'uiInput', 'swipe', '180', '600', '180', '120', '600')
+        return False
+
+    with (out / 'normal-unlock.log').open('w') as unlock_log:
+        normal_unlock = subprocess.Popen([str(hdc), '-t', target, 'shell', '/data/local/tmp/bootstrap'],
+                                         stdout=unlock_log, stderr=subprocess.STDOUT)
+        try:
+            wait_for(home_ready, 90, 'ordinary guest launcher after unprotected gesture')
+            normal_unlock.wait(timeout=45)
+        finally:
+            if normal_unlock.poll() is None:
+                normal_unlock.terminate()
+                normal_unlock.wait(timeout=10)
+    status = shell('/data/local/tmp/bootstrap', '--status')
+    report['lock_manager_reports_unlocked'] = 'screen_locked=0' in status
     calculator('first')
     shell('aa', 'force-stop', BUNDLE)
     wait_for(lambda: not app_nodes(layout('stopped')), 30, 'app window removed')
