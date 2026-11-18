@@ -97,6 +97,12 @@ int main(int argc, char **argv) {
     std::printf("normal_wakeup_result=%d screen_on=%d\n", wake_result, screen_on(power_manager, true));
     std::fflush(stdout);
     if (wake_result) return 11;
+    if (app_profile) {
+        // The harness performs an ordinary gesture and verifies the resulting
+        // app-owned UI. Do not race that gesture with an asynchronous Unlock.
+        std::puts("app_profile_ready_for_normal_gesture");
+        return 0;
+    }
     if (!manager->IsScreenLocked()) return 0;
     OHOS::sptr<Callback> callback = new Callback();
     std::thread([] { OHOS::IPCSkeleton::JoinWorkThread(); }).detach();

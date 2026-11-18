@@ -110,12 +110,37 @@ def app_nodes(tree):
     return []
 
 
+def click_node(node):
+    coords = list(map(int, re.findall(r'-?\d+', node.get('bounds', ''))))
+    if len(coords) != 4:
+        raise RuntimeError('Invalid button bounds')
+    x1, y1, x2, y2 = coords
+    if not (0 <= x1 < x2 <= 360 and 0 <= y1 < y2 <= 720):
+        raise RuntimeError('Button outside physical display')
+    shell('uitest', 'uiInput', 'click', str((x1+x2)//2), str((y1+y2)//2))
+
+
 def calculator(round_name):
     result = shell('aa', 'start', '-a', 'MainAbility', '-b', BUNDLE)
     if 'error:' in result.lower():
         raise RuntimeError('Ability start rejected: ' + result)
-    tree = wait_for(lambda: (t if app_nodes(t := layout(round_name + '-start')) else None),
-                    90, 'calculator-owned UI')
+    def ready():
+        tree = layout(round_name + '-start')
+        # The bundled distributed calculator asks for device collaboration on
+        # first launch. Basic arithmetic needs no device discovery permission.
+        for child in tree.get('children', []):
+            attrs = child.get('attributes', {})
+            if (attrs.get('bundleName') == 'com.ohos.permissionmanager' and
+                    attrs.get('abilityName') == 'com.ohos.permissionmanager.GrantAbility'):
+                for node in nodes(child):
+                    if node.get('type') == 'Button' and node.get('text') == 'Deny':
+                        capture(round_name + '-optional-permission')
+                        click_node(node)
+                        report['optional_collaboration_permission'] = 'denied through guest UI'
+                        return None
+        return tree if app_nodes(tree) else None
+
+    tree = wait_for(ready, 90, 'calculator-owned UI')
     capture(round_name + '-opened')
     report['guest_app_gui_verified'] = True
 
@@ -124,13 +149,7 @@ def calculator(round_name):
         candidates = [n for n in current if n.get('text') in texts and n.get('visible') != 'false']
         if not candidates:
             raise RuntimeError('Calculator button absent: ' + repr(texts))
-        coords = list(map(int, re.findall(r'-?\d+', candidates[-1].get('bounds', ''))))
-        if len(coords) != 4:
-            raise RuntimeError('Invalid button bounds')
-        x1, y1, x2, y2 = coords
-        if not (0 <= x1 < x2 <= 360 and 0 <= y1 < y2 <= 720):
-            raise RuntimeError('Button outside physical display')
-        shell('uitest', 'uiInput', 'click', str((x1+x2)//2), str((y1+y2)//2))
+        click_node(candidates[-1])
 
     click(('C', 'AC', '清除'))
     before = app_nodes(layout(round_name + '-cleared'))
@@ -239,7 +258,8 @@ try:
             helper.wait(timeout=60)
             log.flush()
             text = (out / 'bootstrap.log').read_text()
-            if helper.returncode or 'screen_on=1' not in text:
+            if (helper.returncode or 'screen_on=1' not in text or
+                    'app_profile_ready_for_normal_gesture' not in text):
                 raise RuntimeError('SDK bootstrap did not complete normally')
         finally:
             if helper.poll() is None:
