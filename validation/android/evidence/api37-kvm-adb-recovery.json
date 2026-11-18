@@ -1,0 +1,48 @@
+{
+  "run": "https://github.com/yezicheng2011/bbb/actions/runs/44289494539",
+  "commit": "f655a59fe9166cab23aacb1fa77339261c96beca",
+  "status": "passed",
+  "kvm_access": true,
+  "automatic_microg_bootstrap_verified": true,
+  "cold_boot_recovery_verified": true,
+  "gms_api_compatibility_verified": false,
+  "desktop_window_verified": false,
+  "rounds": [
+    {
+      "process": {
+        "pid": 3516,
+        "start_ticks": "8866"
+      },
+      "managed_install_seconds": 160.791,
+      "round_seconds": 175.992,
+      "framework_sha256": "8d7f9529f8f5191b8dcc6ac108f3d421e5e6ad61f435e27f6cc817fdda09eb41",
+      "basic_services_verified": true,
+      "calculator_input_verified": true
+    },
+    {
+      "process": {
+        "pid": 4109,
+        "start_ticks": "24084"
+      },
+      "managed_install_seconds": 76.705,
+      "round_seconds": 91.949,
+      "framework_sha256": "8d7f9529f8f5191b8dcc6ac108f3d421e5e6ad61f435e27f6cc817fdda09eb41",
+      "basic_services_verified": true,
+      "calculator_input_verified": true
+    }
+  ],
+  "updates": {
+    "status": "passed",
+    "signed_update_verified": true,
+    "data_retained": true,
+    "wrong_signer_rejected": true,
+    "apk_rollback_verified": true,
+    "private_data_rollback_verified": true,
+    "apk_sha256": {
+      "v1": "07abd09e8afeb38583854d1630d8cb9cf83862187add071e9c7e02d145761090",
+      "v2": "54ed446387e4615f92c95dd954641e530f4fe919157493554d8097ce13f2bd0b",
+      "wrong_signer": "6618b29d343dca3432e40788ca6ea68c57ab67c7d08e266ca94549ab8a0a1c21"
+    },
+    "app_uid": 10160
+  }
+}

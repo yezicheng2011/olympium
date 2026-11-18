@@ -1,0 +1,12 @@
+{
+  "run": "https://github.com/yezicheng2011/bbb/actions/runs/44289494449",
+  "commit": "f655a59fe9166cab23aacb1fa77339261c96beca",
+  "kvm_verified": true,
+  "lock_manager_reports_unlocked": true,
+  "desktop_hap_install_verified": true,
+  "desktop_hap_original_icon_verified": true,
+  "desktop_hap_launch_input_close_relaunch_verified": true,
+  "desktop_hap_remove_verified": true,
+  "fresh_hap_sha256": "7ee7f47c55aa4c26c6e9686762bb271f1da8f45feb405aba793208d7837a4d56",
+  "elapsed_seconds": 326.673
+}

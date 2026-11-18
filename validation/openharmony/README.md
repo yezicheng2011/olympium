@@ -65,6 +65,14 @@ fresh installation, original icon, launcher input, close, reopen and removal.
 Feature-module sets, keyboard and drag forwarding, and HarmonyOS commercial
 apps require separate work and testing.
 
+The [desktop HAP KVM run](https://github.com/yezicheng2011/bbb/actions/runs/44289494449)
+passed with the normal-privilege SDK probe. It rejected installation without
+consent, installed the signed archive into an empty package slot, verified
+the original icon, and opened the generated GIO launcher. Pointer input
+changed the app's visible text. Titlebar close stopped the guest app and
+reopening the launcher repeated the interaction. Removal cleared both the
+launcher and the guest package.
+
 The host flow also passed locally with simulated HDC and QMP serving recorded
 SDK frames and accessibility trees. Real Wayland mapping, pointer coordinates,
 titlebar close and GIO relaunch were exercised in that run. See
