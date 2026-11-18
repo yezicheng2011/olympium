@@ -44,9 +44,26 @@
     ]
   },
   "desktop_pointer_verified": true,
-  "elapsed_seconds": 207.908,
-  "ci_run": "https://github.com/yezicheng2011/bbb/actions/runs/44230816932",
-  "source_commit": "df0766d",
+  "desktop_close_verified": true,
+  "desktop-reopened_preview": {
+    "result": "5",
+    "expression": "2+3"
+  },
+  "desktop-reopened_calculation": {
+    "expression": "5",
+    "preview_cleared": true,
+    "input_button_ids": [
+      "C",
+      "2",
+      "+",
+      "3",
+      "="
+    ]
+  },
+  "desktop_relaunch_verified": true,
+  "elapsed_seconds": 302.989,
+  "ci_run": "https://github.com/yezicheng2011/bbb/actions/runs/44232561716",
+  "source_commit": "3868c1c",
   "guest_release": "OpenHarmony 6.1.0.31",
   "desktop_transport": "Cropped QMP display frames and HDC input through a GTK Wayland window",
   "preview_screenshot": "sdk61-kvm-host-pointer-preview.png"
