@@ -16,8 +16,8 @@
 #
 # "cli" is the loader, the server, the system libraries, and the command-line
 # programs. It runs command-line Mach-O programs. It has no AppKit, so it does
-# not open a graphical Mac application; that needs Darling's "gui" components,
-# which this script can be asked for and which were not built or run here.
+# not open a graphical Mac application. Use DARLING_COMPONENTS='cli;gui'
+# to build AppKit and its framework dependencies.
 #
 # On the build machine, an x86_64 computer with four processors and Ubuntu
 # 24.04, the clone with its 157 submodules was 5 GB, the build was 15,457
@@ -27,6 +27,16 @@ PIN=3fcd2e1aa85079789d19d82415695bdecc512241
 SRC=${DARLING_SRC:-/var/tmp/darling-src}
 OUT=${DARLING_OUT:-/var/tmp/darling-out}
 COMPONENTS=${DARLING_COMPONENTS:-cli}
+normalized_components=${COMPONENTS,,}
+normalized_components=${normalized_components//[[:space:]]/}
+normalized_components=${normalized_components//,/;}
+case ";${normalized_components};" in
+	*';gui;'*|*';gui_frameworks;'*)
+		# At PIN, AppKit links UniformTypeIdentifiers. Darling enables that
+		# framework through gui_stubs, which gui does not include by itself.
+		COMPONENTS+=";gui_stubs"
+		;;
+esac
 
 missing=""
 for tool in git cmake ninja clang bison flex pkg-config python3; do
