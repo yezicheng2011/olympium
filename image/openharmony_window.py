@@ -81,6 +81,7 @@ def main():
                     text=True, timeout=12, check=True)
                 if 'No Error' not in result.stdout:
                     raise RuntimeError('Guest rejected pointer input: ' + result.stdout.strip())
+                print('Guest pointer accepted', flush=True)
 
             def closed(*_):
                 Gtk.main_quit()

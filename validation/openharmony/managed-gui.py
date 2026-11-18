@@ -403,10 +403,17 @@ def verify_desktop_hap(package):
                                       env=env, stdout=log, stderr=subprocess.STDOUT)
         try:
             wait_for(lambda: (runtime / 'wayland-0').exists(), 20, 'HAP desktop Wayland socket')
+            compositor_log = out / 'desktop-hap-compositor.log'
+            launch_log = out / 'desktop-hap-launch.log'
             for label in ('first', 'reopened'):
-                with (out / 'desktop-hap-launch.log').open('a') as app_log:
+                mapped = compositor_log.read_text().count('window mapped:')
+                with launch_log.open('a') as app_log:
                     subprocess.run(['gio', 'launch', str(desktop_entry)], env=env,
                                    stdout=app_log, stderr=subprocess.STDOUT, check=True, timeout=30)
+                # Wait for the runtime's own accessibility query to finish
+                # before the harness runs another uitest command in the guest.
+                wait_for(lambda: compositor_log.read_text().count('window mapped:') > mapped,
+                         75, 'Wayland window mapped by the HAP launcher')
                 elements = wait_for(lambda: app_view('desktop-hap-' + label, 'Olympium fresh HAP'),
                                     50, 'owned HAP app window from desktop launcher')
                 bounds = list(map(int, re.findall(r'\d+', elements[0]['bounds'])))
@@ -445,12 +452,18 @@ def verify_desktop_hap(package):
                 def click(px, py):
                     desktop(a.desktop_pointer.resolve(), screen_w, screen_h, px, py, timeout=15)
 
+                accepted = launch_log.read_text().count('Guest pointer accepted')
                 click(left + bx, top + by)
+                wait_for(lambda: launch_log.read_text().count('Guest pointer accepted') > accepted,
+                         20, 'guest acceptance of the forwarded host pointer')
                 wait_for(lambda: app_view('desktop-hap-input', 'Fresh HAP input received'),
                          25, 'HAP text changes after desktop pointer input')
                 time.sleep(0.5)
                 host_frame(f'desktop-hap-{label}-input')
+                stopped = launch_log.read_text().count('OpenHarmony app stopped')
                 click(left + 16, top - 17)
+                wait_for(lambda: launch_log.read_text().count('OpenHarmony app stopped') > stopped,
+                         30, 'close sent guest force-stop through the HAP runtime')
                 wait_for(lambda: not app_nodes(layout('desktop-hap-window-closed'), FRESH_BUNDLE),
                          30, 'closing desktop window force-stops the guest app')
             report['desktop_hap_launch_input_close_relaunch_verified'] = True

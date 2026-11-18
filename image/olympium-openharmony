@@ -2,6 +2,7 @@
 """Install single-entry HAPs into an explicitly configured OpenHarmony SDK session."""
 
 import argparse
+import contextlib
 import fcntl
 import hashlib
 import json
@@ -120,7 +121,7 @@ class Session:
         try:
             with tempfile.TemporaryDirectory(prefix='olympium-oh-layout-') as directory:
                 path = Path(directory) / 'layout.json'
-                self.shell('uitest', 'dumpLayout', '-p', remote, timeout=15)
+                self.shell('uitest', 'dumpLayout', '-p', remote, timeout=30)
                 self.command('file', 'recv', remote, path)
                 todo = [json.loads(path.read_text())]
                 while todo:
@@ -134,7 +135,8 @@ class Session:
                             return coords
                     todo.extend(reversed(node.get('children', [])))
         finally:
-            self.shell('rm', '-f', remote)
+            with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
+                self.shell('rm', '-f', remote, timeout=5)
         return None
 
 
@@ -174,9 +176,12 @@ def launch(session, bundle, root, title):
     if 'start ability successfully' not in result.lower():
         raise ValueError('Ability Manager could not open the application: ' + result.strip()[:240])
     try:
-        deadline = time.monotonic() + 45
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
-            bounds = session.bounds(bundle)
+            try:
+                bounds = session.bounds(bundle)
+            except (FileNotFoundError, json.JSONDecodeError, subprocess.TimeoutExpired):
+                bounds = None
             if bounds:
                 break
             time.sleep(1)
@@ -187,6 +192,7 @@ def launch(session, bundle, root, title):
                         '--title', title or info['name'], '--bounds', *map(str, bounds)], check=True)
     finally:
         session.shell('aa', 'force-stop', bundle)
+        print('OpenHarmony app stopped', flush=True)
 
 
 def main():
