@@ -2008,9 +2008,14 @@ static int launch_mac(const struct rec *rec, int argc, char **argv) {
 		args[k++] = argv[i];
 	}
 	args[k] = NULL;
-	execv(args[0], args);
-	perror(args[0]);
-	return 127;
+	int status = run_wait(args);
+	if (status != 0) {
+		snprintf(text, sizeof text,
+			"%s could not run with the installed Mac runtime (exit %d). "
+			"The application stays in Applications.", rec->name, status);
+		show_notice(rec->name, text, icon);
+	}
+	return status < 0 ? 127 : status;
 }
 
 /* Takes an installed Mac application away again: the application itself, its
