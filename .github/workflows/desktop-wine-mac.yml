@@ -1,0 +1,42 @@
+name: Desktop Wine and Mac installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'codex/**']
+    paths:
+      - '.github/workflows/desktop-wine-mac.yml'
+      - 'desktop/**'
+      - 'image/olympium-mac-run'
+permissions:
+  contents: read
+concurrency:
+  group: desktop-wine-mac-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install desktop tools and both Wine loaders
+        run: |
+          apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo dpkg --add-architecture i386
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends \
+            libwlroots-dev libwayland-dev libpango1.0-dev libgtk-3-dev \
+            libgdk-pixbuf-2.0-dev libxkbcommon-dev libdrm-dev libpixman-1-dev \
+            libxcb-xfixes0-dev liblzma-dev zlib1g-dev xwayland grim \
+            wine wine64 wine32:i386 gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 \
+            p7zip-full cpio
+          sudo install -d -o "$(id -un)" /run/dev-desktop
+          test -x /usr/lib/wine/wine
+      - name: Verify Wine GUI and 32-bit executable
+        run: make -C desktop test-wine
+      - name: Verify Mac package installer under Landlock
+        run: |
+          make -C desktop dev-install
+          test "$(desktop/dev-install confinement)" = landlock
+          make -C desktop test-mac
