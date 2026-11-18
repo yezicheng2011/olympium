@@ -1,0 +1,39 @@
+name: OpenHarmony managed GUI
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'codex/**']
+    paths:
+      - '.github/workflows/openharmony-managed.yml'
+      - 'validation/openharmony/**'
+      - 'validation/runtime-artifacts.json'
+permissions:
+  contents: read
+concurrency:
+  group: openharmony-managed-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kvm-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare KVM and compiler dependencies
+        run: |
+          test -c /dev/kvm
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends acl qemu-system-x86 e2fsprogs git python3-pil libusb-1.0-0
+          sudo usermod -aG kvm "$(id -un)"
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Verify app window, calculation and relaunch
+        run: sudo -u "$(id -un)" -g kvm -- /usr/bin/python3 validation/openharmony/managed-gui.py --work "$RUNNER_TEMP/oh-managed" --output build/openharmony-managed-report
+      - name: Save actual verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: openharmony-managed-report
+          path: build/openharmony-managed-report
+          if-no-files-found: ignore
+          retention-days: 14

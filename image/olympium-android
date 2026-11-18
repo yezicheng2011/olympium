@@ -101,7 +101,7 @@ def inspect(apk, root):
     icon = apk_icon(apk, badging, aapt, previews / sha)
     sdk = re.search(r"^sdkVersion:'(\d+)'$", badging, re.M)
     return dict(ok=True, package=identity[1], name=name, version=identity[3],
-                version_code=int(identity[2]),
+                version_code=int(identity[2] or 0),
                 id='android-' + hashlib.sha256(identity[1].encode()).hexdigest()[:16],
                 sha=sha, icon=str(icon) if icon else '', min_sdk=int(sdk[1]) if sdk else 1,
                 needs_runtime_download=not (RUNTIME / 'emulator/emulator').is_file()
