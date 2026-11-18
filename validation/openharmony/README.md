@@ -22,3 +22,10 @@ capture. APK/SDK archives and guest userdata are not uploaded.
 This test does not certify host desktop window integration, arbitrary HAPs,
 commercial HarmonyOS compatibility, or removal of guest system services.
 See the workflow result and `result.json` for actual verification status.
+
+The [KVM run with native HAP reinstallation](https://github.com/yezicheng2011/bbb/actions/runs/44222505725)
+reached the unprotected launcher, rendered the calculator, and verified
+`2+3=5` before and after force-stop and reinstallation. Bundle Manager accepted
+the original publisher-signed calculator HAP. The recorded application was
+already supplied by the emulator image. See the JSON and screenshot in
+`evidence/` for the measured result.
