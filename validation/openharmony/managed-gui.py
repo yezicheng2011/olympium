@@ -121,9 +121,23 @@ def click_node(node):
 
 
 def calculator(round_name):
-    result = shell('aa', 'start', '-a', 'MainAbility', '-b', BUNDLE)
-    if 'error:' in result.lower():
-        raise RuntimeError('Ability start rejected: ' + result)
+    home = layout(round_name + '-launcher')
+    launched = False
+    for child in home.get('children', []):
+        if child.get('attributes', {}).get('bundleName') == 'com.ohos.launcher':
+            for node in nodes(child):
+                if node.get('text') == 'Calculator':
+                    click_node(node)
+                    launched = True
+                    report['launch_method'] = 'ordinary guest launcher icon'
+                    break
+        if launched:
+            break
+    if not launched:
+        result = shell('aa', 'start', '-a', 'MainAbility', '-b', BUNDLE)
+        if 'error:' in result.lower():
+            raise RuntimeError('Ability start rejected: ' + result)
+        report['launch_method'] = 'aa start'
     def ready():
         tree = layout(round_name + '-start')
         # The bundled distributed calculator asks for device collaboration on
@@ -265,14 +279,16 @@ try:
             if helper.poll() is None:
                 helper.terminate()
                 helper.wait(timeout=10)
-    def unlocked():
-        status = shell('/data/local/tmp/bootstrap', '--status')
-        if 'credential_configured=1' in status:
-            raise RuntimeError('SDK user unexpectedly requires authentication')
-        return 'credential_configured=0 screen_locked=0' in status
-
-    wait_for(unlocked, 60, 'normal gesture unlock completion')
-    report['unprotected_sdk_unlock_verified'] = True
+    status = shell('/data/local/tmp/bootstrap', '--status')
+    if 'credential_configured=0' not in status:
+        raise RuntimeError('SDK credential state was not confirmed unprotected')
+    report['lock_manager_reports_unlocked'] = 'screen_locked=0' in status
+    # With this publisher image the launcher can be visible while the lock
+    # service still reports locked. Exercise the ordinary user launch path;
+    # retain the API discrepancy rather than equating it with unlock success.
+    wait_for(lambda: any(n.get('bundleName') == 'com.ohos.launcher'
+                        for n in nodes(layout('home-after-normal-gesture'))),
+             60, 'ordinary guest launcher after unprotected gesture')
     calculator('first')
     shell('aa', 'force-stop', BUNDLE)
     wait_for(lambda: not app_nodes(layout('stopped')), 30, 'app window removed')
