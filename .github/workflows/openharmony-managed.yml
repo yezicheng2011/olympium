@@ -29,10 +29,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Prepare KVM and compiler dependencies
+        timeout-minutes: 6
         run: |
           test -c /dev/kvm
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends acl qemu-system-x86 e2fsprogs git python3-pil libusb-1.0-0 \
+          apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends acl qemu-system-x86 e2fsprogs git python3-pil libusb-1.0-0 \
             gir1.2-gtk-3.0 python3-gi grim libwlroots-dev libwayland-dev libpango1.0-dev \
             libgdk-pixbuf-2.0-dev libxkbcommon-dev libdrm-dev libpixman-1-dev
           sudo usermod -aG kvm "$(id -un)"
