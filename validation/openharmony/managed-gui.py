@@ -2,6 +2,7 @@
 """KVM-only GUI acceptance of the owned, unprotected OpenHarmony SDK image."""
 import argparse
 from decimal import Decimal, InvalidOperation
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -335,6 +336,20 @@ try:
     calculator('first')
     shell('aa', 'force-stop', BUNDLE)
     wait_for(lambda: not app_nodes(layout('stopped')), 30, 'app window removed')
+    # Exercise the native installer with the publisher's original signed HAP,
+    # copied out of the system image and back through the normal data path.
+    # This is reinstall acceptance, not a claim of desktop HAP integration.
+    hap = work / 'publisher-calculator.hap'
+    run(hdc, '-t', target, 'file', 'recv',
+        '/system/app/com.example.distributedcalc/Calc_Demo.hap', hap)
+    report['publisher_hap_sha256'] = hashlib.sha256(hap.read_bytes()).hexdigest()
+    remote_hap = '/data/local/tmp/olympium-publisher-calculator.hap'
+    run(hdc, '-t', target, 'file', 'send', hap, remote_hap)
+    install = shell('bm', 'install', '-p', remote_hap, '-r', timeout=120)
+    (out / 'native-hap-install.log').write_text(install)
+    if 'install bundle successfully' not in install.lower():
+        raise RuntimeError('Publisher HAP reinstall was not accepted by Bundle Manager')
+    report['native_hap_reinstall_verified'] = True
     calculator('reopened')
     report['relaunch_verified'] = True
 except Exception as error:

@@ -5,7 +5,10 @@ on:
     branches: [main, 'codex/**']
     paths:
       - '.github/workflows/openharmony-managed.yml'
-      - 'validation/openharmony/**'
+      - 'validation/openharmony/*.py'
+      - 'validation/openharmony/*.cpp'
+      - 'validation/openharmony/*.c'
+      - 'validation/openharmony/sources.json'
       - 'validation/runtime-artifacts.json'
 permissions:
   contents: read
