@@ -63,3 +63,11 @@ The canvas remained gray and the process later exited with an error.
 Drawing and stable relaunch remain open. See
 `evidence/pikopixel-beta10-source-runtime-result.json` for the source,
 binary, and patch hashes and the two screenshots.
+
+The complete x86_64 source runtime also builds and runs. The libdispatch patch
+avoids registering its internal observer on a kqueue filter that Darling
+does not implement. The DarlingServer patch reloads the active native
+worker's thread state after a suspendable callback. In the full-runtime
+test, PikoPixel rendered its own Wayland dialog and still exited with 139
+after New Image. DarlingServer remained running and `darling shell true`
+returned zero afterward. See `evidence/full-darling-source-result.json`.

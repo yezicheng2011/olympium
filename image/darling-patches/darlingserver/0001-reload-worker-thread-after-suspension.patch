@@ -1,0 +1,55 @@
+diff --git a/src/thread.cpp b/src/thread.cpp
+index 3c79e51..775cda1 100644
+--- a/src/thread.cpp
++++ b/src/thread.cpp
+@@ -492,6 +492,14 @@ bool DarlingServer::Thread::waitingForReply() const {
+
+ static const auto microthreadLog = DarlingServer::Log("microthread");
+
++// A suspended microthread can continue on a different native worker. Reload
++// the worker's TLS after callbacks that can suspend it. A memory clobber alone
++// in the caller does not stop the compiler from caching the TLS address.
++[[gnu::noinline]] static DarlingServer::Thread* resumedThread() {
++	asm volatile("" ::: "memory");
++	return currentThreadVar.get();
++}
++
+ // this runs in the context of the microthread (i.e. with the microthread's stack active)
+ void DarlingServer::Thread::microthreadWorker() {
+ #if DSERVER_ASAN
+@@ -503,12 +511,13 @@ void DarlingServer::Thread::microthreadWorker() {
+ 	currentThreadVar->makePendingCallActive();
+ 	currentThreadVar->_activeCall->processCall();
+
+-	if (currentThreadVar->_handlingInterruptedCall) {
+-		currentThreadVar->_didSyscallReturnDuringInterrupt = true;
++	auto* thread = resumedThread();
++	if (thread->_handlingInterruptedCall) {
++		thread->_didSyscallReturnDuringInterrupt = true;
+ #if DSERVER_ASAN
+-		__sanitizer_start_switch_fiber(NULL, currentThreadVar->_stack.base, currentThreadVar->_stack.size);
++		__sanitizer_start_switch_fiber(NULL, thread->_stack.base, thread->_stack.size);
+ #endif
+-		setcontext(&currentThreadVar->_syscallReturnHereDuringInterrupt);
++		setcontext(&thread->_syscallReturnHereDuringInterrupt);
+ 	} else {
+ #if DSERVER_ASAN
+ 		// we're exiting normally, so we might not re-enter this microthread; tell ASAN to drop the fake stack
+@@ -534,12 +543,13 @@ void DarlingServer::Thread::microthreadContinuation() {
+ 		currentContinuation = nullptr;
+ 	}
+
+-	if (currentThreadVar->_handlingInterruptedCall) {
+-		currentThreadVar->_didSyscallReturnDuringInterrupt = true;
++	auto* thread = resumedThread();
++	if (thread->_handlingInterruptedCall) {
++		thread->_didSyscallReturnDuringInterrupt = true;
+ #if DSERVER_ASAN
+-		__sanitizer_start_switch_fiber(NULL, currentThreadVar->_stack.base, currentThreadVar->_stack.size);
++		__sanitizer_start_switch_fiber(NULL, thread->_stack.base, thread->_stack.size);
+ #endif
+-		setcontext(&currentThreadVar->_syscallReturnHereDuringInterrupt);
++		setcontext(&thread->_syscallReturnHereDuringInterrupt);
+ 	} else {
+ #if DSERVER_ASAN
+ 		// see microthreadWorker()

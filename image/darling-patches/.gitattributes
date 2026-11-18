@@ -1,0 +1,2 @@
+# Unified diff context adds a space before source indentation.
+*.patch whitespace=-space-before-tab

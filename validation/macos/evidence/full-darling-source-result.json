@@ -1,0 +1,27 @@
+{
+  "runtime": "Full source-built x86_64 Darling in isolated Ubuntu 24.04 QEMU guest",
+  "darling_source_commit": "3fcd2e1aa85079789d19d82415695bdecc512241",
+  "components": [
+    "cli",
+    "gui_stubs"
+  ],
+  "source_patch_sha256": {
+    "0001-appkit-color-space-icc-profile.patch": "2187d5f806b670265efe101eef4f0ec7aefd296d34bc3fb70cf7936e088d870b",
+    "0002-appkit-nib-custom-view-placeholder.patch": "9895363d0aebfb1311e1555db1cbffd1d75232b3075450c7e83d9f59765a9120",
+    "darlingserver/0001-reload-worker-thread-after-suspension.patch": "c126a7705856578a6106cf1eef646aa16c829264dcad2bd0d6e1bcba4cbce7f9",
+    "libdispatch/0001-disable-internal-memory-pressure-observer.patch": "bde58333ffdcf2532e714a5858fb5487e3445d5c534a78402106c4760c1cfe20"
+  },
+  "runtime_binary_sha256": {
+    "darlingserver": "3feffe929edf3f51e7762856b0847ec241f637e0b93dc5288573b5d6e319ad6d",
+    "libdispatch.dylib": "dc6135224f74e088ba4f7fcb6480f22bc65febe17c357dc21f814e98daf29b81"
+  },
+  "cold_cli_smoke_exit": 0,
+  "original_pikopixel_dialog_rendered": true,
+  "display_backend": "Native Wayland",
+  "pikopixel_exit_after_new_image": 139,
+  "darlingserver_survived_app_exit": true,
+  "post_app_cli_smoke_exit": 0,
+  "cocoa_probe_window_mapped": true,
+  "pikopixel_drawing_verified": false,
+  "screenshot": "pikopixel-full-runtime-dialog.png"
+}
