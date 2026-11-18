@@ -353,11 +353,10 @@ def verify_desktop_hap(package):
     with os.fdopen(fd, 'w') as stream:
         json.dump(dict(hdc=str(hdc), qmp=str(work / 'window.sock'), target=target), stream)
     root = work / 'hap-library'
-    data_home = work / 'hap-data'
     env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY='wayland-0',
                WLR_BACKENDS='headless', WLR_RENDERER='pixman', DEV_DESK_HEADLESS='1',
                GDK_BACKEND='wayland', OLYMPIUM_DESK_HOME=str(root),
-               XDG_DATA_HOME=str(data_home), OLYMPIUM_NO_DIALOG='1',
+               OLYMPIUM_NO_DIALOG='1',
                OLYMPIUM_OPENHARMONY_SESSION=str(session),
                OLYMPIUM_OPENHARMONY_RUNTIME=str(ROOT / 'image/olympium-openharmony'))
     installer = ROOT / 'desktop/dev-install'
@@ -381,7 +380,7 @@ def verify_desktop_hap(package):
     identifier = re.search(r'^id=(oh-[0-9a-f]{16})$', installed.stdout, re.MULTILINE)[1]
     if FRESH_BUNDLE not in shell('bm', 'dump', '-a'):
         raise RuntimeError('Desktop import did not install the HAP in the guest')
-    desktop_entry = data_home / 'applications' / f'olympium-{identifier}.desktop'
+    desktop_entry = root / 'applications' / f'olympium-{identifier}.desktop'
     icon = Path(re.search(r'^Icon=(.*)$', desktop_entry.read_text(), re.MULTILINE)[1])
     with ZipFile(package) as archive:
         if icon.read_bytes() != archive.read('resources/base/media/probe.png'):
