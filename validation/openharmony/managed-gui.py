@@ -160,7 +160,8 @@ def calculator(round_name):
 
     def click(texts):
         current = app_nodes(layout(round_name + '-before-click'))
-        candidates = [n for n in current if n.get('text') in texts and n.get('visible') != 'false']
+        candidates = [n for n in current if n.get('type') == 'Button' and
+                      (n.get('id') in texts or n.get('text') in texts) and n.get('visible') != 'false']
         if not candidates:
             raise RuntimeError('Calculator button absent: ' + repr(texts))
         click_node(candidates[-1])
@@ -169,18 +170,23 @@ def calculator(round_name):
     before = app_nodes(layout(round_name + '-cleared'))
     for texts in (('2',), ('+',), ('3',), ('=',)):
         click(texts)
-    original = {(n.get('hierarchy'), n.get('bounds')): n.get('text') for n in before}
+    original = next(n.get('text') for n in before if n.get('id') == 'result')
 
     def changed_five():
         current = app_nodes(layout(round_name + '-result'))
         for node in current:
+            if node.get('id') != 'result' or node.get('type') != 'Text':
+                continue
             text = node.get('text', '').strip()
             try:
                 five = Decimal(text) == 5
             except InvalidOperation:
                 continue
-            key = node.get('hierarchy'), node.get('bounds')
-            if five and key in original and original[key] != node.get('text'):
+            if five and original != node.get('text'):
+                report[round_name + '_calculation'] = dict(
+                    result=text, expression=next((n.get('text') for n in current
+                                                 if n.get('id') == 'expression'), ''),
+                    input_button_ids=['C', '2', '+', '3', '='])
                 return True
         return False
 
