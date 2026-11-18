@@ -43,3 +43,24 @@ installed it without reinstall mode. A fresh app-owned UI tree, rendered
 frame, and visible text change after a click verified first launch and input.
 `build-fresh-hap.py` creates the test package from `fresh-hap/`. The test
 signer is used only with the isolated SDK image.
+
+## Desktop HAP integration for a configured SDK guest
+
+The desktop recognizes single-entry `.hap` files and registers them with
+Launchpad after explicit confirmation and successful guest Bundle Manager
+installation. The desktop copies the archive intact. The guest verifies the
+signature. A base PNG icon referenced by the package is reused. Launch finds
+the entry ability's visible accessibility root and opens its region in a
+Wayland window. Closing the window force-stops that application in the guest.
+This bridge supports one active app per configured SDK session and primary
+pointer clicks. It uses the owned OpenHarmony 6.1 SDK guest's 360×720 display.
+
+Configure an already running SDK emulator with a private JSON descriptor at
+`${XDG_RUNTIME_DIR}/olympium-openharmony/session.json` (mode 0600). It contains
+the absolute HDC executable path in `hdc`, the desktop user's QMP socket in
+`qmp`, and the loopback HDC endpoint in `target`. Launchpad uses this descriptor
+from the desktop session. Guest provisioning remains manual. The SDK
+acceptance workflow creates a disposable configuration and checks consent,
+fresh installation, original icon, launcher input, close, reopen and removal.
+Feature-module sets, keyboard and drag forwarding, and HarmonyOS commercial
+apps require separate work and testing.

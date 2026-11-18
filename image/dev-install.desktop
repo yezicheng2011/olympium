@@ -5,4 +5,4 @@ Exec=dev-install open %f
 Icon=package-x-generic
 Terminal=false
 NoDisplay=true
-MimeType=application/vnd.android.package-archive;
+MimeType=application/vnd.android.package-archive;application/x-olympium-hap;

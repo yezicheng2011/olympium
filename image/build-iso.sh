@@ -251,7 +251,8 @@ stage_desktop() {
 		"$REPO/image/driver-report" "$REPO/image/driver-install" \
 		"$REPO/image/install-sample.sh" \
 		"$ROOT/usr/libexec/dev-desktop/"
-	install -m 755 "$REPO/image/olympium-android" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 755 "$REPO/image/olympium-android" "$REPO/image/olympium-openharmony" "$ROOT/usr/libexec/dev-desktop/"
+	install -m 644 "$REPO/image/openharmony_window.py" "$ROOT/usr/libexec/dev-desktop/"
 	install -m 755 "$REPO/image/Xwayland-software" "$ROOT/usr/libexec/dev-desktop/"
 	install -m 644 "$REPO/image/android_window.py" "$REPO/image/android_icon.py" \
 		"$REPO/image/android_runtime.py" "$REPO/image/android_framework.py" "$REPO/image/android-runtime-pins.json" \
@@ -267,6 +268,8 @@ stage_desktop() {
 			"$ROOT/usr/libexec/dev-desktop/android-compat/"
 	fi
 	install -D -m 644 "$REPO/image/dev-install.desktop" "$ROOT/usr/share/applications/dev-install.desktop"
+	install -D -m 644 "$REPO/image/olympium-hap.xml" "$ROOT/usr/share/mime/packages/olympium-hap.xml"
+	chroot "$ROOT" update-mime-database /usr/share/mime
 	chroot "$ROOT" update-desktop-database /usr/share/applications
 	# A Mac runtime, when one was staged by image/build-darling.sh and asked for.
 	if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
@@ -421,6 +424,7 @@ EOF
 [Default Applications]
 text/html=firefox.desktop
 application/xhtml+xml=firefox.desktop
+application/x-olympium-hap=dev-install.desktop
 x-scheme-handler/http=firefox.desktop
 x-scheme-handler/https=firefox.desktop
 x-scheme-handler/ftp=firefox.desktop

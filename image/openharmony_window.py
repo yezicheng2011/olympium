@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the verified guest calculator area in a Wayland test window."""
+"""Render an OpenHarmony SDK app region in a Wayland window."""
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -33,14 +33,15 @@ def main():
     parser.add_argument('--hdc', required=True)
     parser.add_argument('--target', required=True)
     parser.add_argument('--bounds', required=True, nargs=4, type=int)
-    parser.add_argument('--reference', type=Path, required=True)
+    parser.add_argument('--reference', type=Path)
+    parser.add_argument('--title', default='Calculator')
     args = parser.parse_args()
     x, y, right, bottom = args.bounds
     if not (0 <= x < right <= 360 and 0 <= y < bottom <= 720):
         parser.error('invalid guest bounds')
     width, height = right - x, bottom - y
     display_width, display_height = width * 4 // 5, height * 4 // 5
-    window = Gtk.Window(title='Calculator')
+    window = Gtk.Window(title=args.title)
     window.set_decorated(False)
     window.set_resizable(False)
     surface = Gtk.EventBox()
@@ -118,7 +119,7 @@ def main():
                         pending_frame = None
                         current = pixbuf.get_pixels()
                         if current != last_pixels:
-                            if last_pixels is None:
+                            if last_pixels is None and args.reference:
                                 pixbuf.savev(str(args.reference), 'png', [], [])
                             picture.set_from_pixbuf(pixbuf)
                             last_pixels = current

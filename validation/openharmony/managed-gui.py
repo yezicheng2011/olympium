@@ -195,7 +195,7 @@ def desktop_calculation(tree, label):
         window = None
         try:
             wait_for(lambda: (runtime / 'wayland-0').exists(), 20, 'host Wayland socket')
-            window = subprocess.Popen([sys.executable, ROOT / 'validation/openharmony/app-window.py',
+            window = subprocess.Popen([sys.executable, ROOT / 'image/openharmony_window.py',
                                        '--qmp', work / 'window.sock', '--hdc', hdc, '--target', target,
                                        '--bounds', *map(str, bounds), '--reference', reference],
                                       env=env, stdout=window_log, stderr=subprocess.STDOUT)
@@ -337,6 +337,135 @@ def calculator(round_name):
     capture(round_name + '-result')
     report['input_verified'] = True
     return tree
+
+
+def verify_desktop_hap(package):
+    from PIL import Image
+    import gi
+    gi.require_version('GdkPixbuf', '2.0')
+    from gi.repository import GdkPixbuf
+    from zipfile import ZipFile
+
+    runtime = work / 'hap-wayland'
+    runtime.mkdir(mode=0o700)
+    session = runtime / 'sdk-session.json'
+    fd = os.open(session, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump(dict(hdc=str(hdc), qmp=str(work / 'window.sock'), target=target), stream)
+    root = work / 'hap-library'
+    data_home = work / 'hap-data'
+    env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY='wayland-0',
+               WLR_BACKENDS='headless', WLR_RENDERER='pixman', DEV_DESK_HEADLESS='1',
+               GDK_BACKEND='wayland', OLYMPIUM_DESK_HOME=str(root),
+               XDG_DATA_HOME=str(data_home), OLYMPIUM_NO_DIALOG='1',
+               OLYMPIUM_OPENHARMONY_SESSION=str(session),
+               OLYMPIUM_OPENHARMONY_RUNTIME=str(ROOT / 'image/olympium-openharmony'))
+    installer = ROOT / 'desktop/dev-install'
+
+    def desktop(*words, check=True, timeout=60):
+        result = subprocess.run(list(map(str, words)), env=env, text=True, timeout=timeout,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        with (out / 'desktop-hap.log').open('a') as log:
+            log.write('$ ' + ' '.join(map(str, words)) + '\n' + result.stdout + '\n')
+        if check:
+            result.check_returncode()
+        return result
+
+    review = json.loads(desktop(installer, 'inspect', package).stdout)
+    if review['action'] != 'openharmony':
+        raise RuntimeError('Desktop installer did not offer HAP installation')
+    rejected = desktop(installer, 'import', package, check=False)
+    if rejected.returncode != 2 or FRESH_BUNDLE in shell('bm', 'dump', '-a'):
+        raise RuntimeError('HAP installed without consent')
+    installed = desktop(installer, 'import', '--consent', package, timeout=180)
+    identifier = re.search(r'^id=(oh-[0-9a-f]{16})$', installed.stdout, re.MULTILINE)[1]
+    if FRESH_BUNDLE not in shell('bm', 'dump', '-a'):
+        raise RuntimeError('Desktop import did not install the HAP in the guest')
+    desktop_entry = data_home / 'applications' / f'olympium-{identifier}.desktop'
+    icon = Path(re.search(r'^Icon=(.*)$', desktop_entry.read_text(), re.MULTILINE)[1])
+    with ZipFile(package) as archive:
+        if icon.read_bytes() != archive.read('resources/base/media/probe.png'):
+            raise RuntimeError('Generated launcher did not use the original HAP icon')
+    report['desktop_hap_install_verified'] = True
+    report['desktop_hap_original_icon_verified'] = True
+
+    def host_frame(name):
+        path = out / (name + '.png')
+        desktop('grim', path, timeout=20)
+        with Image.open(path) as image:
+            return image.convert('RGB')
+
+    def app_view(label, text):
+        elements = app_nodes(layout(label), FRESH_BUNDLE)
+        return elements if any(n.get('text') == text for n in elements) else None
+
+    with (out / 'desktop-hap-compositor.log').open('w') as log:
+        compositor = subprocess.Popen([ROOT / 'desktop/dev-compositor-input-test', '-n'],
+                                      env=env, stdout=log, stderr=subprocess.STDOUT)
+        try:
+            wait_for(lambda: (runtime / 'wayland-0').exists(), 20, 'HAP desktop Wayland socket')
+            for label in ('first', 'reopened'):
+                with (out / 'desktop-hap-launch.log').open('a') as app_log:
+                    subprocess.run(['gio', 'launch', str(desktop_entry)], env=env,
+                                   stdout=app_log, stderr=subprocess.STDOUT, check=True, timeout=30)
+                elements = wait_for(lambda: app_view('desktop-hap-' + label, 'Olympium fresh HAP'),
+                                    50, 'owned HAP app window from desktop launcher')
+                bounds = list(map(int, re.findall(r'\d+', elements[0]['bounds'])))
+                x, y, right, bottom = bounds
+                width, height = (right - x) * 4 // 5, (bottom - y) * 4 // 5
+                button = next(n for n in elements if n.get('id') == 'verify-fresh-hap')
+                gx, gy = node_center(button)
+                bx, by = (gx - x) * width // (right - x), (gy - y) * height // (bottom - y)
+                capture(f'desktop-hap-{label}-guest')
+                reference = GdkPixbuf.Pixbuf.new_from_file(str(out / f'desktop-hap-{label}-guest.png'))
+                reference = reference.new_subpixbuf(x, y, right - x, bottom - y)
+                reference = reference.scale_simple(width, height, GdkPixbuf.InterpType.BILINEAR)
+                ref_file = work / 'hap-reference.png'
+                reference.savev(str(ref_file), 'png', [], [])
+                with Image.open(ref_file) as image:
+                    reference = image.convert('RGB')
+                anchor = reference.crop((8, by - 7, width - 8, by - 6)).tobytes()
+                if len(set(anchor)) < 3:
+                    raise RuntimeError('Cannot locate the HAP button in the guest frame')
+
+                def locate():
+                    frame = host_frame(f'desktop-hap-{label}-opened')
+                    for row in range(by - 7, frame.height - height + by - 6):
+                        pixels = frame.crop((0, row, frame.width, row + 1)).tobytes()
+                        pos = pixels.find(anchor)
+                        if pos < 24 or pos % 3:
+                            continue
+                        left, top = pos // 3 - 8, row - (by - 7)
+                        box = (8, by - 12, width - 8, by + 12)
+                        if reference.crop(box).tobytes() == frame.crop(
+                                (left + box[0], top + box[1], left + box[2], top + box[3])).tobytes():
+                            return left, top, frame.width, frame.height
+                    return None
+
+                left, top, screen_w, screen_h = wait_for(locate, 30, 'rendered HAP pixels on the host')
+                def click(px, py):
+                    desktop(a.desktop_pointer.resolve(), screen_w, screen_h, px, py, timeout=15)
+
+                click(left + bx, top + by)
+                wait_for(lambda: app_view('desktop-hap-input', 'Fresh HAP input received'),
+                         25, 'HAP text changes after desktop pointer input')
+                time.sleep(0.5)
+                host_frame(f'desktop-hap-{label}-input')
+                click(left + 16, top - 17)
+                wait_for(lambda: not app_nodes(layout('desktop-hap-window-closed'), FRESH_BUNDLE),
+                         30, 'closing desktop window force-stops the guest app')
+            report['desktop_hap_launch_input_close_relaunch_verified'] = True
+            desktop(installer, 'remove', identifier, timeout=150)
+            if desktop_entry.exists() or FRESH_BUNDLE in shell('bm', 'dump', '-a'):
+                raise RuntimeError('Desktop removal left the launcher or guest bundle installed')
+            report['desktop_hap_remove_verified'] = True
+        finally:
+            compositor.terminate()
+            try:
+                compositor.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                compositor.kill()
+                compositor.wait()
 
 
 def verify_fresh_install(package):
@@ -540,6 +669,8 @@ try:
         desktop_calculation(tree, 'host-reopened')
         report['desktop_relaunch_verified'] = True
     if a.fresh_hap:
+        if a.desktop_pointer:
+            verify_desktop_hap(fresh_work / 'probe.hap')
         verify_fresh_install(fresh_work / 'probe.hap')
 except Exception as error:
     report['error'] = str(error)
