@@ -38,3 +38,18 @@ The screenshot demonstrates the callback title change. Its text-field label
 did not visibly update, so label repaint is not claimed as verified. This is
 one independent Cocoa probe; third-party macOS GUI applications, repeatable
 cold starts, clipboard/files and near-native performance remain unverified.
+
+
+The launch controller now waits for the Mac runtime and reports a nonzero exit
+in a desktop dialog. `desktop/test-mac-launch-failure.py` verifies normal exit,
+error exit and signal termination with a stand-in runtime; it is not a Mac app
+execution test. The real Cocoa probe was reimported under Landlock and again
+responded to a host pointer with this controller (`evidence/cocoa-runtime-supervision.json`).
+
+An actual third-party test of the unmodified official Hex Fiend 2.3.0 Intel
+archive failed before a usable app window: Sparkle needs `_OBJC_EHTYPE_id`
+from WebKit. Diagnostic flat namespace loading progresses to a second missing
+symbol, `DARegisterDiskAppearedCallback`; that diagnostic flag is not shipped.
+See `evidence/hexfiend-2.3.0-result.json`. The associated screenshot is the
+native desktop failure dialog, **not** a functioning Hex Fiend GUI. These
+framework gaps remain unresolved.

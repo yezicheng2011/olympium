@@ -1,0 +1,14 @@
+{
+  "application": "Independent Cocoa GUI probe",
+  "mac_application_compatibility_claim": "probe only; not third-party application compatibility",
+  "desktop_install_source_blob": "502f99be33c11220148c3e9505c75ae0662ae01a",
+  "formal_import_verified": true,
+  "confinement": "landlock",
+  "desktop_search_launch_verified": true,
+  "input_verified": true,
+  "input": "host Wayland virtual pointer, 1280x720, click 640,269",
+  "observed_title": "Olympium Mac GUI - verified",
+  "observed_window_id": 8388614,
+  "runtime": "unmodified official Darling 0.1.20260609~noble",
+  "result": "Existing Cocoa GUI and input still pass with runtime exit supervision"
+}
