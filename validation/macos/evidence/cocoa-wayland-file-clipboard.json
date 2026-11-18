@@ -1,0 +1,12 @@
+{
+  "environment": "Ubuntu 24.04 x86_64 QEMU TCG, source-built Darling, native Wayland, software rendering",
+  "input": "Real Wayland pointer clicking both probes' copy and paste buttons",
+  "host_file": "/tmp/Olympium 剪贴板 100%.txt",
+  "darling_file": "/Volumes/SystemRoot/tmp/Olympium 剪贴板 100%.txt",
+  "wire_type": "text/uri-list",
+  "wire_uri": "file:///tmp/Olympium%20%E5%89%AA%E8%B4%B4%E6%9D%BF%20100%25.txt",
+  "test_file_sha256": "46d9709049a547aa07dda66025efa185a42495a9b4258c0e3d3cfdccb5c6d447",
+  "cocoa_to_gtk_file_path_and_content_verified": true,
+  "gtk_to_cocoa_file_path_and_content_verified": true,
+  "verified_while_source_open": true
+}

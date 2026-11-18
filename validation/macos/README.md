@@ -122,6 +122,12 @@ including alpha. GTK's generic image request did not pick up the TIFF-only
 offer. PikoPixel's Copy action did not publish a selection in the tested
 document. See `evidence/cocoa-wayland-image-clipboard.json`.
 
+Cocoa and GTK clipboard probes also exchanged the same local file in both
+directions while the source was open. The filename contained Chinese
+characters, spaces and a percent sign. The receiving probes opened the
+file and confirmed its contents via the decoded path. See
+`evidence/cocoa-wayland-file-clipboard.json`.
+
 In the full source runtime, the same publisher Hex Fiend 2.3.0 now opens a
 known byte sequence using the default Mach-O two-level namespace. It shows
 the expected hex and text. Drag-selecting byte `4F` updates the inspector to
