@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "signed_update_verified": true,
+  "data_retained": true,
+  "wrong_signer_rejected": true,
+  "apk_rollback_verified": true,
+  "private_data_rollback_verified": true,
+  "apk_sha256": {
+    "v1": "7c7028b12fab17cecbf7e33625349546701ca3ef1e55e9e55e1b006dbf7f95ce",
+    "v2": "727eaa28be44510ac455e6f37e67013b4ff9839ce072b37359c2792c31e191ed",
+    "wrong_signer": "fcd50b2d1d2127f4d73829a5f33eab73dc106cd2e3ae007bf4fcfeabc1cb8cb6"
+  },
+  "app_uid": 10160,
+  "ci_run": "https://github.com/yezicheng2011/bbb/actions/runs/44212303251",
+  "source_commit": "64cd9e3",
+  "scope": "Independent ordinary-UID test APK. Native Android signing checks, private app data retention and platform rollback snapshots. This is not verification of every application update provider."
+}

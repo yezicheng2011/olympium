@@ -1643,9 +1643,13 @@ static int import_mac(const struct review *r) {
 	return 0;
 }
 
-static int cmd_import(const char *path, const char *ext, int consent) {
+static int cmd_import_mode(const char *path, const char *ext, int consent, int update_only) {
 	struct review r;
 	fill_review(path, &r);
+	if (update_only && strcmp(r.action, "android") != 0) {
+		fprintf(stderr, "dev-install: managed update is currently available for Android APKs\n");
+		return 3;
+	}
 	if (strcmp(r.action, "android") == 0) {
 		if (!consent) {
 			fprintf(stderr, "dev-install: refused to install without consent\n");
@@ -1666,7 +1670,7 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 		printf("progress 1/3 read\n");
 		printf("progress 2/3 install\n");
 		fflush(stdout);
-		char *args[] = {(char *)helper, "install", r.file, "--root", root, NULL};
+		char *args[] = {(char *)helper, update_only ? "update" : "install", r.file, "--root", root, NULL};
 		if (helper == NULL || capture(args, text, sizeof text) != 0 || !json_true(text, "ok")) {
 			char reason[1024] = "";
 			json_string(text, "message", reason, sizeof reason);
@@ -1848,6 +1852,41 @@ static int cmd_import(const char *path, const char *ext, int consent) {
 	printf("progress 4/4 desktop\n");
 	printf("download: none\n");
 	return 0;
+}
+
+static int cmd_import(const char *path, const char *ext, int consent) {
+	return cmd_import_mode(path, ext, consent, 0);
+}
+
+static int cmd_rollback(const char *id, int consent) {
+	if (!consent) {
+		fprintf(stderr, "dev-install: rollback requires consent\n");
+		return 2;
+	}
+	static struct rec recs[REC_MAX];
+	int n = load_recs(recs, REC_MAX), at = -1;
+	for (int i = 0; i < n; i++) {
+		if (strcmp(recs[i].id, id) == 0) { at = i; break; }
+	}
+	if (at < 0 || strcmp(recs[at].launch, "android") != 0) {
+		fprintf(stderr, "dev-install: no managed Android app with this ID\n");
+		return 3;
+	}
+	char root[512], text[4096] = "", path[1024] = "";
+	desk_root(root, sizeof root);
+	const char *helper = android_runtime();
+	char *args[] = {(char *)helper, "rollback", recs[at].program, "--root", root, NULL};
+	if (helper == NULL || capture(args, text, sizeof text) != 0 || !json_true(text, "ok")) {
+		char reason[1024] = "";
+		json_string(text, "message", reason, sizeof reason);
+		fprintf(stderr, "dev-install: rollback failed: %s\n", reason[0] ? reason : "Android rollback failed");
+		return 3;
+	}
+	json_string(text, "path", path, sizeof path);
+	if (path[0] == '\0') return 3;
+	/* The backend retains reviewed APKs and treats an identical import as a
+	 * no-op. Reuse import to refresh the existing library row, icon and wrapper. */
+	return cmd_import(path, NULL, 1);
 }
 
 /* Tells the person why nothing opened. A launch from Launchpad or the dock
@@ -2711,6 +2750,8 @@ static void usage(void) {
 	fprintf(stderr,
 		"usage: dev-install inspect FILE\n"
 		"       dev-install import --consent FILE [--mime EXT]\n"
+		"       dev-install update --consent APK\n"
+		"       dev-install rollback --consent ID\n"
 		"       dev-install launch ID [ARG...]\n"
 		"       dev-install remove ID\n"
 		"       dev-install open [--no-ui] FILE\n"
@@ -2732,7 +2773,7 @@ int main(int argc, char **argv) {
 		print_review(&r);
 		return 0;
 	}
-	if (strcmp(argv[1], "import") == 0) {
+	if (strcmp(argv[1], "import") == 0 || strcmp(argv[1], "update") == 0) {
 		int consent = 0;
 		const char *file = NULL;
 		const char *ext = NULL;
@@ -2749,7 +2790,17 @@ int main(int argc, char **argv) {
 			usage();
 			return 2;
 		}
-		return cmd_import(file, ext, consent);
+		return cmd_import_mode(file, ext, consent, strcmp(argv[1], "update") == 0);
+	}
+	if (strcmp(argv[1], "rollback") == 0) {
+		int consent = 0;
+		const char *id = NULL;
+		for (int i = 2; i < argc; i++) {
+			if (strcmp(argv[i], "--consent") == 0) consent = 1;
+			else if (id == NULL) id = argv[i];
+		}
+		if (id == NULL) { usage(); return 2; }
+		return cmd_rollback(id, consent);
 	}
 	if (strcmp(argv[1], "launch") == 0 && argc >= 3) {
 		return cmd_launch(argv[2], argc - 3, argv + 3);
