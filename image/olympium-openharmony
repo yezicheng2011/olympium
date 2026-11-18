@@ -36,6 +36,8 @@ def read_member(archive, name, limit):
 
 
 def package_info(path, root):
+    if not path.is_file():
+        raise ValueError('Expected a regular HAP file.')
     with zipfile.ZipFile(path) as archive:
         manifest = json.loads(read_member(archive, 'module.json', MAX_METADATA))
         app, module = manifest['app'], manifest['module']
@@ -49,7 +51,8 @@ def package_info(path, root):
         label = app.get('label', '')
         if not label or label.startswith('$'):
             label = path.stem if path.stem != bundle else bundle
-        label = ' '.join(label.split())[:72].replace('\\', '/')
+        label = ''.join(c for c in ' '.join(label.split()) if c >= ' ' and c != '\x7f')
+        label = label.encode()[:120].decode(errors='ignore')
         identifier = 'oh-' + hashlib.sha256(bundle.encode()).hexdigest()[:16]
         sha = digest(path)
         icon = ''
@@ -136,6 +139,8 @@ class Session:
 
 
 def install(session, source, root):
+    if not source.is_file():
+        raise ValueError('Expected a regular HAP file.')
     (root / 'openharmony').mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.install-', dir=root / 'openharmony') as directory:
         staged = Path(directory) / source.name

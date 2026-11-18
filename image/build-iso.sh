@@ -225,7 +225,7 @@ stage_desktop() {
 	mount_chroot
 	# install-to-disk needs sfdisk (fdisk) and grub-install (grub2-common).
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
-		parted dosfstools kmod fdisk grub2-common python3 aapt adb desktop-file-utils shared-mime-info librsvg2-common
+		parted dosfstools kmod fdisk grub2-common python3 python3-gi gir1.2-gtk-3.0 aapt adb desktop-file-utils shared-mime-info librsvg2-common
 	# The shell, Files, and Settings are set in the Ubuntu typeface. Without it
 	# Pango falls back to another face and every label changes width.
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends fonts-ubuntu

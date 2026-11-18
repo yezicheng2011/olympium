@@ -26,8 +26,8 @@ compares host pixels and reads guest expression and result after each click.
 The [passing desktop run](https://github.com/yezicheng2011/bbb/actions/runs/44232561716)
 recorded the host clicking `2+3=5` in that window, closing the window through
 its title bar, and repeating the calculation in a newly opened window. The window bridge is specific
-to this controlled fixture. Desktop HAP import, arbitrary apps, and commercial
-HarmonyOS compatibility still require separate implementation and testing.
+to this controlled fixture. The configured SDK desktop installer is described
+below. Arbitrary apps and commercial HarmonyOS still need acceptance.
 
 The [KVM run with native HAP reinstallation](https://github.com/yezicheng2011/bbb/actions/runs/44222505725)
 reached the unprotected launcher, rendered the calculator, and verified
