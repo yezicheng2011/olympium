@@ -168,12 +168,13 @@ def calculator(round_name):
 
     click(('C', 'AC', '清除'))
     before = app_nodes(layout(round_name + '-cleared'))
-    for texts in (('2',), ('+',), ('3',), ('=',)):
+    for texts in (('2',), ('+',), ('3',)):
         click(texts)
     original = next(n.get('text') for n in before if n.get('id') == 'result')
 
-    def changed_five():
+    def preview_five():
         current = app_nodes(layout(round_name + '-result'))
+        expression = next((n.get('text') for n in current if n.get('id') == 'expression'), '')
         for node in current:
             if node.get('id') != 'result' or node.get('type') != 'Text':
                 continue
@@ -182,15 +183,27 @@ def calculator(round_name):
                 five = Decimal(text) == 5
             except InvalidOperation:
                 continue
-            if five and original != node.get('text'):
-                report[round_name + '_calculation'] = dict(
-                    result=text, expression=next((n.get('text') for n in current
-                                                 if n.get('id') == 'expression'), ''),
-                    input_button_ids=['C', '2', '+', '3', '='])
+            if five and expression == '2+3' and original != node.get('text'):
+                report[round_name + '_preview'] = dict(result=text, expression=expression)
                 return True
         return False
 
-    wait_for(changed_five, 30, 'changed calculator output equals five')
+    wait_for(preview_five, 30, 'expression 2+3 and changed preview result five')
+    capture(round_name + '-preview')
+    click(('=',))
+
+    def committed_five():
+        current = app_nodes(layout(round_name + '-committed-result'))
+        fields = {n.get('id'): n.get('text') for n in current if n.get('type') == 'Text'}
+        # This sample commits '=' by moving its preview to the expression row
+        # and clearing the preview row. Validate both transitions, not a key 5.
+        if fields.get('expression') == '5' and fields.get('result') == '':
+            report[round_name + '_calculation'] = dict(
+                expression='5', preview_cleared=True, input_button_ids=['C', '2', '+', '3', '='])
+            return True
+        return False
+
+    wait_for(committed_five, 30, 'equals commits five and clears preview')
     capture(round_name + '-result')
     report['input_verified'] = True
 
