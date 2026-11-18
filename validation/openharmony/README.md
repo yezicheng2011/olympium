@@ -35,3 +35,11 @@ reached the unprotected launcher, rendered the calculator, and verified
 the original publisher-signed calculator HAP. The recorded application was
 already supplied by the emulator image. See the JSON and screenshot in
 `evidence/` for the measured result.
+
+The [fresh HAP run](https://github.com/yezicheng2011/bbb/actions/runs/44233740169)
+also uses a separate, normal-privilege app built with the public SDK test
+signer. Bundle Manager first confirmed the probe package was absent, then
+installed it without reinstall mode. A fresh app-owned UI tree, rendered
+frame, and visible text change after a click verified first launch and input.
+`build-fresh-hap.py` creates the test package from `fresh-hap/`. The test
+signer is used only with the isolated SDK image.
