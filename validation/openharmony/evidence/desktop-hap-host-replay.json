@@ -1,0 +1,14 @@
+{
+  "mode": "Local host integration with simulated HDC and QMP",
+  "hap_fixture_source": "Normal-privilege OpenHarmony 6.1 SDK test app",
+  "recorded_guest_frames_run": "https://github.com/yezicheng2011/bbb/actions/runs/44233740169",
+  "desktop_installer_refused_without_consent": true,
+  "host_hap_handoff_byte_identical": true,
+  "registered_icon_matches_hap_png": true,
+  "gio_launcher_mapped_a_real_wayland_window": true,
+  "host_pointer_reached_expected_guest_button_coordinates": true,
+  "host_titlebar_closed_and_launcher_reopened": true,
+  "remove_cleared_desktop_launcher": true,
+  "native_guest_install_or_execution_in_this_run": false,
+  "kvm_verified_in_this_run": false
+}

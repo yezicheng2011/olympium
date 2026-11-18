@@ -64,3 +64,9 @@ acceptance workflow creates a disposable configuration and checks consent,
 fresh installation, original icon, launcher input, close, reopen and removal.
 Feature-module sets, keyboard and drag forwarding, and HarmonyOS commercial
 apps require separate work and testing.
+
+The host flow also passed locally with simulated HDC and QMP serving recorded
+SDK frames and accessibility trees. Real Wayland mapping, pointer coordinates,
+titlebar close and GIO relaunch were exercised in that run. See
+`evidence/desktop-hap-host-replay.json`. The KVM workflow remains the test for
+native installation and execution through this same desktop launcher.
