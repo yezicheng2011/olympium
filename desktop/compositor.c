@@ -234,6 +234,13 @@ struct server {
 	int spot_cursor;   /* which result is selected */
 	int blur_ok;
 	int blur_fail;
+	struct blur_slot *blur_cache;
+	size_t blur_cache_bytes;
+	uint64_t blur_tick;
+	unsigned long blur_hits;
+	unsigned long blur_misses;
+	int blur_cache_off;
+	int blur_cache_verify;
 	unsigned frames;
 	char blur_error[160];
 	char title[96];
@@ -364,10 +371,12 @@ static void write_status(struct server *server) {
 		return;
 	}
 	fprintf(f,
-		"title=%s\narch=%s\ncontrast=%d\nblur=%s\nframes=%u\nblur_error=%s\nnotice=%s\n",
+		"title=%s\narch=%s\ncontrast=%d\nblur=%s\nframes=%u\nblur_error=%s\nnotice=%s\n"
+		"glass_cache_hits=%lu\nglass_cache_misses=%lu\n",
 		server->title, server->arch, server->contrast,
 		server->contrast ? "off-contrast" : (server->blur_ok ? "live" : "unavailable"),
-		server->frames, server->blur_error, server->notice);
+		server->frames, server->blur_error, server->notice,
+		server->blur_hits, server->blur_misses);
 	fclose(f);
 }
 
@@ -1226,6 +1235,149 @@ static void draw_chrome_on(struct server *server, cairo_t *cr, cairo_surface_t *
 	draw_search(server, cr, box);
 }
 
+/*
+ * The glass behind the menu bar, the dock and each title bar is a blur of
+ * what the renderer drew there, laid under a white veil and cut to a rounded
+ * shape. That is most of the cost of a frame, and when a window animates
+ * somewhere else the pixels behind the bar are the same as in the last frame.
+ * So the finished glass is remembered, keyed by the pixels it was made from
+ * and the shape and veil it was made with. It depends on nothing else: no
+ * window title, no hover, no clock, which are drawn over it afterwards. A
+ * remembered glass is used only when the pixels are the same byte for byte.
+ * OLYMPIUM_BLUR_CACHE=0 turns it off, and OLYMPIUM_BLUR_CACHE=verify makes
+ * the glass again on every use and aborts when the two differ, which is how
+ * the test shows it never serves a wrong picture.
+ */
+struct blur_slot {
+	struct blur_slot *next;
+	int w, h, mode;
+	double radius, veil;
+	size_t bytes;
+	uint64_t used;
+	uint8_t *src;
+	uint8_t *glass;
+};
+
+enum { BLUR_CACHE_BUDGET = 40 * 1024 * 1024 };
+
+static void blur_apply(uint8_t *pixels, int w, int h, int stride, int mode) {
+	if (mode == 0) {
+		dev_soft_bgra(pixels, w, h, stride);
+	} else {
+		dev_glass_bgra(pixels, w, h, stride, mode);
+	}
+}
+
+static void blur_cache_drop_oldest(struct server *server) {
+	struct blur_slot **oldest = NULL;
+	for (struct blur_slot **at = &server->blur_cache; *at != NULL; at = &(*at)->next) {
+		if (oldest == NULL || (*at)->used < (*oldest)->used) {
+			oldest = at;
+		}
+	}
+	if (oldest == NULL) {
+		return;
+	}
+	struct blur_slot *gone = *oldest;
+	*oldest = gone->next;
+	server->blur_cache_bytes -= gone->bytes * 2;
+	free(gone->src);
+	free(gone->glass);
+	free(gone);
+}
+
+/* Copies rows between surfaces whose strides may differ. */
+static void copy_rows(uint8_t *dst, int dst_stride, const uint8_t *src, int src_stride, int w, int h) {
+	if (dst_stride == src_stride) {
+		memcpy(dst, src, (size_t)dst_stride * (size_t)h);
+		return;
+	}
+	for (int y = 0; y < h; y++) {
+		memcpy(dst + (size_t)y * dst_stride, src + (size_t)y * src_stride, (size_t)w * 4);
+	}
+}
+
+static cairo_surface_t *glass_make(uint8_t *pixels, int w, int h, int stride, int mode,
+		double radius, double veil) {
+	blur_apply(pixels, w, h, stride, mode);
+	return frosted_surface(pixels, w, h, stride, 0, radius, veil);
+}
+
+/* The finished glass for the pixels in `pixels` (w * 4 bytes a row), which
+ * are changed. mode 0 is the heavy backdrop blur, otherwise the glass radius. */
+static cairo_surface_t *glass_cached(struct server *server, uint8_t *pixels, int w, int h,
+		int stride, int mode, double radius, double veil) {
+	size_t bytes = (size_t)stride * (size_t)h;
+	if (server->blur_cache_off || bytes * 2 > BLUR_CACHE_BUDGET) {
+		return glass_make(pixels, w, h, stride, mode, radius, veil);
+	}
+	for (struct blur_slot *slot = server->blur_cache; slot != NULL; slot = slot->next) {
+		if (slot->w != w || slot->h != h || slot->mode != mode || slot->bytes != bytes ||
+				slot->radius != radius || slot->veil != veil ||
+				memcmp(slot->src, pixels, bytes) != 0) {
+			continue;
+		}
+		cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+		if (cairo_surface_status(out) != CAIRO_STATUS_SUCCESS) {
+			cairo_surface_destroy(out);
+			break;
+		}
+		slot->used = ++server->blur_tick;
+		server->blur_hits++;
+		cairo_surface_flush(out);
+		copy_rows(cairo_image_surface_get_data(out), cairo_image_surface_get_stride(out),
+			slot->glass, stride, w, h);
+		cairo_surface_mark_dirty(out);
+		if (server->blur_cache_verify) {
+			cairo_surface_t *again = glass_make(pixels, w, h, stride, mode, radius, veil);
+			cairo_surface_flush(again);
+			const uint8_t *a = cairo_image_surface_get_data(again);
+			const uint8_t *b = cairo_image_surface_get_data(out);
+			int same = cairo_image_surface_get_stride(again) == cairo_image_surface_get_stride(out);
+			for (int y = 0; same && y < h; y++) {
+				same = memcmp(a + (size_t)y * cairo_image_surface_get_stride(again),
+					b + (size_t)y * cairo_image_surface_get_stride(out), (size_t)w * 4) == 0;
+			}
+			if (!same) {
+				wlr_log(WLR_ERROR, "glass cache mismatch: %dx%d mode %d", w, h, mode);
+				abort();
+			}
+			cairo_surface_destroy(again);
+		}
+		return out;
+	}
+	server->blur_misses++;
+	struct blur_slot *slot = calloc(1, sizeof(*slot));
+	uint8_t *src = slot != NULL ? malloc(bytes) : NULL;
+	uint8_t *glass = src != NULL ? malloc(bytes) : NULL;
+	if (glass == NULL) {
+		free(src);
+		free(slot);
+		return glass_make(pixels, w, h, stride, mode, radius, veil);
+	}
+	memcpy(src, pixels, bytes);
+	cairo_surface_t *out = glass_make(pixels, w, h, stride, mode, radius, veil);
+	cairo_surface_flush(out);
+	copy_rows(glass, stride, cairo_image_surface_get_data(out),
+		cairo_image_surface_get_stride(out), w, h);
+	slot->w = w;
+	slot->h = h;
+	slot->mode = mode;
+	slot->radius = radius;
+	slot->veil = veil;
+	slot->bytes = bytes;
+	slot->src = src;
+	slot->glass = glass;
+	slot->used = ++server->blur_tick;
+	while (server->blur_cache != NULL && server->blur_cache_bytes + bytes * 2 > BLUR_CACHE_BUDGET) {
+		blur_cache_drop_oldest(server);
+	}
+	slot->next = server->blur_cache;
+	server->blur_cache = slot;
+	server->blur_cache_bytes += bytes * 2;
+	return out;
+}
+
 static struct wlr_texture *make_chrome(struct server *server, int x, int y, int w, int h,
 		double radius, int which) {
 	int stride = w * 4;
@@ -1237,11 +1389,6 @@ static struct wlr_texture *make_chrome(struct server *server, int x, int y, int 
 	if (!server->contrast) {
 		sampled = read_region(server, x, y, w, h, pixels, stride);
 		if (sampled) {
-			if (which == 6) {
-				dev_soft_bgra(pixels, w, h, stride);
-			} else {
-				dev_glass_bgra(pixels, w, h, stride, (which == 5 || which == 7) ? 6 : 3);
-			}
 			server->blur_ok = 1;
 			server->blur_error[0] = '\0';
 		} else {
@@ -1267,8 +1414,13 @@ static struct wlr_texture *make_chrome(struct server *server, int x, int y, int 
 	} else if (which == 6) {
 		veil = 0.0;
 	}
-	cairo_surface_t *base = frosted_surface(pixels, w, h, stride,
-		server->contrast || !sampled, radius, veil);
+	cairo_surface_t *base;
+	if (!server->contrast && sampled) {
+		base = glass_cached(server, pixels, w, h, stride,
+			which == 6 ? 0 : ((which == 5 || which == 7) ? 6 : 3), radius, veil);
+	} else {
+		base = frosted_surface(pixels, w, h, stride, 1, radius, veil);
+	}
 	cairo_t *cr = cairo_create(base);
 	struct wlr_box box = {.x = x, .y = y, .width = w, .height = h};
 	draw_chrome_on(server, cr, base, &box, which);
@@ -3815,6 +3967,12 @@ static void pad_activate(struct server *server, int index) {
 	}
 	if (fork() == 0) {
 		setsid();
+		/* Ubuntu's Wine 9.0 aborts when TMPDIR is set, and the shortcuts
+		 * Wine writes for Windows programs start wine itself. See
+		 * wine_environment in install.c. */
+		if (strstr(app->cmd, "wine") != NULL) {
+			unsetenv("TMPDIR");
+		}
 		execl("/bin/sh", "sh", "-c", app->cmd, (char *)NULL);
 		_exit(127);
 	}
@@ -4993,6 +5151,11 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.seat->events.request_set_cursor, &server.request_cursor);
 	server.request_set_selection.notify = seat_request_set_selection;
 	wl_signal_add(&server.seat->events.request_set_selection, &server.request_set_selection);
+	{
+		const char *cache = getenv("OLYMPIUM_BLUR_CACHE");
+		server.blur_cache_off = cache != NULL && strcmp(cache, "0") == 0;
+		server.blur_cache_verify = cache != NULL && strcmp(cache, "verify") == 0;
+	}
 	server.clip_fd = -1;
 	server.clip_helper_fd = -1;
 	server.x_clip_state = '?';

@@ -22,3 +22,4 @@ desktop/dev-compositor-input-test
 __pycache__/
 desktop/test-xremap
 desktop/test-accounts
+desktop/test-animate

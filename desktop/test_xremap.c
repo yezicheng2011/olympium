@@ -7,7 +7,12 @@
  * surface away while the window lives on. test-wine.sh runs this to check
  * that the compositor shows the window again and is still standing after.
  *
- *   test-xremap [ROUNDS]
+ *   test-xremap [ROUNDS [PAUSE_MS]]
+ *
+ * The pause is how long the window is left shown and hidden. Xwayland hands
+ * the compositor a window's surface some time after the window is mapped,
+ * and on a loaded machine that takes a few hundred milliseconds. A window
+ * that is hidden before it has one is never reported as mapped.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +27,7 @@ static void pause_ms(xcb_connection_t *c, int ms) {
 
 int main(int argc, char **argv) {
 	int rounds = argc > 1 ? atoi(argv[1]) : 1;
+	int pause = argc > 2 ? atoi(argv[2]) : 250;
 	xcb_connection_t *c = xcb_connect(NULL, NULL);
 	if (c == NULL || xcb_connection_has_error(c)) {
 		fprintf(stderr, "test-xremap: no X display\n");
@@ -37,11 +43,11 @@ int main(int argc, char **argv) {
 		xcb_change_property(c, XCB_PROP_MODE_REPLACE, w, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
 			(uint32_t)strlen(name), name);
 		xcb_map_window(c, w);
-		pause_ms(c, 250);
+		pause_ms(c, pause);
 		xcb_unmap_window(c, w);
-		pause_ms(c, 250);
+		pause_ms(c, pause);
 		xcb_map_window(c, w);
-		pause_ms(c, 250);
+		pause_ms(c, pause);
 		/* Hidden first, then destroyed: the order Wine closes a window in. */
 		xcb_unmap_window(c, w);
 		pause_ms(c, 60);

@@ -1446,6 +1446,18 @@ static const char *wine_prepare(const char *prefix, long *ms) {
 	return "fresh";
 }
 
+/* The environment every Wine process of ours is started with. TMPDIR is
+ * removed: with it set, even to an empty string, Ubuntu's Wine 9.0 aborts
+ * with "free(): invalid pointer" or a segmentation fault in its 32-bit loader
+ * before the program's window opens, every time (seen with
+ * 9.0~repack-4build3). Many systems export TMPDIR, so this is not a test
+ * artefact. Wine then uses /tmp, which is what it does without it. */
+static void wine_environment(const char *prefix) {
+	setenv("WINEPREFIX", prefix, 1);
+	setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+	unsetenv("TMPDIR");
+}
+
 /* Asks wineserver to stay for a while after the last Windows program exits,
  * so the next launch reuses it, and to exit by itself after that. 0 keeps
  * Wine's own default (about three seconds). Nothing runs before the first
@@ -1499,7 +1511,7 @@ static int cmd_prewarm(const char *what) {
 		char *kill_argv[] = {"/usr/bin/wineserver", "-k", NULL};
 		char prefix[640];
 		wine_prefix_path(prefix, sizeof prefix);
-		setenv("WINEPREFIX", prefix, 1);
+		wine_environment(prefix);
 		if (access("/usr/bin/wineserver", X_OK) == 0) {
 			run_quiet(kill_argv);
 		}
@@ -1526,8 +1538,7 @@ static int cmd_prewarm(const char *what) {
 	long ms = 0;
 	wine_prefix_path(prefix, sizeof prefix);
 	const char *state = wine_prepare(prefix, &ms);
-	setenv("WINEPREFIX", prefix, 1);
-	setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+	wine_environment(prefix);
 	long a = mono_ms();
 	wine_keep_server(env_seconds("OLYMPIUM_WINE_PREWARM_IDLE", 600));
 	/* wineserver alone saves little. Most of a cold start is Wine's own
@@ -2159,8 +2170,7 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		long t0 = mono_ms();
 		wine_prefix_path(prefix, sizeof prefix);
 		const char *state = wine_prepare(prefix, &prefix_ms);
-		setenv("WINEPREFIX", prefix, 1);
-		setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+		wine_environment(prefix);
 		long t1 = mono_ms();
 		wine_keep_server(env_seconds("OLYMPIUM_WINE_IDLE", 60));
 		long t2 = mono_ms();
