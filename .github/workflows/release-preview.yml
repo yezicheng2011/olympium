@@ -9,7 +9,7 @@ on:
       - 'image/build-iso.sh'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   amd64:
@@ -39,8 +39,8 @@ jobs:
             musl-tools qemu-system-x86 acl
       - name: Build live image and verify contents
         run: |
-          sudo env OLYMPIUM_WINE=1 bash image/build-iso.sh amd64
           mkdir -p build/release build/boot-report
+          sudo env OLYMPIUM_WINE=1 bash image/build-iso.sh amd64
           root=/var/tmp/dev-live/rootfs-amd64
           iso=build/release/olympium-amd64-preview.iso
           cp build/dev-live-amd64.iso "$iso"
@@ -75,7 +75,10 @@ jobs:
             if grep -q 'compositor on WAYLAND_DISPLAY=' build/boot-report/serial.log; then
               sleep 5
               kill -0 "$vm_pid"
-              ! grep -qE 'compositor exit|Kernel panic' build/boot-report/serial.log
+              if grep -qE 'compositor exit|Kernel panic' build/boot-report/serial.log; then
+                tail -100 build/boot-report/serial.log
+                exit 1
+              fi
               exit 0
             fi
             kill -0 "$vm_pid" || break
@@ -91,7 +94,19 @@ jobs:
           path: build/boot-report
           if-no-files-found: ignore
           retention-days: 14
-      - name: Keep the verified ISO and checksums
+      - name: Stage verified files in a Release draft
+        id: release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cat build/release/SHA256SUMS
+          gh release create v0.1.0-preview.1 build/release/* \
+            --target "$GITHUB_SHA" --title "Olympium v0.1.0 Preview 1" \
+            --draft --prerelease --latest=false --notes "Verified build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Keep the verified ISO and checksums if Release staging fails
+        if: steps.release.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: preview-amd64-release
