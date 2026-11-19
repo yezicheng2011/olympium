@@ -48,7 +48,11 @@ fi
 if [ ! -e /var/lib/olympium/setup-done ] && [ -x /usr/bin/dev-settings ]; then
 	if grep -q 'olympium.setup=1' /proc/cmdline 2>/dev/null ||
 			! grep -q -E 'olympium\.(open|show|import|install)[a-z0-9]*=' /proc/cmdline 2>/dev/null; then
-		(/usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
+		# A boot test fills the form with olympium.setupauto=FULL|NAME|PASSWORD|ROOTPASSWORD
+		# (underscores stand for spaces; the kernel command line is readable by
+		# every user, so this is for disposable test boots only).
+		auto=$(sed -n 's/.*olympium\.setupauto=\([^ ]*\).*/\1/p' /proc/cmdline 2>/dev/null | tr '_' ' ')
+		(OLYMPIUM_SETUP_AUTO=$auto /usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
 	fi
 fi
 # Prewarm is off unless the user turned it on with "dev-install prewarm on".

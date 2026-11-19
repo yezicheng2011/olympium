@@ -23,3 +23,4 @@ __pycache__/
 desktop/test-xremap
 desktop/test-accounts
 desktop/test-animate
+desktop/test_accounts

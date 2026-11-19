@@ -185,7 +185,10 @@ static void add_text(GtkWidget *box, const char *text, const char *css_class) {
 	gtk_label_set_xalign(GTK_LABEL(label), 0);
 	gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
 	gtk_label_set_max_width_chars(GTK_LABEL(label), 56);
-	gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+	/* Values can be copied. A row's name is not text to copy, and a selectable
+	 * label that gets the focus shows itself all selected. */
+	gtk_label_set_selectable(GTK_LABEL(label),
+		css_class == NULL || strcmp(css_class, "rowname") != 0);
 	gtk_widget_set_margin_start(label, 16);
 	gtk_widget_set_margin_end(label, 16);
 	gtk_widget_set_margin_top(label, 10);
@@ -402,6 +405,20 @@ static GtkWidget *plain_entry(const char *hint) {
 	return entry;
 }
 
+/* A small name above an entry. A placeholder alone disappears from the entry
+ * that has the focus, which would leave the first field with no name. */
+static void add_field(GtkWidget *box, const char *name, GtkWidget *entry) {
+	GtkWidget *label = gtk_label_new(name);
+	gtk_label_set_xalign(GTK_LABEL(label), 0);
+	gtk_style_context_add_class(gtk_widget_get_style_context(label), "note");
+	gtk_widget_set_margin_start(label, 16);
+	gtk_widget_set_margin_top(label, 3);
+	gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+	gtk_widget_set_margin_top(entry, 1);
+	gtk_widget_set_margin_bottom(entry, 2);
+	gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 0);
+}
+
 struct change_form {
 	char account[40];
 	GtkWidget *current;
@@ -550,28 +567,28 @@ static int run_first_launch(void) {
 	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	form->window = window;
 	gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-	gtk_window_set_default_size(GTK_WINDOW(window), 560, 520);
+	gtk_window_set_default_size(GTK_WINDOW(window), 560, -1);
 	gtk_window_set_title(GTK_WINDOW(window), "Welcome to Olympium");
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 	GtkWidget *box = pane("Welcome to Olympium");
 	gtk_container_add(GTK_CONTAINER(window), box);
 	GtkWidget *who = card();
 	add_text(who, "Your account", "rowname");
-	form->full = plain_entry("Full name");
-	form->name = plain_entry("Account name, such as dana");
-	form->pass = secret_entry("Password, at least 8 characters");
-	form->pass2 = secret_entry("Password again");
-	gtk_box_pack_start(GTK_BOX(who), form->full, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(who), form->name, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(who), form->pass, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(who), form->pass2, FALSE, FALSE, 0);
+	form->full = plain_entry("For example, Dana Example");
+	form->name = plain_entry("Lower-case letters and digits, such as dana");
+	form->pass = secret_entry("At least 8 characters");
+	form->pass2 = secret_entry("The same password again");
+	add_field(who, "Full name", form->full);
+	add_field(who, "Account name", form->name);
+	add_field(who, "Password", form->pass);
+	add_field(who, "Password again", form->pass2);
 	gtk_box_pack_start(GTK_BOX(box), who, FALSE, FALSE, 0);
 	GtkWidget *admin = card();
 	add_text(admin, "Administrator (root) password", "rowname");
-	form->root = secret_entry("Administrator password, at least 8 characters");
-	form->root2 = secret_entry("Administrator password again");
-	gtk_box_pack_start(GTK_BOX(admin), form->root, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(admin), form->root2, FALSE, FALSE, 0);
+	form->root = secret_entry("At least 8 characters");
+	form->root2 = secret_entry("The same password again");
+	add_field(admin, "Password", form->root);
+	add_field(admin, "Password again", form->root2);
 	gtk_box_pack_start(GTK_BOX(box), admin, FALSE, FALSE, 0);
 	add_note(box, "Both can be changed later in Settings, under Users & Passwords.");
 	form->result = gtk_label_new("");

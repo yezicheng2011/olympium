@@ -36,9 +36,11 @@ run() {
 		chroot "$ROOT" /usr/bin/env "$@"
 	fi
 }
-run -u DISPLAY -u WAYLAND_DISPLAY HOME=/root WINEPREFIX="$TPL" WINEDEBUG=-all \
+# TMPDIR is taken out: with it set, even empty, Ubuntu's Wine 9.0 aborts or
+# segfaults before it builds anything, and a build machine often exports it.
+run -u DISPLAY -u WAYLAND_DISPLAY -u TMPDIR HOME=/root WINEPREFIX="$TPL" WINEDEBUG=-all \
 	WINEDLLOVERRIDES="mscoree,mshtml=" /usr/bin/wineboot --init >/dev/null 2>&1
-run HOME=/root WINEPREFIX="$TPL" /usr/bin/wineserver -w
+run -u TMPDIR HOME=/root WINEPREFIX="$TPL" /usr/bin/wineserver -w
 if [ ! -s "$ROOT$TPL/system.reg" ]; then
 	echo "wine-prefix: wineboot did not produce a registry; no prefix was installed" >&2
 	rm -rf "$ROOT$TPL"

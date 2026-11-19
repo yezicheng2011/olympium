@@ -18,7 +18,9 @@ Guest system images (Android and the like) are neither in the image nor download
 
 ## Accounts
 
-First launch asks for an account and for the administrator (root) password, and does not finish until both are set. Settings, Users & Passwords, changes either one and asks for the current password first. Passwords go to the system's `chpasswd` on its standard input. Tested against a copy of the built image's root: the account is created, both passwords verify, a wrong one is refused, and a change takes effect.
+First launch asks for an account and for the administrator (root) password, and does not finish until both are set. Settings, Users & Passwords, changes either one and asks for the current password first. Passwords go to the system's `chpasswd` on its standard input. `make -C desktop test-accounts` runs the real `useradd` and `chpasswd` in a throwaway root: the first-launch window, filled in the way a boot test fills it, makes the account and sets the root password, right passwords verify, wrong ones do not, nothing is written in clear, and a change takes effect while a short one is refused. It was also run on a booted image (QEMU without KVM, the install ISO built from this tree): the welcome window appeared over the desktop 9.7 s into the session, filling it created `dana` (uid 1001, full name, home folder 0750) with yescrypt hashes for `dana` and `root`, both showing as usable in `passwd -S`, and neither password was in the compositor log. Settings, Users & Passwords, opened in that session and showed both accounts. Changing a password through the window was not clicked through on the booted image; the same code is what `test-accounts` runs.
+
+On a live boot nothing persists, so the window comes back on every boot. Boot options a person picks (such as the contrast entry) still show it; boot-test flags that open or import something do not.
 
 The desktop session itself still runs as root. Running it as the account that was created is not done.
 

@@ -57,6 +57,7 @@ make -C desktop test-startup
 make -C desktop test-wine
 make -C desktop test-mac
 make -C desktop test-packages
+sudo make -C desktop test-accounts   # first-launch account and passwords; needs root
 ```
 
 `test-startup` checks native session startup and driver indexing. `test-render` and `test-startup` need Xwayland, Python 3, and the desktop build dependencies. It checks idle frame counts, shell invalidation, repeated X window unmap/remap/destroy cycles, and the glass cache while an X window animates (every cache use is compared with a fresh blur). `desktop/measure-render.sh` measures the compositor's CPU per frame with a window animating; `OLYMPIUM_BLUR_CACHE=0` turns the cache off for comparison (`docs/rendering-performance.md`). Run compositor integration suites sequentially: they share `/run/dev-desktop/control` and status. `test-wine` needs Wine, Xwayland, and mingw on the host. `test-mac` needs 7-Zip, cpio, and python3. `test-packages` needs dpkg-deb, and the rpm tools for its `.rpm` part. Each exits 77 without what it needs. Building `dev-install` needs the `liblzma` and `zlib` headers.
