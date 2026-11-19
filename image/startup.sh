@@ -41,11 +41,13 @@ if grep -q 'olympium.openbrowser=1' /proc/cmdline 2>/dev/null; then
 	) &
 fi
 # First launch: an account and the administrator password are asked for until
-# they have been set. A boot test passes olympium.* flags and is not asked,
-# unless it passes olympium.setup=1.
+# they have been set. A boot test that opens or imports something
+# (olympium.open*, show*, import*, install) is not asked, unless it also
+# passes olympium.setup=1. Options a person chooses at the boot menu, such as
+# olympium.contrast=1, do not skip it.
 if [ ! -e /var/lib/olympium/setup-done ] && [ -x /usr/bin/dev-settings ]; then
 	if grep -q 'olympium.setup=1' /proc/cmdline 2>/dev/null ||
-			! grep -q 'olympium\.[a-z0-9]*=' /proc/cmdline 2>/dev/null; then
+			! grep -q -E 'olympium\.(open|show|import|install)[a-z0-9]*=' /proc/cmdline 2>/dev/null; then
 		(/usr/bin/dev-settings --first-run 2>&1 | sed 's/^/session: /') &
 	fi
 fi

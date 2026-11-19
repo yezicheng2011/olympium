@@ -365,8 +365,14 @@ static void load_branding(struct server *server) {
 }
 
 static void write_status(struct server *server) {
-	mkdir("/run/dev-desktop", 0755);
-	FILE *f = fopen("/run/dev-desktop/status", "w");
+	/* OLYMPIUM_STATUS names another file, for a test that must not share this
+	 * one with a compositor that is still shutting down. */
+	const char *path = getenv("OLYMPIUM_STATUS");
+	if (path == NULL || path[0] != '/') {
+		path = "/run/dev-desktop/status";
+		mkdir("/run/dev-desktop", 0755);
+	}
+	FILE *f = fopen(path, "w");
 	if (f == NULL) {
 		return;
 	}
