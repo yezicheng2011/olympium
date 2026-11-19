@@ -59,6 +59,12 @@ if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ] \
 	install -m 644 "$macfx/DeskEcho.dmg" "$ROOT/usr/share/olympium/samples/"
 fi
 rm -rf "$macfx"
+install -m 644 "$REPO/image/dev-desktop.service" "$ROOT/etc/systemd/system/dev-desktop.service"
+if [ -d "$ROOT/etc/NetworkManager" ]; then
+	install -d "$ROOT/etc/NetworkManager/conf.d"
+	install -m 644 "$REPO/image/NetworkManager-olympium.conf" \
+		"$ROOT/etc/NetworkManager/conf.d/10-olympium.conf"
+fi
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.note"
 install -m 644 "$REPO/image/hello.note" "$ROOT/usr/share/olympium/samples/hello.dnote"
 rm -rf "$ROOT/tmp/desktop"
@@ -149,6 +155,14 @@ if [ "$ARCH" != arm64 ] && [ -x "$ROOT/usr/bin/wineboot" ]; then
 	bash "$REPO/image/wine-prefix.sh" "$ROOT"
 	umount_chroot
 fi
+# Everything under /usr is final now. Without these stamps, systemd finds /usr
+# newer than /etc and /var on every boot of the live image and runs ldconfig
+# and the other first-boot-after-update jobs again, which was 13.7 s of the
+# desktop's critical path under emulation.
+usr_usec=$(stat -c %.6Y "$ROOT/usr" | tr -d '.')
+for stamp in "$ROOT/etc/.updated" "$ROOT/var/.updated"; do
+	printf '# This file was created by systemd-update-done. The timestamp below is the\n# modification time of /usr/ at the time of the last update.\nTIMESTAMP_USEC=%s\n' "$usr_usec" > "$stamp"
+done
 for mnt in proc sys dev/pts dev run; do
 	if mountpoint -q "$ROOT/$mnt"; then
 		umount -l "$ROOT/$mnt" || true

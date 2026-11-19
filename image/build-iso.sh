@@ -206,6 +206,9 @@ install_packages() {
 	# Bluetooth stack, and modemmanager with usb-modeswitch drives LTE and 5G
 	# modems that speak QMI, MBIM or AT. The kernel drivers and firmware for
 	# them come with linux-modules-extra and linux-firmware below.
+	install -d "$ROOT/etc/NetworkManager/conf.d"
+	install -m 644 "$REPO/image/NetworkManager-olympium.conf" \
+		"$ROOT/etc/NetworkManager/conf.d/10-olympium.conf"
 	# 7zip and cpio unpack Mac disk images and packages for dev-install.
 	# rpm and rpm2cpio are what it reads and unpacks an .rpm with.
 	# librsvg2-common lets Launchpad load a program's SVG icon.

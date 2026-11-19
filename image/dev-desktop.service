@@ -1,6 +1,9 @@
 [Unit]
 Description=Olympium desktop
-After=systemd-udev-trigger.service systemd-user-sessions.service
+# Not after systemd-user-sessions.service. That one waits for network.target,
+# which waits for NetworkManager, and the desktop does not need the network.
+# The session runs as root, so it does not need logins to be allowed either.
+After=systemd-udev-trigger.service
 [Service]
 Type=simple
 ExecStart=/usr/libexec/dev-desktop/run-session

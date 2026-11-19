@@ -29,7 +29,12 @@ modprobe virtio_gpu 2>/dev/null || true
 	modprobe virtio_net 2>/dev/null || true
 	modprobe virtio_blk 2>/dev/null || true
 	modprobe nvme 2>/dev/null || true
-	if command -v ip >/dev/null 2>&1; then
+	# Links are only raised here when there is no NetworkManager. With it, a
+	# link brought up before NetworkManager has looked at it already has an
+	# address from router advertisements, and NetworkManager takes that over
+	# as it is instead of running DHCP: the wired port then never gets an IPv4
+	# address.
+	if command -v ip >/dev/null 2>&1 && ! command -v NetworkManager >/dev/null 2>&1; then
 		for iface in /sys/class/net/*; do
 			name=$(basename "$iface")
 			[ "$name" = lo ] && continue

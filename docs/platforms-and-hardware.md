@@ -26,7 +26,16 @@ The desktop session itself still runs as root. Running it as the account that wa
 
 ## Radios
 
-The image now installs NetworkManager with wpa_supplicant (Wi-Fi), BlueZ (Bluetooth) and ModemManager with usb-modeswitch (LTE and 5G modems that speak QMI, MBIM or AT). The kernel in the built amd64 image has, among others, `iwlwifi`, `ath11k`, `mt7921e`, `rtw89`, `btusb`, `qmi_wwan`, `cdc_mbim`, `mhi_wwan_mbim`, `iosm` and `mtk_t7xx`, with `linux-firmware`. None of this was exercised: the build machine has no radio. There are no Wi-Fi, Bluetooth or cellular controls in Settings or the menu bar yet; `nmcli`, `bluetoothctl` and `mmcli` in the terminal are what there is. The image has not been rebuilt since these packages were added.
+The image installs NetworkManager with wpa_supplicant (Wi-Fi), BlueZ (Bluetooth) and ModemManager with usb-modeswitch (LTE and 5G modems that speak QMI, MBIM or AT). The kernel in the built amd64 image has, among others, `iwlwifi`, `ath11k`, `mt7921e`, `rtw89`, `btusb`, `qmi_wwan`, `cdc_mbim`, `mhi_wwan_mbim`, `iosm` and `mtk_t7xx`, with `linux-firmware`.
+
+Booted under QEMU (no KVM), with no radio hardware: NetworkManager, ModemManager and wpa_supplicant are active and no unit failed. `nmcli` reports Wi-Fi and mobile-broadband hardware as missing, `bluetooth.service` stays inactive because there is no adapter, and `mmcli -L` finds no modem. So **no radio was exercised**: no Wi-Fi scan, no Bluetooth pairing, no cellular attach. There are no Wi-Fi, Bluetooth or cellular controls in Settings or the menu bar yet; `nmcli`, `bluetoothctl` and `mmcli` in the terminal are what there is.
+
+What that boot did show, and was fixed:
+
+- Wired Ethernet never had an address. Ubuntu's NetworkManager package leaves Ethernet to netplan, and the image has no netplan. `image/NetworkManager-olympium.conf` lets NetworkManager manage every device. After that, the wired port got `10.0.2.15` over DHCP, a default route, working DNS and connectivity `full`.
+- `run-session` raised every link at start, before NetworkManager had looked at them. A raised link has an address from router advertisements by then, and NetworkManager took that over as it was ("connected (externally)") and never ran DHCP. The loop now runs only when there is no NetworkManager.
+- The desktop waited for NetworkManager: `dev-desktop.service` came after `systemd-user-sessions.service`, which comes after `network.target`, which comes after NetworkManager. The service no longer orders after it, because the session is root and does not need the network. Under emulation the desktop service became active 12.9 s into userspace instead of 43.0 s (`systemd-analyze critical-chain`).
+- `ldconfig.service` ran again on every boot of the live image, 13.7 s on the critical path under emulation, because `/usr` was newer than `/etc/.updated`. `repack-install.sh` now writes the stamps after the last change to `/usr`, and the unit's start condition is unmet on boot.
 
 ## Processors and graphics
 
