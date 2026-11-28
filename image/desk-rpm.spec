@@ -2,7 +2,7 @@ Name: desk-rpm
 Version: 1.0
 Release: 1
 Summary: Desk RPM
-License: MIT
+License: Apache-2.0
 BuildArch: noarch
 
 %description

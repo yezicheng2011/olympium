@@ -1,6 +1,6 @@
 #!/bin/sh
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Runs the 64-bit samples on a 32-bit system and leaves the transcript up.
 echo "64-bit programs on this 32-bit system"

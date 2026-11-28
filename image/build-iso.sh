@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Builds a live ISO for amd64 or arm64 from Ubuntu 24.04 packages plus the
 # first-party desktop. The image is not Ubuntu. No guest operating-system
@@ -307,7 +307,7 @@ EOF
 		"$REPO/docs/drivers.md" \
 		"$ROOT/usr/share/doc/dev-desktop/"
 	cat > "$ROOT/usr/share/doc/dev-desktop/SOURCE" <<'EOF'
-First-party desktop source is under daniel.ye Source License, Version 1.0.
+First-party desktop source is under the Apache License, Version 2.0.
 The full text is the LICENSE file in the git tree that built this image.
 
 Third-party binary packages keep their own licenses. Copyright files are under

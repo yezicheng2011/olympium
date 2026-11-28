@@ -1,6 +1,6 @@
 # Third-party notices
 
-First-party files in this repository are under daniel.ye Source License, Version 1.0. See `LICENSE` and `NOTICE`.
+First-party files in this repository are under the Apache License, Version 2.0. See `LICENSE` and `NOTICE`.
 
 The live ISO also contains unmodified Ubuntu 24.04 packages. Those packages are not relicensed. Their copyright files are installed under `/usr/share/doc` in the image, and the installed versions are listed in `sbom.tsv` produced by `image/build-iso.sh`. Corresponding source packages are available from Ubuntu's archives.
 

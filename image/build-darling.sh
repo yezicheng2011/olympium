@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Builds Darling's command-line components from source, at the revision this
 # tree was run against, and stages the result where the image build looks for

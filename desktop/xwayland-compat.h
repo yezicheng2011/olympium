@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Development Desktop contributors
- * License: daniel.ye Source License, Version 1.0. See LICENSE.
+ * Copyright 2026 Daniel Ye
+ * Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * The compositor shows X programs, which is what a Wine window is, through
  * Xwayland. A wlroots that was built without Xwayland has no such header.

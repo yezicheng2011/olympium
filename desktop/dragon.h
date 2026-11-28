@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Development Desktop contributors
- * License: daniel.ye Source License, Version 1.0. See LICENSE.
+ * Copyright 2026 Daniel Ye
+ * Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * The Olympium mark: an Eastern dragon in profile. A long body with no
  * wings, coiled in an S and tapering to a tufted tail, a head with a long

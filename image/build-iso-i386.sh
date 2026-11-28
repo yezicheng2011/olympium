@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Live ISO for a 32-bit x86 machine. The kernel is Debian's 686-pae kernel.
 # Userspace is Debian bookworm. wlroots 0.17 is built from source because

@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Development Desktop contributors
- * License: daniel.ye Source License, Version 1.0. See LICENSE.
+ * Copyright 2026 Daniel Ye
+ * Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Watches the X clipboard for the compositor. X programs here are Wine
  * windows and anything else under Xwayland.

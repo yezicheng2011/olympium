@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Development Desktop contributors
- * License: daniel.ye Source License, Version 1.0. See LICENSE.
+ * Copyright 2026 Daniel Ye
+ * Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Pid 1 for a small 64-bit guest. The guest exists so a 32-bit machine can
  * run a 64-bit program. It is not a general-purpose system.

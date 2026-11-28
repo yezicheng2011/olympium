@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Development Desktop contributors
- * License: daniel.ye Source License, Version 1.0. See LICENSE.
+ * Copyright 2026 Daniel Ye
+ * Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Starts a program. A 32-bit program on a 64-bit CPU of the same family is
  * executed directly. A 64-bit x86 program on a 32-bit CPU is handed to the
