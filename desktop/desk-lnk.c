@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Does the one thing a Windows installer does that matters to Launchpad: it
  * puts a shortcut in the Start Menu. Built with mingw and run under Wine by

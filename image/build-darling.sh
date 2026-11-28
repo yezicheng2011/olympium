@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Builds Darling's command-line components from source, at the revision this
 # tree was run against, and stages the result where the image build looks for
@@ -27,7 +27,7 @@ umask 022
 PIN=3fcd2e1aa85079789d19d82415695bdecc512241
 SRC=${DARLING_SRC:-/var/tmp/darling-src}
 OUT=${DARLING_OUT:-/var/tmp/darling-out}
-COMPONENTS=${DARLING_COMPONENTS:-cli}
+COMPONENTS=${DARLING_COMPONENTS:-cli;gui}
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PATCH_DIR=$SCRIPT_DIR/darling-patches
 PATCHES=()
@@ -133,4 +133,4 @@ install -m 644 "$SRC/LICENSE" "$OUT/LICENSE"
 	echo "sha256 of the Linux programs:"
 	(cd "$OUT/usr/local/bin" && sha256sum darling darlingserver darpath darling-coredump)
 } > "$OUT/SOURCE"
-du -sh "$OUT" | awk '{ print "build-darling: staged " $1 " at '"$OUT"'" }'
+du -sh "$OUT" | awk -v out="$OUT" '{ print "build-darling: staged " $1 " at " out }'

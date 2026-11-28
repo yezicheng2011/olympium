@@ -56,10 +56,12 @@ if len(selected) != len(names):
     raise SystemExit('SDK build/toolchain archives were not found')
 archive.unlink()
 for target, destination in selected:
+    shutil.rmtree(work / 'sdk' / destination, ignore_errors=True)
     extract(target, dict(destination=destination, strip=1), work / 'sdk')
     target.unlink()
 image = next(p for p in pins if p['path'] == 'Oniro/OpenHarmony 6.1 emulator')
 image_archive = download(image, cache)
+shutil.rmtree(work / 'oniro', ignore_errors=True)
 extract(image_archive, dict(destination='oniro', strip=0), work)
 image_archive.unlink()
 (work / 'publisher-provenance.json').write_text(json.dumps(dict(sdk_parts=parts, sdk=combined, image=image), indent=2) + '\n')

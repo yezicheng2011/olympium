@@ -1,9 +1,16 @@
-Olympium
-Copyright 2026 Daniel Ye
+Olympium Universal OS (ISO)
+Copyright 2026 Olympium Contributors (including Ye Zicheng / daniel.ye)
 
-First-party source is under the Apache License, Version 2.0.
-The full text is LICENSE.
+First-party Olympium OS source code (Wayland compositor, VB.NET desktop &
+runtime suite, native C bridge, and ISO build scripts) is licensed under the
+Apache License, Version 2.0. See iso/LICENSE.
 
-The live system also includes third-party Linux packages. Those packages
-remain under their own licenses. See THIRD_PARTY_NOTICES.md and, in a
-built image, /usr/share/doc/dev-desktop/SOURCE and sbom.tsv.
+The built ISO image (olympium-universal.iso) aggregates unmodified third-party
+components including the Linux kernel (GPL-2.0-only), GRUB (GPL-3.0-or-later),
+QEMU (GPL-2.0-only), Wine (LGPL-2.1-or-later), Darling (GPL-3.0-only + APSL),
+.NET 8 Runtime (MIT), GTK 3 / GLib / Pango / Cairo (LGPL-2.1-or-later),
+wlroots / Wayland (MIT), Firefox (MPL-2.0), scrcpy / ADB / OpenHarmony tools
+(Apache-2.0), and Ubuntu/Debian base packages. Every third-party component
+remains strictly under its own license. See iso/THIRD_PARTY_NOTICES.md and,
+inside a built ISO, /usr/share/doc/dev-desktop/sbom.tsv and
+/usr/share/doc/*/copyright.

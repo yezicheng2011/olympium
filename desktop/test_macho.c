@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #include "macho.h"
 
@@ -29,6 +29,14 @@ int main(void) {
 	uint8_t fat[8] = {0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00, 0x00, 0x02};
 	if (dev_macho_identify(fat, sizeof fat, &info) != 0 || info.kind != DEV_MACHO_FAT || info.nfat != 2) {
 		return fail("fat header");
+	}
+	uint8_t fat64[8] = {0xCA, 0xFE, 0xBA, 0xBF, 0x00, 0x00, 0x00, 0x02};
+	if (dev_macho_identify(fat64, sizeof fat64, &info) != 0 || info.kind != DEV_MACHO_FAT || info.nfat != 2) {
+		return fail("fat64 header");
+	}
+	uint8_t jclass[8] = {0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00, 0x00, 0x3D};
+	if (dev_macho_identify(jclass, sizeof jclass, &info) == 0) {
+		return fail("Java class file was accepted as Mach-O");
 	}
 	uint8_t elf[4] = {0x7F, 'E', 'L', 'F'};
 	if (dev_macho_identify(elf, sizeof elf, &info) == 0) {

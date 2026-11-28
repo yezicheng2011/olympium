@@ -10,6 +10,7 @@ import io
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -110,7 +111,7 @@ def main():
         record['cold_start'] = args.cold_start
         print('Launching ' + components[0], flush=True)
         launch = run('shell', 'am', 'start', '-W', '-a', 'android.intent.action.MAIN',
-                     '-c', 'android.intent.category.LAUNCHER', '-n', components[0], timeout=180)
+                     '-c', 'android.intent.category.LAUNCHER', '-n', shlex.quote(components[0]), timeout=180)
         (args.output / 'launch.txt').write_bytes(launch)
         if b'Status: ok' not in launch or b'Error' in launch:
             raise RuntimeError('Activity launch did not return Status: ok')

@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Reads a Mac application bundle: its Info.plist, the CPU types of its
  * program, and its icon. Nothing here runs the program, and nothing here

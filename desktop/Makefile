@@ -12,9 +12,14 @@ GTK_FLAGS := $(shell pkg-config --cflags --libs gtk+-3.0)
 # built where Xwayland can be: it needs xcb and xcb-xfixes.
 CLIP_HELPER := $(shell pkg-config --exists xcb xcb-xfixes && echo dev-clip-helper)
 
-.PHONY: all clip-helper test test-render test-startup test-wine test-mac test-packages clean
+.PHONY: all clip-helper native-lib test test-render test-startup test-wine test-mac test-packages clean
 
-all: $(CLIP_HELPER) dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
+all: $(CLIP_HELPER) libolympium-native.so dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho splash.png
+
+native-lib: libolympium-native.so
+
+libolympium-native.so: native_bridge.c accounts.c accounts.h dragon.h $(MAC_SOURCES) $(MAC_HEADERS)
+	$(CC) $(CFLAGS) $(LARGE_FILES) -fPIC -shared -o $@ native_bridge.c accounts.c $(MAC_SOURCES) $(CAIRO_FLAGS) $(PIXBUF_FLAGS) -lcrypt -llzma -lz -lm
 
 splash.png: splash.c
 	$(CC) $(CFLAGS) -o splash-gen splash.c $(CAIRO_FLAGS) -lm
@@ -86,18 +91,29 @@ test-blur: test_blur.c blur.c blur.h
 test-macho: test_macho.c macho.c macho.h
 	$(CC) $(CFLAGS) -o $@ test_macho.c macho.c
 
+test-accounts: test_accounts.c accounts.c accounts.h
+	$(CC) $(CFLAGS) -o $@ test_accounts.c accounts.c -lcrypt
+
+test-sandbox: test_sandbox.c sandbox.c sandbox.h
+	$(CC) $(CFLAGS) -o $@ test_sandbox.c sandbox.c
+
+test-macbundle: test_macbundle.c macbundle.c macbundle.h macho.c macho.h
+	$(CC) $(CFLAGS) -o $@ test_macbundle.c macbundle.c macho.c
+
 test-xremap: test_xremap.c
 	$(CC) $(CFLAGS) -o $@ test_xremap.c $(shell pkg-config --cflags --libs xcb)
 
-test: test-blur test-macho
+test: test-blur test-macho test-accounts
 	./test-blur
 	./test-macho
+	./test-accounts names
 
 test-render:
 	bash ./test-render.sh
 
 test-startup: dev-compositor olympium-testapp
-	python3 ../image/test-driver-report.py
+	$(MAKE) -C ../image driver-report test-driver-report
+	cd ../image && ./test-driver-report
 	python3 ./test-startup.py
 
 # Needs wine, Xwayland, and mingw. It exits 77 when one is missing.
@@ -113,4 +129,4 @@ test-packages:
 	./test-packages.sh
 
 clean:
-	rm -f dev-clip-helper dev-compositor-nox dev-compositor-input-test dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho test-xremap splash-gen splash.png
+	rm -f libolympium-native.so dev-clip-helper dev-compositor-nox dev-compositor-input-test dev-compositor dev-files dev-settings dev-swatch dev-compat olympium-run olympium-testapp dev-install desk-note desk-paste test-blur test-macho test-accounts test-sandbox test-macbundle test-xremap splash-gen splash.png

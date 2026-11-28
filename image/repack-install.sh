@@ -28,11 +28,25 @@ umount_chroot() {
 	umount "$ROOT/proc" 2>/dev/null || true
 	umount "$ROOT/sys" 2>/dev/null || true
 }
+trap umount_chroot EXIT
 
 install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" "$ROOT/usr/share/olympium/samples"
-install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
-	"$REPO/image/install-sample.sh" "$REPO/image/olympium-mac-run" \
-	"$ROOT/usr/libexec/dev-desktop/"
+if [ "$ARCH" = amd64 ]; then
+	make -C "$REPO/image" run-session olympium-mac-run
+	install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
+		"$REPO/image/install-sample.sh" "$REPO/image/olympium-mac-run" \
+		"$ROOT/usr/libexec/dev-desktop/"
+else
+	mount_chroot
+	rm -rf "$ROOT/tmp/image"
+	mkdir -p "$ROOT/tmp/image"
+	cp -a "$REPO/image/Makefile" "$REPO/image/src" "$ROOT/tmp/image/"
+	chroot "$ROOT" make -C /tmp/image clean run-session olympium-mac-run
+	install -m 755 "$ROOT/tmp/image/run-session" "$REPO/image/startup.sh" \
+		"$REPO/image/install-sample.sh" "$ROOT/tmp/image/olympium-mac-run" \
+		"$ROOT/usr/libexec/dev-desktop/"
+	umount_chroot
+fi
 # dev-install unpacks Mac disk images and packages with 7-Zip and cpio, and
 # an .rpm with rpm and rpm2cpio. A root made before those were needed gets
 # them added. Nothing else is downloaded.
@@ -117,11 +131,11 @@ dpkg-deb -c "$ROOT/usr/share/olympium/samples/desk-note.deb" | head
 rm -rf "$WORK"
 mkdir -p "$WORK/boot/grub" "$WORK/live"
 if [ "$ARCH" = i386 ]; then
-	kimg=$(echo "$ROOT"/boot/vmlinuz-*-686-pae)
-	initrd=$(echo "$ROOT"/boot/initrd.img-*-686-pae)
+	kimg=$(ls -1 "$ROOT"/boot/vmlinuz-*-686-pae | sort -V | tail -n 1)
+	initrd="$ROOT/boot/initrd.img-${kimg##*/vmlinuz-}"
 else
-	kimg=$(echo "$ROOT"/boot/vmlinuz-*)
-	initrd=$(echo "$ROOT"/boot/initrd.img-*)
+	kimg=$(ls -1 "$ROOT"/boot/vmlinuz-* | sort -V | tail -n 1)
+	initrd="$ROOT/boot/initrd.img-${kimg##*/vmlinuz-}"
 fi
 cp -L "$kimg" "$WORK/boot/vmlinuz"
 cp -L "$initrd" "$WORK/boot/initrd.img"
@@ -149,13 +163,36 @@ if [ "$ARCH" != arm64 ] && [ -x "$ROOT/usr/bin/wineboot" ]; then
 	bash "$REPO/image/wine-prefix.sh" "$ROOT"
 	umount_chroot
 fi
+# Install dotnet-runtime-8.0, scrcpy, slim OpenHarmony local SDK layout, and unified dragon icons.
+mount_chroot
+DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get update
+DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends dotnet-runtime-8.0
+bash "$REPO/image/stage-mobile-slim.sh" "$ROOT" "$ARCH"
+umount_chroot
+make -C "$REPO/vbnet" build
+bash "$REPO/vbnet/install-shims.sh" "$ROOT" "$REPO/vbnet/out"
+install -D -m 644 "$REPO/image/olympium-wine.binfmt.conf" "$ROOT/etc/binfmt.d/olympium-wine.conf"
+install -D -m 644 "$REPO/image/olympium-wine-exec.desktop" "$ROOT/usr/share/applications/olympium-wine-exec.desktop"
+if [ -f "$REPO/branding/icons/olympium-1024.png" ]; then
+	install -D -m 644 "$REPO/branding/icons/olympium-1024.png" "$ROOT/usr/share/olympium/olympium-1024.png"
+	install -D -m 644 "$REPO/branding/icons/olympium-transparent-1024.png" "$ROOT/usr/share/olympium/olympium-transparent-1024.png"
+	for sz in 48x48 128x128 256x256 512x512; do
+		install -D -m 644 "$REPO/branding/icons/olympium-1024.png" "$ROOT/usr/share/icons/hicolor/$sz/apps/olympium.png"
+	done
+fi
+if [ -f "$REPO/desktop/libolympium-native.so" ]; then
+	install -D -m 755 "$REPO/desktop/libolympium-native.so" "$ROOT/usr/lib/olympium/libolympium-native.so"
+fi
 for mnt in proc sys dev/pts dev run; do
 	if mountpoint -q "$ROOT/$mnt"; then
 		umount -l "$ROOT/$mnt" || true
 	fi
 done
 mkdir -p "$ROOT/proc" "$ROOT/sys" "$ROOT/dev" "$ROOT/run" "$ROOT/tmp"
-mksquashfs "$ROOT" "$WORK/live/filesystem.squashfs" -comp gzip -b 1M -noappend \
+bash "$REPO/image/slim-rootfs.sh" "$ROOT"
+bcj=x86
+[ "$ARCH" = arm64 ] && bcj=arm
+mksquashfs "$ROOT" "$WORK/live/filesystem.squashfs" -comp xz -b 1M -Xbcj "$bcj" -noappend \
 	-e var/cache/apt/archives var/lib/apt/lists tmp
 cat > "$WORK/boot/grub/grub.cfg" <<'EOF'
 set timeout=4

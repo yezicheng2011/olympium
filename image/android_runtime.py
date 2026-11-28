@@ -37,7 +37,13 @@ def download(record, cache):
             append = offset and response.status == 206
             with partial.open('ab' if append else 'wb') as output:
                 shutil.copyfileobj(response, output, 1024 * 1024)
+        with partial.open('rb') as stream:
+            actual = hashlib.file_digest(stream, record['algorithm']).hexdigest()
+        if partial.stat().st_size != record['size'] or actual != record['checksum']:
+            partial.unlink(missing_ok=True)
+            raise RuntimeError('Android publisher checksum mismatch: ' + record['path'])
         partial.replace(target)
+        return target
     with target.open('rb') as stream:
         actual = hashlib.file_digest(stream, record['algorithm']).hexdigest()
     if target.stat().st_size != record['size'] or actual != record['checksum']:
@@ -102,6 +108,8 @@ def ensure_runtime(root):
     marker = root / 'runtime-version.json'
     if marker.is_file() and marker.read_bytes() == pins:
         return
+    if root.exists() and any(root.iterdir()) and not marker.is_file():
+        raise RuntimeError('Refusing to replace an existing unrecognized Android runtime')
     root.parent.mkdir(parents=True, exist_ok=True)
     cache = root.parent / 'downloads'
     cache.mkdir(exist_ok=True)
@@ -118,11 +126,23 @@ def ensure_runtime(root):
                 extract(archive, record, stage)
             archives.append(archive)
         (stage / 'runtime-version.json').write_bytes(pins)
+        backup = None
         if root.exists():
-            # Only an incomplete runtime previously owned by this installer.
             if any(root.iterdir()):
-                raise RuntimeError('Refusing to replace an existing unrecognized Android runtime')
-            root.rmdir()
-        stage.rename(root)
+                if not marker.is_file():
+                    raise RuntimeError('Refusing to replace an existing unrecognized Android runtime')
+                backup = root.parent / f'.{root.name}.old-{os.getpid()}'
+                shutil.rmtree(backup, ignore_errors=True)
+                root.rename(backup)
+            else:
+                root.rmdir()
+        try:
+            stage.rename(root)
+        except OSError:
+            if backup is not None and backup.exists() and not root.exists():
+                backup.rename(root)
+            raise
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
         for archive in archives:
             archive.unlink()

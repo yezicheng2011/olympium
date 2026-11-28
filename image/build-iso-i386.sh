@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Live ISO for a 32-bit x86 machine. The kernel is Debian's 686-pae kernel.
 # Userspace is Debian bookworm. wlroots 0.17 is built from source because
@@ -44,6 +44,7 @@ umount_chroot() {
 	umount "$ROOT/proc" 2>/dev/null || true
 	umount "$ROOT/sys" 2>/dev/null || true
 }
+trap umount_chroot EXIT
 
 ver_lt() {
 	[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ] && [ "$1" != "$2" ]
@@ -90,7 +91,7 @@ install -d "$ROOT/usr/share/olympium"
 {
 	echo "arch i386"
 	echo "base debian-bookworm"
-	kver=$(cd "$ROOT/lib/modules" && echo *-686-pae)
+	kver=$(ls -1 "$ROOT/lib/modules" | grep -E -- '-686-pae$' | sort -V | tail -n 1)
 	echo "kernel $kver"
 } > "$ROOT/usr/share/olympium/driver-manifest.txt"
 for pkg in firmware-linux-free firmware-misc-nonfree firmware-amd-graphics \
@@ -102,7 +103,7 @@ for pkg in firmware-linux-free firmware-misc-nonfree firmware-amd-graphics \
 		echo "driver-missing package $pkg" | tee -a "$ROOT/usr/share/olympium/driver-manifest.txt"
 	fi
 done
-cfg=$(echo "$ROOT"/boot/config-*-686-pae)
+cfg=$(ls -1 "$ROOT"/boot/config-*-686-pae | sort -V | tail -n 1)
 if ! grep -q '^CONFIG_X86_32=y' "$cfg" || grep -q '^CONFIG_64BIT=y' "$cfg"; then
 	echo "the installed kernel is not a 32-bit x86 kernel" >&2
 	exit 1
@@ -167,9 +168,12 @@ if [ "${OLYMPIUM_WINE:-0}" = 1 ]; then
 fi
 echo "wlroots $(pkg_ver wlroots)"
 
-rm -rf "$ROOT/tmp/desktop"
+rm -rf "$ROOT/tmp/desktop" "$ROOT/tmp/image"
 cp -a "$REPO/desktop" "$ROOT/tmp/desktop"
+mkdir -p "$ROOT/tmp/image"
+cp -a "$REPO/image/Makefile" "$REPO/image/src" "$ROOT/tmp/image/"
 chroot "$ROOT" make -C /tmp/desktop clean all
+chroot "$ROOT" make -C /tmp/image clean system
 file "$ROOT/tmp/desktop/dev-compositor" | grep -q '80386'
 install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" \
 	"$ROOT/etc/dev-desktop" "$ROOT/etc/systemd/system/multi-user.target.wants" \
@@ -180,16 +184,17 @@ install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" 
 if [ -x "$ROOT/tmp/desktop/dev-clip-helper" ]; then
 	install -m 755 "$ROOT/tmp/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
 fi
-install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
-	"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
-	"$REPO/image/olympium-mac-run" \
-	"$REPO/image/guest-fetch.sh" "$REPO/image/driver-report" "$REPO/image/driver-install" \
-	"$REPO/image/firefox-launch" "$REPO/image/install-sample.sh" \
+install -m 755 "$ROOT/tmp/image/run-session" "$REPO/image/startup.sh" \
+	"$ROOT/tmp/image/olympium-launch" "$ROOT/tmp/image/install-to-disk" \
+	"$ROOT/tmp/image/olympium-mac-run" \
+	"$ROOT/tmp/image/guest-fetch" "$ROOT/tmp/image/driver-report" "$ROOT/tmp/image/driver-install" \
+	"$ROOT/tmp/image/firefox-launch" "$REPO/image/install-sample.sh" \
 	"$ROOT/usr/libexec/dev-desktop/"
-install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
-install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
-install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
-install -m 755 "$REPO/image/install-to-disk" "$ROOT/usr/bin/install-to-disk"
+install -m 755 "$ROOT/tmp/image/driver-install" "$ROOT/usr/bin/driver-install"
+install -m 755 "$ROOT/tmp/image/driver-report" "$ROOT/usr/bin/driver-report"
+install -m 755 "$ROOT/tmp/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
+install -m 755 "$ROOT/tmp/image/install-to-disk" "$ROOT/usr/bin/install-to-disk"
+IMAGE_BINS=$ROOT/tmp/image
 install -m 644 "$REPO/image/foot.ini" "$ROOT/etc/xdg/foot/foot.ini"
 install -m 644 "$REPO/image/browser-home.html" "$ROOT/usr/share/olympium/browser-home.html"
 install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
@@ -273,16 +278,30 @@ if [ -x "$ROOT/usr/sbin/update-initramfs.real" ]; then
 	rm -f "$ROOT/usr/sbin/update-initramfs"
 	chroot "$ROOT" dpkg-divert --local --rename --remove /usr/sbin/update-initramfs
 fi
+bash "$REPO/image/stage-crossarch.sh" "$ROOT" i386
+if [ -f "$REPO/branding/icons/olympium-1024.png" ]; then
+	install -D -m 644 "$REPO/branding/icons/olympium-1024.png" "$ROOT/usr/share/olympium/olympium-1024.png"
+	install -D -m 644 "$REPO/branding/icons/olympium-transparent-1024.png" "$ROOT/usr/share/olympium/olympium-transparent-1024.png"
+	for sz in 48x48 128x128 256x256 512x512; do
+		install -D -m 644 "$REPO/branding/icons/olympium-1024.png" \
+			"$ROOT/usr/share/icons/hicolor/$sz/apps/olympium.png"
+	done
+fi
 chroot "$ROOT" update-initramfs -u
 chroot "$ROOT" dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' \
 	> "$ROOT/usr/share/doc/dev-desktop/sbom.tsv"
 rm -rf "$ROOT/tmp/iso" "$ROOT/tmp/desktop" "$ROOT/tmp/depbuild" "$ROOT/var/cache/apt/archives/"*.deb
 rm -rf "$ROOT/var/lib/apt/lists/"*
 umount_chroot
+bash "$REPO/image/slim-rootfs.sh" "$ROOT"
+if [ "${OLYMPIUM_ROOTFS_ONLY:-0}" = 1 ]; then
+	echo "staged rootfs $ROOT (i386)"
+	exit 0
+fi
 rm -rf "$WORK"
 mkdir -p "$WORK/boot/grub" "$WORK/live"
-kimg=$(echo "$ROOT"/boot/vmlinuz-*-686-pae)
-initrd=$(echo "$ROOT"/boot/initrd.img-*-686-pae)
+kimg=$(ls -1 "$ROOT"/boot/vmlinuz-*-686-pae | sort -V | tail -n 1)
+initrd="$ROOT/boot/initrd.img-${kimg##*/vmlinuz-}"
 cp -L "$kimg" "$WORK/boot/vmlinuz"
 cp -L "$initrd" "$WORK/boot/initrd.img"
 if [ -f "$REPO/desktop/splash.png" ]; then

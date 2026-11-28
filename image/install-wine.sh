@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Installs the distribution's own Wine and Xwayland into an image root. Wine
 # is not rewritten or patched here. What differs per image is which halves of
@@ -45,3 +45,10 @@ arm64)
 	;;
 esac
 in_root dpkg-query -W -f '${Package}:${Architecture} ${Version}\n' wine wine64 wine32 xwayland 2>/dev/null || true
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -f "$SCRIPT_DIR/olympium-wine.binfmt.conf" ]; then
+	install -D -m 644 "$SCRIPT_DIR/olympium-wine.binfmt.conf" "$ROOT/etc/binfmt.d/olympium-wine.conf"
+fi
+if [ -f "$SCRIPT_DIR/olympium-wine-exec.desktop" ]; then
+	install -D -m 644 "$SCRIPT_DIR/olympium-wine-exec.desktop" "$ROOT/usr/share/applications/olympium-wine-exec.desktop"
+fi

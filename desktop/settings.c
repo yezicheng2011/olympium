@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Settings, laid out like a system-settings window: a search field, an icon
  * sidebar, and grouped rows. The glyphs are original. The compositor draws
@@ -8,9 +8,11 @@
  */
 #define _GNU_SOURCE
 #include "accounts.h"
+#include "dragon.h"
 
 #include <gtk/gtk.h>
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -34,7 +36,7 @@ static void send_contrast(void) {
 	snprintf(addr.sun_path, sizeof addr.sun_path, "/run/dev-desktop/control");
 	if (connect(fd, (struct sockaddr *)&addr, sizeof addr) == 0) {
 		const char *msg = "contrast toggle\n";
-		if (write(fd, msg, strlen(msg)) < 0) {
+		if (send(fd, msg, strlen(msg), MSG_NOSIGNAL) < 0) {
 			/* The compositor may have closed the socket. */
 		}
 	}
@@ -111,16 +113,8 @@ static gboolean draw_nav_icon(GtkWidget *widget, cairo_t *cr, gpointer data) {
 		rounded(cr, 10, 10, 12, 12, 3);
 		cairo_fill(cr);
 	} else if (strcmp(id, "olympium") == 0) {
-		icon_fill(cr, 0.22, 0.38, 0.66, 0.08, 0.14, 0.32);
-		cairo_set_source_rgba(cr, 1.00, 0.84, 0.40, 1);
-		cairo_set_line_width(cr, 2.1);
-		cairo_move_to(cr, 8, 19);
-		cairo_curve_to(cr, 7, 12, 18, 16, 14, 9);
-		cairo_stroke(cr);
-		cairo_arc(cr, 17, 11, 2.3, 0, 6.2832);
-		cairo_fill(cr);
-		cairo_arc(cr, 21, 7.5, 1.2, 0, 6.2832);
-		cairo_fill(cr);
+		icon_fill(cr, 0.11, 0.12, 0.15, 0.02, 0.02, 0.03);
+		draw_dragon_mark(cr, 3.0, 3.0, 22.0, 1.00, 0.92, 0.54);
 	} else if (strcmp(id, "license") == 0) {
 		icon_fill(cr, 0.36, 0.82, 0.52, 0.12, 0.62, 0.36);
 		cairo_set_source_rgba(cr, 1, 1, 1, 0.96);
@@ -671,6 +665,7 @@ static void add_pane(GtkWidget *side, const char *id, const char *label, GtkWidg
 }
 
 int main(int argc, char **argv) {
+	signal(SIGPIPE, SIG_IGN);
 	gtk_init(&argc, &argv);
 	g_object_set(gtk_settings_get_default(), "gtk-font-name", "Ubuntu 12", NULL);
 	GtkCssProvider *css = gtk_css_provider_new();

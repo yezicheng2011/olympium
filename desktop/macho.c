@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #include "macho.h"
 
@@ -13,7 +13,9 @@ enum {
 	MH_MAGIC_64 = 0xFEEDFACF,
 	MH_CIGAM_64 = 0xCFFAEDFE,
 	FAT_MAGIC = 0xCAFEBABE,
-	FAT_CIGAM = 0xBEBAFECA
+	FAT_CIGAM = 0xBEBAFECA,
+	FAT_MAGIC_64 = 0xCAFEBABF,
+	FAT_CIGAM_64 = 0xBFBAFECA
 };
 
 static uint32_t read_u32(const uint8_t *p, int swap) {
@@ -70,19 +72,26 @@ int dev_macho_identify(const uint8_t *data, size_t length, struct dev_macho_info
 	uint32_t magic = (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
 		((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
 
-	if (magic == FAT_MAGIC || magic == FAT_CIGAM) {
+	if (magic == FAT_MAGIC || magic == FAT_CIGAM ||
+			magic == FAT_MAGIC_64 || magic == FAT_CIGAM_64) {
 		/*
 		 * A normal fat header is big-endian on disk. Reading those bytes as a
-		 * little-endian word yields FAT_CIGAM. FAT_MAGIC here means the file
-		 * itself was stored little-endian.
+		 * little-endian word yields FAT_CIGAM/FAT_CIGAM_64. FAT_MAGIC here
+		 * means the file itself was stored little-endian. Java class files
+		 * share 0xCAFEBABE followed by a version number, so reject impossible
+		 * slice counts.
 		 */
 		uint32_t nfat;
-		int stored_le = magic == FAT_MAGIC;
+		int stored_le = magic == FAT_MAGIC || magic == FAT_MAGIC_64;
 		if (stored_le) {
 			nfat = read_u32(data + 4, 0);
 		} else {
 			nfat = ((uint32_t)data[4] << 24) | ((uint32_t)data[5] << 16) |
 				((uint32_t)data[6] << 8) | (uint32_t)data[7];
+		}
+		if (nfat == 0 || nfat > 16) {
+			snprintf(out->description, sizeof out->description, "not a Mach-O header");
+			return -1;
 		}
 		out->kind = DEV_MACHO_FAT;
 		out->swapped = stored_le;

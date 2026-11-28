@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Watches the X clipboard for the compositor. X programs here are Wine
  * windows and anything else under Xwayland.
@@ -52,10 +52,10 @@ static xcb_atom_t g_property;
 static xcb_atom_t g_wm_check;
 static uint32_t g_id_mask;
 
-static long now_ms(void) {
+static int64_t now_ms(void) {
 	struct timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
-	return (long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+	return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
 static xcb_atom_t atom(const char *name) {
@@ -150,31 +150,14 @@ int main(void) {
 	free(first);
 	say(state);
 
-	long claimed_at = 0;
-	long nudge_at[2] = {0, 0};
+	int64_t claimed_at = 0;
+	int64_t nudge_at[2] = {0, 0};
 	if (state == 'x') {
 		nudge_at[0] = now_ms() + 120;
 		nudge_at[1] = now_ms() + 500;
 	}
 	struct pollfd pfd = {.fd = xcb_get_file_descriptor(g_conn), .events = POLLIN};
 	for (;;) {
-		int wait = -1;
-		long now = now_ms();
-		for (int i = 0; i < 2; i++) {
-			if (nudge_at[i] != 0) {
-				long left = nudge_at[i] - now;
-				if (left <= 0) {
-					nudge_at[i] = 0;
-					nudge();
-					wait = 0;
-				} else if (wait < 0 || left < wait) {
-					wait = (int)left;
-				}
-			}
-		}
-		if (poll(&pfd, 1, wait) < 0) {
-			continue;
-		}
 		xcb_generic_event_t *event;
 		while ((event = xcb_poll_for_event(g_conn)) != NULL) {
 			uint8_t type = event->response_type & 0x7f;
@@ -182,7 +165,7 @@ int main(void) {
 				xcb_xfixes_selection_notify_event_t *change =
 					(xcb_xfixes_selection_notify_event_t *)event;
 				char next = state_of(change->owner);
-				now = now_ms();
+				int64_t now = now_ms();
 				if (next == 'x') {
 					claimed_at = now;
 					nudge_at[0] = now + 120;
@@ -205,6 +188,23 @@ int main(void) {
 		}
 		if (xcb_connection_has_error(g_conn)) {
 			return 0;
+		}
+		int wait = -1;
+		int64_t now = now_ms();
+		for (int i = 0; i < 2; i++) {
+			if (nudge_at[i] != 0) {
+				int64_t left = nudge_at[i] - now;
+				if (left <= 0) {
+					nudge_at[i] = 0;
+					nudge();
+					wait = 0;
+				} else if (wait < 0 || left < wait) {
+					wait = (int)left;
+				}
+			}
+		}
+		if (poll(&pfd, 1, wait) < 0) {
+			continue;
 		}
 	}
 }

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Windows Program (Wine)
+Exec=/usr/libexec/dev-desktop/olympium-wine-exec %f
+Icon=olympium
+Terminal=false
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-dosexec;application/vnd.microsoft.portable-executable;application/x-msdos-program;

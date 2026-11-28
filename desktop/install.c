@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * One install window for a file the user chose. Opening a file only inspects
  * it. Import and launch require consent. This program calls the pinned
@@ -13,8 +13,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <gtk/gtk.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,12 +125,17 @@ static const char *android_runtime(void) {
 }
 
 static int capture(char *const argv[], char *out, size_t outlen) {
+	if (outlen > 0) {
+		out[0] = '\0';
+	}
 	int fds[2];
 	if (pipe(fds) != 0) {
 		return 1;
 	}
 	pid_t pid = fork();
 	if (pid < 0) {
+		close(fds[0]);
+		close(fds[1]);
 		return 1;
 	}
 	if (pid == 0) {
@@ -142,16 +149,24 @@ static int capture(char *const argv[], char *out, size_t outlen) {
 	size_t n = 0;
 	while (n + 1 < outlen) {
 		ssize_t r = read(fds[0], out + n, outlen - 1 - n);
+		if (r < 0 && errno == EINTR) {
+			continue;
+		}
 		if (r <= 0) {
 			break;
 		}
 		n += (size_t)r;
 	}
-	out[n] = '\0';
+	if (outlen > 0) {
+		out[n] = '\0';
+	}
 	close(fds[0]);
 	int st = 0;
-	waitpid(pid, &st, 0);
-	return WIFEXITED(st) ? WEXITSTATUS(st) : 1;
+	pid_t waited;
+	do {
+		waited = waitpid(pid, &st, 0);
+	} while (waited < 0 && errno == EINTR);
+	return waited == pid && WIFEXITED(st) ? WEXITSTATUS(st) : 1;
 }
 
 static int json_true(const char *text, const char *key) {
@@ -196,6 +211,11 @@ static int file_sha256(const char *path, char *out, size_t outlen) {
 		return -1;
 	}
 	pid_t pid = fork();
+	if (pid < 0) {
+		close(fds[0]);
+		close(fds[1]);
+		return -1;
+	}
 	if (pid == 0) {
 		dup2(fds[1], 1);
 		close(fds[0]);
@@ -208,6 +228,9 @@ static int file_sha256(const char *path, char *out, size_t outlen) {
 	size_t n = 0;
 	while (n + 1 < sizeof buf) {
 		ssize_t r = read(fds[0], buf + n, sizeof buf - 1 - n);
+		if (r < 0 && errno == EINTR) {
+			continue;
+		}
 		if (r <= 0) {
 			break;
 		}
@@ -216,8 +239,11 @@ static int file_sha256(const char *path, char *out, size_t outlen) {
 	buf[n] = '\0';
 	close(fds[0]);
 	int st = 0;
-	waitpid(pid, &st, 0);
-	if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) {
+	pid_t waited;
+	do {
+		waited = waitpid(pid, &st, 0);
+	} while (waited < 0 && errno == EINTR);
+	if (waited != pid || !WIFEXITED(st) || WEXITSTATUS(st) != 0) {
 		return -1;
 	}
 	char *sp = strchr(buf, ' ');
@@ -415,7 +441,7 @@ static int wine_can_run(unsigned machine, char *why, size_t n) {
 		host = uname(&u) == 0 ? u.machine : "";
 	}
 	int host_x64 = strcmp(host, "x86_64") == 0;
-	int host_x86 = host[0] == 'i' && strcmp(host + 2, "86") == 0;
+	int host_x86 = host[0] == 'i' && host[1] != '\0' && strcmp(host + 2, "86") == 0;
 	int host_arm64 = strcmp(host, "aarch64") == 0 || strcmp(host, "arm64") == 0;
 	const char *what = pe_machine_name(machine);
 	if (machine == 0x8664) {
@@ -1131,7 +1157,17 @@ static int install_deb(const char *deb, const char *id, struct rec *rec) {
 			}
 			char full[512];
 			snprintf(full, sizeof full, "%s%s", dest, execkey);
-			if (access(full, X_OK) != 0) {
+			char dest_real[PATH_MAX];
+			char full_real[PATH_MAX];
+			if (realpath(dest, dest_real) == NULL || realpath(full, full_real) == NULL) {
+				continue;
+			}
+			size_t dest_len = strlen(dest_real);
+			if (strncmp(full_real, dest_real, dest_len) != 0 || full_real[dest_len] != '/' ||
+					access(full_real, X_OK) != 0) {
+				continue;
+			}
+			if (snprintf(full, sizeof full, "%s", full_real) >= (int)sizeof full) {
 				continue;
 			}
 			const char *base = strrchr(full, '/');
@@ -1292,10 +1328,10 @@ static void runtime_daemon(const char *sockpath) {
 
 static long millis_between(const struct timespec *a, const struct timespec *b);
 
-static long mono_ms(void) {
+static int64_t mono_ms(void) {
 	struct timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
-	return (long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+	return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
 static int run_quiet(char *const argv[]) {
@@ -1336,8 +1372,8 @@ static int find_x_display(char *out, size_t n) {
 	char path[600];
 	snprintf(path, sizeof path, "%s/olympium-xdisplay",
 		run != NULL && run[0] != '\0' ? run : "/run/dev-desktop");
-	long wait_ms = (long)env_seconds("OLYMPIUM_XWAIT", 20) * 1000;
-	long start = mono_ms();
+	int64_t wait_ms = (int64_t)env_seconds("OLYMPIUM_XWAIT", 20) * 1000;
+	int64_t start = mono_ms();
 	for (;;) {
 		FILE *f = fopen(path, "r");
 		if (f != NULL) {
@@ -1399,8 +1435,8 @@ static int dir_is_empty(const char *path) {
  * copied in whole, into a sibling directory first and then renamed, so an
  * interrupted copy never leaves a half prefix behind. Returns "existing",
  * "seeded", or "fresh" (Wine builds it on this launch). */
-static const char *wine_prepare(const char *prefix, long *ms) {
-	long start = mono_ms();
+static const char *wine_prepare(const char *prefix, int64_t *ms) {
+	int64_t start = mono_ms();
 	char probe[768];
 	*ms = 0;
 	snprintf(probe, sizeof probe, "%s/system.reg", prefix);
@@ -1523,20 +1559,20 @@ static int cmd_prewarm(const char *what) {
 		return 0;
 	}
 	char prefix[640];
-	long ms = 0;
+	int64_t ms = 0;
 	wine_prefix_path(prefix, sizeof prefix);
 	const char *state = wine_prepare(prefix, &ms);
 	setenv("WINEPREFIX", prefix, 1);
 	setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
-	long a = mono_ms();
+	int64_t a = mono_ms();
 	wine_keep_server(env_seconds("OLYMPIUM_WINE_PREWARM_IDLE", 600));
 	/* wineserver alone saves little. Most of a cold start is Wine's own
 	 * services, so start them once with a program that exits at once. */
 	char *warm[] = {"/usr/bin/wine", "cmd", "/c", "exit", NULL};
 	run_quiet(warm);
 	printf("prewarm wine_prefix %s\n", state);
-	printf("prewarm wine_prefix_ms %ld\n", ms);
-	printf("prewarm wine_server_ms %ld\n", mono_ms() - a);
+	printf("prewarm wine_prefix_ms %" PRId64 "\n", ms);
+	printf("prewarm wine_server_ms %" PRId64 "\n", mono_ms() - a);
 	return 0;
 }
 
@@ -2063,8 +2099,9 @@ static int cmd_remove(const char *id) {
 	} else {
 	snprintf(apps_root, sizeof apps_root, "%s/mac/Applications/", root);
 	size_t prefix = strlen(apps_root);
-	if (strncmp(recs[at].path, apps_root, prefix) != 0 || strchr(recs[at].path + prefix, '/') != NULL ||
-			strstr(recs[at].path, "/../") != NULL || recs[at].path[prefix] == '\0') {
+	const char *leaf = recs[at].path + prefix;
+	if (strncmp(recs[at].path, apps_root, prefix) != 0 || strchr(leaf, '/') != NULL ||
+			leaf[0] == '\0' || strcmp(leaf, ".") == 0 || strcmp(leaf, "..") == 0) {
 		/* The row was edited to point somewhere else. Nothing is deleted. */
 		fprintf(stderr, "dev-install: %s is not under %s; it was not removed\n", recs[at].path, apps_root);
 		return 3;
@@ -2086,8 +2123,13 @@ static int cmd_remove(const char *id) {
 	unlink(path);
 	char icons_root[640];
 	snprintf(icons_root, sizeof icons_root, "%s/icons/", root);
-	if (icon[0] != '\0' && strncmp(icon, icons_root, strlen(icons_root)) == 0) {
-		unlink(icon);
+	size_t icon_prefix = strlen(icons_root);
+	if (icon[0] != '\0' && strncmp(icon, icons_root, icon_prefix) == 0) {
+		const char *icon_leaf = icon + icon_prefix;
+		if (icon_leaf[0] != '\0' && strchr(icon_leaf, '/') == NULL &&
+				strcmp(icon_leaf, ".") != 0 && strcmp(icon_leaf, "..") != 0) {
+			unlink(icon);
+		}
 	}
 	printf("removed=%s\n", recs[at].path);
 	for (int i = at; i + 1 < n; i++) {
@@ -2155,23 +2197,23 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		}
 		setenv("DISPLAY", xdisplay, 1);
 		char prefix[640];
-		long prefix_ms = 0;
-		long t0 = mono_ms();
+		int64_t prefix_ms = 0;
+		int64_t t0 = mono_ms();
 		wine_prefix_path(prefix, sizeof prefix);
 		const char *state = wine_prepare(prefix, &prefix_ms);
 		setenv("WINEPREFIX", prefix, 1);
 		setenv("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
-		long t1 = mono_ms();
+		int64_t t1 = mono_ms();
 		wine_keep_server(env_seconds("OLYMPIUM_WINE_IDLE", 60));
-		long t2 = mono_ms();
+		int64_t t2 = mono_ms();
 		/* The phases of one launch. launch_start_ms is CLOCK_MONOTONIC, the
 		 * same clock as /proc/uptime, so a test can subtract it from the
 		 * moment the compositor reports the window. */
 		printf("engine wine\n");
 		printf("wine_prefix %s\n", state);
-		printf("wine_prefix_ms %ld\n", prefix_ms);
-		printf("wine_server_ms %ld\n", t2 - t1);
-		printf("launch_start_ms %ld\n", t0);
+		printf("wine_prefix_ms %" PRId64 "\n", prefix_ms);
+		printf("wine_server_ms %" PRId64 "\n", t2 - t1);
+		printf("launch_start_ms %" PRId64 "\n", t0);
 		fflush(stdout);
 		char mark[700];
 		char root[512];
@@ -2179,7 +2221,7 @@ static int cmd_launch(const char *id, int argc, char **argv) {
 		snprintf(mark, sizeof mark, "%s/wine-launch-marks", root);
 		FILE *mf = fopen(mark, "w");
 		if (mf != NULL) {
-			fprintf(mf, "launch_start_ms %ld\nwine_prefix %s\nwine_prefix_ms %ld\nwine_server_ms %ld\n",
+			fprintf(mf, "launch_start_ms %" PRId64 "\nwine_prefix %s\nwine_prefix_ms %" PRId64 "\nwine_server_ms %" PRId64 "\n",
 				t0, state, prefix_ms, t2 - t1);
 			fclose(mf);
 		}

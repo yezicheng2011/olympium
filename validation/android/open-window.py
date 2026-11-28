@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Run the Android window implementation installed with the desktop."""
+"""Run the native C++ Android window backend installed with the desktop."""
+import os
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'image'))
-from android_window import main
-
-if __name__ == '__main__':
-    main()
+binary = Path(__file__).resolve().parents[2] / 'image/olympium-android'
+os.execv(str(binary), [str(binary), 'window', *sys.argv[1:]])

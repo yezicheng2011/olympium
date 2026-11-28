@@ -1,0 +1,109 @@
+====================================================================
+Olympium Universal OS ISO — 完整打包与构建命令指南 (BUILD_ISO.txt)
+====================================================================
+
+目标产物：
+  全局唯一的多架构通用 ISO：
+    iso/build/olympium-universal.iso
+    iso/build/olympium-universal.iso.sha256
+
+该单一 ISO 同时包含并支持：
+  - 启动架构：x86_64 (UEFI + BIOS)、i386 32位 (BIOS/UEFI)、ARM64/aarch64 (UEFI)
+  - 跨架构应用运行：在任意宿主机架构（含 x86_64/i386/arm64/armhf）上直接运行
+    x86 (32位)、x86_64 (64位)、ARM (32位 armhf)、ARM64 (64位 aarch64) 软件
+    （通过 qemu-user-static + binfmt_misc + 跨架构最小 libc sysroot）
+  - 桌面与系统工具：VB.NET (.NET 8) 主体 + 极简 C 合成器/原生桥接（已修复指针 Z 轴层级与统一新龙图标）
+  - 全格式双击即原生安装并运行：
+    .exe / .msi（自动后台 Wine + binfmt_misc，无需手动开启）
+    .dmg / .pkg / .app（Intel x86_64 / Universal2 / M 系列 ARM64 通过 Darling GUI）
+    .deb / .rpm / 跨架构 ELF
+    .apk（精简版 Android scrcpy + ADB，不含数 GB 完整系统镜像）
+    .hap（精简版 OpenHarmony 本地 SDK 工具 + HDC，不含完整系统镜像）
+
+--------------------------------------------------------------------
+1. 安装宿主机打包依赖 (Ubuntu 24.04 x86_64)
+--------------------------------------------------------------------
+sudo apt-get update
+sudo apt-get install -y \
+  debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin \
+  grub-efi-ia32-bin grub-efi-arm64-bin mtools dosfstools \
+  qemu-user-static binfmt-support \
+  build-essential pkg-config git curl wget python3 \
+  libwlroots-dev libwayland-dev wayland-protocols libgtk-3-dev \
+  libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
+  libxkbcommon-dev libinput-dev libdrm-dev libgbm-dev libegl-dev \
+  libgles2-mesa-dev liblzma-dev zlib1g-dev libcrypt-dev \
+  p7zip-full cpio rpm2cpio dpkg-dev
+
+# 安装 .NET 8 SDK（用于编译 VB.NET 系统与桌面应用）
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0
+export PATH="$HOME/.dotnet:$PATH"
+
+--------------------------------------------------------------------
+2. 本地编译与自测（无需 root，先验证桌面/VB.NET/合成器）
+--------------------------------------------------------------------
+
+# 编译 C 合成器、跨架构运行器 olympium-run、原生桥接库 libolympium-native.so
+make -C desktop
+
+# 编译 VB.NET (.NET 8) 桌面与应用套件
+make -C vbnet build
+
+# 运行单元测试
+make -C desktop test
+
+--------------------------------------------------------------------
+3. 一键打包“全局唯一多架构通用 ISO”（推荐）
+--------------------------------------------------------------------
+
+# 默认开启：通用多架构(x86_64 + i386 + arm64) + 自动 Wine + 精简 Android/OpenHarmony + 跨架构用户态
+sudo PATH="$HOME/.dotnet:$PATH" ./image/build-iso.sh universal
+
+# 如需同时内置 Darling GUI（支持 Intel x86_64 / Universal2 Mac 图形应用）:
+sudo PATH="$HOME/.dotnet:$PATH" OLYMPIUM_DARLING=1 ./image/build-iso.sh universal
+
+# 如已自行构建 Apple Silicon (ARM64) 实验性 Darling 产物，可一并注入：
+# sudo PATH="$HOME/.dotnet:$PATH" OLYMPIUM_DARLING=1 \
+#   OLYMPIUM_DARLING_ARM64_STAGE=/path/to/darling-arm64-stage \
+#   ./image/build-iso.sh universal
+
+# 可选环境变量：
+#   OLYMPIUM_WINE=1              # 默认 1：内置 Wine + 预建前缀 + binfmt_misc 自动双击运行 exe/msi
+#   OLYMPIUM_DARLING=1           # 默认 0/可设 1：内置 Darling GUI（自动优先本地源码产物，其次官方 GUI deb）
+#   OLYMPIUM_SLIM_MOBILE=1       # 默认 1：仅内置精简 scrcpy/adb/hdc/hap 工具，绝不塞入完整镜像
+#   OLYMPIUM_CROSSARCH=1         # 默认 1：内置 x86/x86_64/armhf/arm64 qemu-user-static 与最小 libc
+#   OLYMPIUM_DOTNET_RUNTIME=1    # 默认 1：内置 .NET 8 运行时以直接运行 VB.NET 系统程序
+
+最终产物路径：
+  build/olympium-universal.iso
+  build/olympium-universal.iso.sha256
+
+--------------------------------------------------------------------
+4. （可选）从源码先编译 Darling GUI 再打包
+--------------------------------------------------------------------
+# 默认包含 cli;gui 图形子系统
+./image/build-darling.sh
+sudo PATH="$HOME/.dotnet:$PATH" OLYMPIUM_DARLING=1 ./image/build-iso.sh universal
+
+--------------------------------------------------------------------
+5. 验证与试启动命令（仅在测试机执行）
+--------------------------------------------------------------------
+# 校验 ISO 哈希与体积
+ls -lh build/olympium-universal.iso
+sha256sum -c build/olympium-universal.iso.sha256
+
+# x86_64 启动测试（BIOS / UEFI 混合）
+qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 \
+  -cdrom build/olympium-universal.iso -boot d \
+  -vga virtio -serial stdio
+
+# i386 (32位) 启动测试
+qemu-system-i386 -M pc -m 2048 \
+  -cdrom build/olympium-universal.iso -boot d \
+  -vga virtio -serial stdio
+
+# ARM64 (aarch64 UEFI) 启动测试
+qemu-system-aarch64 -machine virt -cpu max -m 4096 -smp 4 \
+  -bios /usr/share/AAVMF/AAVMF_CODE.fd \
+  -cdrom build/olympium-universal.iso -boot d \
+  -device virtio-gpu-pci -device usb-kbd -device usb-tablet -serial stdio

@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #define _GNU_SOURCE
 #include "macicon.h"
@@ -133,14 +133,15 @@ int mac_icon_render(const char *icns_path, const char *png_out) {
 	if (pid == 0) {
 		/* The bytes are already in memory, so this child needs no file. It
 		 * gets one pipe to write pixels to, a memory limit, and ten seconds. */
-		int out = dup(fds[1]);
+		int out = fcntl(fds[1], F_DUPFD, 4);
 		int nul = open("/dev/null", O_RDWR);
+		if (out < 0 || nul < 0) {
+			_exit(126);
+		}
 		dup2(nul, 0);
 		dup2(nul, 1);
 		dup2(nul, 2);
-		if (out != 3) {
-			dup2(out, 3);
-		}
+		dup2(out, 3);
 		/* Nothing else stays open: not the display, not a socket. */
 		int closed = -1;
 #ifdef SYS_close_range
@@ -182,8 +183,11 @@ int mac_icon_render(const char *icns_path, const char *png_out) {
 	/* Anything more than the square is not a picture and is not read. */
 	close(fds[0]);
 	int status = 0;
-	waitpid(pid, &status, 0);
-	if (pixels == NULL || got != PIXELS || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+	pid_t waited;
+	do {
+		waited = waitpid(pid, &status, 0);
+	} while (waited < 0 && errno == EINTR);
+	if (pixels == NULL || got != PIXELS || waited != pid || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
 		free(pixels);
 		return -1;
 	}

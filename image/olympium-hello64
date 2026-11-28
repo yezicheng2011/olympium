@@ -1,4 +1,0 @@
-#!/bin/sh
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
-exec /usr/libexec/dev-desktop/olympium-run --hold /usr/lib/olympium/amd64/bin/hello64

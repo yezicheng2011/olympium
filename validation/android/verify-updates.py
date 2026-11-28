@@ -66,7 +66,7 @@ def apk(version, key, name):
 
 
 def backend(label, command, value, check=True):
-    return run(label, [sys.executable, repo / 'image/olympium-android', command, value,
+    return run(label, [repo / 'image/olympium-android', command, value,
                        '--root', root], check, 1200)
 
 
@@ -79,6 +79,7 @@ try:
         raise RuntimeError('This acceptance requires KVM')
     original_key = work / 'probe-build/debug.keystore'
     wrong_key = build / 'wrong.keystore'
+    wrong_key.unlink(missing_ok=True)
     run('new-untrusted-test-key', ['keytool', '-genkeypair', '-keystore', wrong_key,
         '-alias', 'androiddebugkey', '-storepass', 'android', '-keypass', 'android',
         '-keyalg', 'RSA', '-keysize', '2048', '-validity', '3650', '-dname', 'CN=Untrusted update fixture'])
@@ -86,6 +87,8 @@ try:
     second = apk(2, original_key, 'v2')
     wrong = apk(3, wrong_key, 'wrong-signer')
     record['apk_sha256'] = dict(v1=digest(first), v2=digest(second), wrong_signer=digest(wrong))
+    if (root / 'android/packages' / package / 'installed.json').is_file():
+        backend('remove-existing', 'remove', package, check=False)
     backend('install-v1', 'install', first)
     uid = run('uid-before', adb + ['shell', 'run-as', package, 'id', '-u']).stdout.decode().strip()
     if not uid.isdecimal() or int(uid) < 10000:

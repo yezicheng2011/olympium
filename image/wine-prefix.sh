@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Builds the Wine prefix once, while the image is built, so the first Windows
 # program on a booted system does not wait for Wine to build it. Run with the

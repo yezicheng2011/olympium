@@ -2,6 +2,7 @@
 Type=Application
 Name=Lawful test app
 Exec=/usr/bin/olympium-testapp
+Icon=olympium
 Terminal=false
 NoDisplay=false
 Categories=Utility;

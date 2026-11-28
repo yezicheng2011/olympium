@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #define _GNU_SOURCE
 #include "macpkg.h"
@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fts.h>
+#include <limits.h>
 #include <lzma.h>
 #include <signal.h>
 #include <stdint.h>
@@ -138,10 +139,20 @@ static pid_t spawn_confined(const struct child *spec, int in_fd, int out_fd, int
 	dup2(err_fd >= 0 ? err_fd : nul, 2);
 	close_other_fds();
 	signal(SIGPIPE, SIG_DFL);
+	char resolved_read[PATH_MAX];
+	char resolved_write[PATH_MAX];
+	const char *read_path = spec->read_path;
+	const char *write_dir = spec->write_dir;
+	if (read_path != NULL && realpath(read_path, resolved_read) != NULL) {
+		read_path = resolved_read;
+	}
+	if (write_dir != NULL && realpath(write_dir, resolved_write) != NULL) {
+		write_dir = resolved_write;
+	}
 	if (spec->cwd != NULL && chdir(spec->cwd) != 0) {
 		_exit(124);
 	}
-	if (dev_confine_self(spec->read_path, spec->write_dir) < 0) {
+	if (dev_confine_self(read_path, write_dir) < 0) {
 		/* Not unpacked rather than unpacked without limits. */
 		_exit(125);
 	}
@@ -163,7 +174,14 @@ static const char *confine_failure(void) {
 
 static int wait_status(pid_t pid) {
 	int st = 0;
-	if (pid <= 0 || waitpid(pid, &st, 0) < 0) {
+	if (pid <= 0) {
+		return -1;
+	}
+	pid_t waited;
+	do {
+		waited = waitpid(pid, &st, 0);
+	} while (waited < 0 && errno == EINTR);
+	if (waited != pid) {
 		return -1;
 	}
 	return WIFEXITED(st) ? WEXITSTATUS(st) : 128 + (WIFSIGNALED(st) ? WTERMSIG(st) : 0);
@@ -509,6 +527,7 @@ static int inflate_gzip(int in_fd, int out_fd, const unsigned char *start, size_
 				continue;
 			}
 			if (n <= 0) {
+				result = 1;
 				break;
 			}
 			z.next_in = in;
@@ -528,8 +547,15 @@ static int inflate_gzip(int in_fd, int out_fd, const unsigned char *start, size_
 		if (rc == Z_STREAM_END) {
 			/* A second gzip member may follow the first. */
 			if (z.avail_in == 0) {
-				ssize_t n = read(in_fd, in, sizeof in);
-				if (n <= 0) {
+				ssize_t n;
+				do {
+					n = read(in_fd, in, sizeof in);
+				} while (n < 0 && errno == EINTR);
+				if (n < 0) {
+					result = 1;
+					break;
+				}
+				if (n == 0) {
 					break;
 				}
 				z.next_in = in;
@@ -1241,6 +1267,9 @@ int mac_review_file(const char *path, const char *cache_dir, struct mac_review *
 /* Makes one unpacked application safe to keep: its links stay inside it,
  * nothing in it is a device or a pipe, and nothing in it is set-user-ID. */
 static void make_safe(const char *bundle, int *links_removed) {
+	char bundle_real[PATH_MAX];
+	int have_real = realpath(bundle, bundle_real) != NULL;
+	size_t real_len = have_real ? strlen(bundle_real) : 0;
 	char *paths[] = {(char *)bundle, NULL};
 	FTS *walk = fts_open(paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, NULL);
 	if (walk == NULL) {
@@ -1248,7 +1277,6 @@ static void make_safe(const char *bundle, int *links_removed) {
 	}
 	uid_t uid = getuid();
 	gid_t gid = getgid();
-	size_t root_len = strlen(bundle);
 	FTSENT *ent;
 	while ((ent = fts_read(walk)) != NULL) {
 		if (geteuid() == 0 && ent->fts_info != FTS_DP) {
@@ -1259,34 +1287,23 @@ static void make_safe(const char *bundle, int *links_removed) {
 		if (ent->fts_info == FTS_SL || ent->fts_info == FTS_SLNONE) {
 			char target[PATH_ROOM];
 			ssize_t len = readlink(ent->fts_accpath, target, sizeof target - 1);
-			int inside = len > 0 && target[0] != '/';
+			int inside = have_real && len > 0 && len < (ssize_t)(sizeof target - 1) &&
+				target[0] != '/';
 			if (inside) {
-				target[len] = '\0';
-				/* How many folders deep the link sits below the application. */
-				int depth = 0;
-				for (const char *p = ent->fts_accpath + root_len; *p != '\0'; p++) {
-					if (*p == '/') {
-						depth++;
-					}
-				}
-				depth -= 1;
-				char *save = NULL;
-				for (char *part = strtok_r(target, "/", &save); part != NULL;
-						part = strtok_r(NULL, "/", &save)) {
-					if (strcmp(part, "..") == 0) {
-						depth--;
-						if (depth < 0) {
-							inside = 0;
-							break;
-						}
-					} else if (strcmp(part, ".") != 0) {
-						depth++;
-					}
+				char resolved[PATH_MAX];
+				if (realpath(ent->fts_accpath, resolved) == NULL) {
+					inside = 0;
+				} else if (strcmp(resolved, bundle_real) != 0 &&
+						(strncmp(resolved, bundle_real, real_len) != 0 ||
+						 resolved[real_len] != '/')) {
+					inside = 0;
 				}
 			}
 			if (!inside) {
 				unlink(ent->fts_accpath);
-				(*links_removed)++;
+				if (links_removed != NULL) {
+					(*links_removed)++;
+				}
 			}
 		} else if (ent->fts_info == FTS_F) {
 			chmod(ent->fts_accpath, (ent->fts_statp->st_mode & 0777) | 0600);

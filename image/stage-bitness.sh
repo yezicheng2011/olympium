@@ -1,5 +1,5 @@
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Installed by build-iso.sh and build-iso-i386.sh. ROOT, ARCH, and REPO are set.
 
@@ -8,14 +8,18 @@ stage_bitness() {
 	if [ -n "${DESKTOP_BINS:-}" ]; then
 		bins=$DESKTOP_BINS
 	fi
+	local ibins=$REPO/image
+	if [ -n "${IMAGE_BINS:-}" ]; then
+		ibins=$IMAGE_BINS
+	fi
 	install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" \
 		"$ROOT/usr/share/olympium/samples" "$ROOT/usr/share/applications" \
 		"$ROOT/root/.local/share/olympium"
 	install -m 755 "$bins/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
 	install -m 755 "$bins/olympium-testapp" "$ROOT/usr/bin/olympium-testapp"
 	install -m 755 "$bins/dev-install" "$ROOT/usr/bin/dev-install"
-	install -m 755 "$REPO/image/olympium-run64" "$ROOT/usr/libexec/dev-desktop/olympium-run64"
-	install -m 755 "$REPO/image/olympium-hello32" "$ROOT/usr/bin/olympium-hello32"
+	install -m 755 "$ibins/olympium-run64" "$ROOT/usr/libexec/dev-desktop/olympium-run64"
+	install -m 755 "$ibins/olympium-hello32" "$ROOT/usr/bin/olympium-hello32"
 	install -m 644 "$REPO/image/olympium-hello32.desktop" \
 		"$REPO/image/olympium-testapp.desktop" \
 		"$ROOT/usr/share/applications/"
@@ -92,8 +96,8 @@ EOF
 		install -m 755 "$guest/bin/hello64" "$guest/bin/highmap64" "$guest/bin/payload64" \
 			"$guest/bin/bash" "$ROOT/usr/lib/olympium/amd64/bin/"
 		cp -a "$guest/doc/." "$ROOT/usr/share/doc/olympium-amd64-guest/"
-		install -m 755 "$REPO/image/olympium-hello64" "$REPO/image/olympium-bash64" \
-			"$REPO/image/olympium-64demo" "$ROOT/usr/bin/"
+		install -m 755 "$ibins/olympium-hello64" "$ibins/olympium-bash64" \
+			"$ibins/olympium-64demo" "$ROOT/usr/bin/"
 		install -m 644 "$REPO/image/olympium-hello64.desktop" \
 			"$REPO/image/olympium-bash64.desktop" \
 			"$ROOT/usr/share/applications/"
