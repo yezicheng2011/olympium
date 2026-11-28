@@ -267,19 +267,6 @@ Namespace Olympium
             Return ReadPeMachine(path) <> 0
         End Function
 
-        ' olympium-run accepts ELF, PE, and Mach-O. A shebang script must be executed directly.
-        Public Function IsElf(path As String) As Boolean
-            Try
-                Using fs = File.OpenRead(path)
-                    Dim b(3) As Byte
-                    If fs.Read(b, 0, 4) <> 4 Then Return False
-                    Return b(0) = &H7F AndAlso b(1) = AscW("E"c) AndAlso b(2) = AscW("L"c) AndAlso b(3) = AscW("F"c)
-                End Using
-            Catch
-                Return False
-            End Try
-        End Function
-
         Public Function PeMachineName(machine As UShort) As String
             Select Case machine
                 Case &H14CUS : Return "32-bit x86"
@@ -331,7 +318,7 @@ Namespace Olympium
                 "/usr/share/icons/hicolor/256x256/apps/olympium.png",
                 "branding/icons/olympium-transparent-1024.png",
                 "../branding/icons/olympium-transparent-1024.png",
-                "../../branding/icons/olympium-transparent-1024.png"
+                "/home/dan/olympium/iso/branding/icons/olympium-transparent-1024.png"
             }
             For Each c In candidates
                 If File.Exists(c) Then Return c

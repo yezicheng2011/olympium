@@ -3,4 +3,4 @@
 # do not allow this image to redistribute them, and a download is not used
 # as a bypass. OpenHarmony and Cuttlefish factory images stay unpinned until
 # the exact artifact license and checksum are recorded by the Olympium tree.
-# policy must be first-use before guest-fetch will download anything.
+# policy must be first-use before guest-fetch.sh will download anything.

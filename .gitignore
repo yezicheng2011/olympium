@@ -1,77 +1,13 @@
-# Local ISO build output. This repository does not contain a bootable ISO.
-/build/
-*.iso
-*.iso.sha256
-*.squashfs
-*.ppm
-
-# Screenshots and generated rasters. Source icons and the splash asset are kept.
-*.png
-!branding/**/*.png
-!branding/*.png
-!branding/*.ico
-!desktop/splash.png
-
-# C desktop build products (sources stay)
-/desktop/*.o
-/desktop/*.so
-/desktop/dev-clip-helper
-/desktop/dev-compositor
-/desktop/dev-compositor-nox
-/desktop/dev-compositor-input-test
-/desktop/dev-files
-/desktop/dev-settings
-/desktop/dev-swatch
-/desktop/dev-compat
-/desktop/olympium-run
-/desktop/olympium-testapp
-/desktop/dev-install
-/desktop/desk-note
-/desktop/desk-paste
-/desktop/test-blur
-/desktop/test-macho
-/desktop/test-accounts
-/desktop/test-sandbox
-/desktop/test-macbundle
-/desktop/test-xremap
-/desktop/splash-gen
-
-# Image helpers compiled from image/src into image/
-/image/olympium-activate
-/image/olympium-launch
-/image/olympium-64demo
-/image/olympium-bash64
-/image/olympium-hello32
-/image/olympium-hello64
-/image/Xwayland-software
-/image/driver-report
-/image/driver-install
-/image/firefox-launch
-/image/olympium-mac-run
-/image/olympium-run64
-/image/install-to-disk
-/image/run-session
-/image/guest-fetch
-/image/olympium-openharmony
-/image/olympium-android
-/image/openharmony-window
-/image/test-driver-report
-/image/test-android-core
-/image/test-openharmony
-/image/*.o
-
-# VB.NET / .NET
-/vbnet/out/
-**/bin/
-**/obj/
+# Build outputs — packaging instructions are in BUILD*.txt; do not commit packages
+bin/
+obj/
+out/
+build/
+dist/
 *.user
 *.suo
-*.pdb
-
-# Python, editor, OS
-__pycache__/
-*.py[cod]
-.DS_Store
+*.jks
+*.keystore
+.vs/
 .idea/
-*.swp
-*~
+*.pdb

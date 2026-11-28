@@ -2,18 +2,10 @@
 Olympium Universal OS ISO — 完整打包与构建命令指南 (BUILD_ISO.txt)
 ====================================================================
 
-Run every command below from the root of this git repository (the directory
-that contains desktop/, vbnet/, and image/). The commands compile this source
-tree. This repository does not contain a prebuilt bootable ISO. build/ is
-gitignored.
-
-以下命令均在本仓库根目录执行（含 desktop/、vbnet/、image/ 的目录）。
-它们编译这份源码。仓库内没有预构建的可启动 ISO。build/ 已被 .gitignore 忽略。
-
-目标产物（构建后生成，不在 git 中）：
+目标产物：
   全局唯一的多架构通用 ISO：
-    build/olympium-universal.iso
-    build/olympium-universal.iso.sha256
+    iso/build/olympium-universal.iso
+    iso/build/olympium-universal.iso.sha256
 
 该单一 ISO 同时包含并支持：
   - 启动架构：x86_64 (UEFI + BIOS)、i386 32位 (BIOS/UEFI)、ARM64/aarch64 (UEFI)
@@ -40,7 +32,7 @@ sudo apt-get install -y \
   libwlroots-dev libwayland-dev wayland-protocols libgtk-3-dev \
   libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
   libxkbcommon-dev libinput-dev libdrm-dev libgbm-dev libegl-dev \
-  libgles2-mesa-dev liblzma-dev zlib1g-dev libcrypt-dev libssl-dev \
+  libgles2-mesa-dev liblzma-dev zlib1g-dev libcrypt-dev \
   p7zip-full cpio rpm2cpio dpkg-dev
 
 # 安装 .NET 8 SDK（用于编译 VB.NET 系统与桌面应用）
@@ -50,7 +42,6 @@ export PATH="$HOME/.dotnet:$PATH"
 --------------------------------------------------------------------
 2. 本地编译与自测（无需 root，先验证桌面/VB.NET/合成器）
 --------------------------------------------------------------------
-# From the repository root / 在仓库根目录：
 
 # 编译 C 合成器、跨架构运行器 olympium-run、原生桥接库 libolympium-native.so
 make -C desktop
@@ -64,7 +55,6 @@ make -C desktop test
 --------------------------------------------------------------------
 3. 一键打包“全局唯一多架构通用 ISO”（推荐）
 --------------------------------------------------------------------
-# From the repository root / 在仓库根目录：
 
 # 默认开启：通用多架构(x86_64 + i386 + arm64) + 自动 Wine + 精简 Android/OpenHarmony + 跨架构用户态
 sudo PATH="$HOME/.dotnet:$PATH" ./image/build-iso.sh universal
@@ -91,7 +81,6 @@ sudo PATH="$HOME/.dotnet:$PATH" OLYMPIUM_DARLING=1 ./image/build-iso.sh universa
 --------------------------------------------------------------------
 4. （可选）从源码先编译 Darling GUI 再打包
 --------------------------------------------------------------------
-# From the repository root / 在仓库根目录：
 # 默认包含 cli;gui 图形子系统
 ./image/build-darling.sh
 sudo PATH="$HOME/.dotnet:$PATH" OLYMPIUM_DARLING=1 ./image/build-iso.sh universal

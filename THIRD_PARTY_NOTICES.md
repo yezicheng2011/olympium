@@ -1,7 +1,7 @@
 # Third-Party Notices — Olympium Universal OS (ISO)
 
 ## First-Party Code
-All first-party code in this repository (`desktop/`, `vbnet/`, `image/`, `branding/`, and the build docs) is licensed under **Apache License, Version 2.0** ([LICENSE](LICENSE), [NOTICE](NOTICE)). It is not dual-licensed. Nothing in this file relicenses a third-party component to Apache-2.0.
+All first-party code under `iso/` (`desktop/`, `vbnet/`, `image/`, `branding/`) is licensed under **Apache License, Version 2.0** ([LICENSE](LICENSE), [NOTICE](NOTICE)).
 
 ## Third-Party Components Bundled or Invoked in the Universal ISO
 
@@ -35,13 +35,4 @@ Every third-party package stays under its original upstream license (never relic
 When redistributing `olympium-universal.iso`:
 1. Keep `/usr/share/doc/dev-desktop/sbom.tsv`, `/usr/share/doc/*/copyright`, and `/usr/share/doc/darling/{LICENSE,SOURCE}` intact inside the image.
 2. Provide this `THIRD_PARTY_NOTICES.md`, `LICENSE`, and `NOTICE` alongside the ISO download.
-3. For unmodified Ubuntu/Debian/Darling GPL binaries, preserve upstream source-code offer pointers (Ubuntu 24.04 and Debian 12 source archives, plus the Darling commit and patches in `image/darling-patches/`).
-
-## Source pins
-
-These are the pins the build scripts and validation profile already record. Each checkout keeps its upstream license.
-
-- Darling, when built with `image/build-darling.sh`: commit `3fcd2e1aa85079789d19d82415695bdecc512241`, plus the patches in `image/darling-patches/`. The image install copies Darling's `LICENSE` and a `SOURCE` file to `/usr/share/doc/darling/`. Darling is GPL-3.0-only; its submodules stay under their own terms, including APSL where Apple published that code.
-- Optional Olympium runtime copied into an image by `image/build-iso.sh`: commit `517aaaa5409f227de42444cf16612d546c29251b`. That project's own `LICENSE` and `NOTICE` are installed at `/usr/share/doc/olympium-runtime/`. This repository does not vendor that runtime and does not relicense it.
-- Optional source checkouts from `image/fetch-compat-sources.py`, pinned in `image/compat-sources.tsv`: Waydroid `5b7e2e71be3f6bfaaaab3b461251dacaf1ce4991` (GPL-3.0), Darling `3fcd2e1aa85079789d19d82415695bdecc512241`, and the OpenHarmony manifest `2929176279e011ade6df28357566d95fa3829e9c` (Apache-2.0). Fetching them does not put their system images in the ISO. They are written under `build/compat-sources/`, which is gitignored.
-- microG reference constants in `validation/android/microg-framework/` and `image/android-compat/profile.json`: LineageOS `android_frameworks_base` revision `48b4df3c577586ef05a3cd7205fa1c0e71504cbd`, Apache-2.0. The generated framework is not committed in this tree.
+3. For unmodified Ubuntu/Debian/Darling GPL binaries, preserve upstream source-code offer pointers (Ubuntu 24.04 & Debian 12 source archives, plus Darling commit/patches in `iso/image/darling-patches/`).
