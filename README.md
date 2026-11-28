@@ -4,6 +4,10 @@
   <img src="branding/icon-transparent-256.png" width="160" alt="Olympium gold dragon icon">
 </p>
 
+<p align="center">
+  <img src="branding/desktop-hero.png" alt="Olympium desktop">
+</p>
+
 The live session and ISO volume are named Olympium. The project icon is a gold Eastern dragon (see `branding/`). The menu-bar mark is an original abstract Eastern dragon. It is not an Apple logo, and no Apple artwork, wallpaper, font, or system asset is in this tree.
 
 This is a native Linux live system with its own Wayland desktop. It is not a web page and not Electron. The layout follows the macOS desktop closely: a thin menu bar, left window controls, a floating dock, and a full-screen launcher. Every pixel of it is drawn here, by a small compositor in `desktop/compositor.c`. Windows are normal Wayland clients.
