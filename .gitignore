@@ -22,3 +22,7 @@ desktop/dev-compositor-input-test
 __pycache__/
 desktop/test-xremap
 desktop/test-accounts
+
+# Project branding icons (the catch-all *.png above would ignore them)
+!branding/*.png
+!branding/*.ico
