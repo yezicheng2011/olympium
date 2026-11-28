@@ -314,7 +314,45 @@ Namespace Olympium
                 File.WriteAllText(Path.Combine(target, "etc", "fstab"), fstab)
                 File.WriteAllText(Path.Combine(target, "etc", "machine-id"), "")
 
-                Dim grubTarget = If(UnameMachine() = "aarch64", "arm64-efi", "x86_64-efi")
+                Dim boot = Path.Combine(target, "boot")
+                Dim kout = RunCmd({"sh", "-c", "cd " & ShQuote(boot) & " && ls vmlinuz-* 2>/dev/null | sort -V | tail -1 || true"}, 15).Output.Trim()
+                If String.IsNullOrEmpty(kout) Then
+                    Console.Error.WriteLine($"install-to-disk: no kernel was copied to {boot}.")
+                    Return 1
+                End If
+                Dim version = kout.Substring("vmlinuz-".Length)
+                If Not File.Exists(Path.Combine(boot, "initrd.img-" & version)) Then
+                    Console.Error.WriteLine($"install-to-disk: no initrd for kernel {version} was copied.")
+                    Return 1
+                End If
+                Directory.CreateDirectory(Path.Combine(boot, "grub"))
+                Dim grubCfg =
+                    "set timeout=3" & vbLf &
+                    "set default=0" & vbLf &
+                    "insmod part_msdos" & vbLf &
+                    "insmod part_gpt" & vbLf &
+                    "insmod ext2" & vbLf &
+                    "search --no-floppy --label " & label & " --set=root" & vbLf &
+                    "menuentry ""Olympium"" {" & vbLf &
+                    vbTab & "linux /boot/" & kout & " root=LABEL=" & label & " ro quiet" & vbLf &
+                    vbTab & "initrd /boot/initrd.img-" & version & vbLf &
+                    "}" & vbLf &
+                    "menuentry ""Olympium, contrast"" {" & vbLf &
+                    vbTab & "linux /boot/" & kout & " root=LABEL=" & label & " ro quiet olympium.contrast=1" & vbLf &
+                    vbTab & "initrd /boot/initrd.img-" & version & vbLf &
+                    "}" & vbLf
+                File.WriteAllText(Path.Combine(boot, "grub", "grub.cfg"), grubCfg)
+
+                Dim machine = UnameMachine()
+                Dim grubTarget = "x86_64-efi"
+                If machine = "aarch64" OrElse machine = "arm64" Then
+                    grubTarget = "arm64-efi"
+                ElseIf machine = "i386" OrElse machine = "i686" Then
+                    grubTarget = "i386-efi"
+                ElseIf efi AndAlso machine <> "x86_64" AndAlso machine <> "x64" Then
+                    Console.Error.WriteLine($"install-to-disk: no boot loader target for {machine}.")
+                    Return 1
+                End If
                 Dim grc = If(efi,
                     RunPassthrough({"grub-install", $"--target={grubTarget}", $"--efi-directory={target}/boot/efi", $"--boot-directory={target}/boot", "--removable", "--no-nvram"}),
                     RunPassthrough({"grub-install", "--target=i386-pc", $"--boot-directory={target}/boot", disk}))
@@ -510,9 +548,15 @@ Namespace Olympium
                 Return RunPassthrough(direct)
             End If
             Dim uid = uidOut.Output.Trim()
+            Dim gidOut = RunCmd({"id", "-g", "olympium"}, 5)
             Dim runtime = "/run/user/" & uid
             Directory.CreateDirectory(runtime)
             NativeBridge.chmod(runtime, &H1C0UI)
+            Dim uidNum As UInteger
+            Dim gidNum As UInteger
+            If UInteger.TryParse(uid, uidNum) AndAlso gidOut.ExitCode = 0 AndAlso UInteger.TryParse(gidOut.Output.Trim(), gidNum) Then
+                NativeBridge.chown(runtime, uidNum, gidNum)
+            End If
             If File.Exists(sock) Then
                 Try
                     NativeBridge.chmod(sock, &H1B6UI) ' 0666

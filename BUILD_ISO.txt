@@ -40,7 +40,7 @@ sudo apt-get install -y \
   libwlroots-dev libwayland-dev wayland-protocols libgtk-3-dev \
   libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
   libxkbcommon-dev libinput-dev libdrm-dev libgbm-dev libegl-dev \
-  libgles2-mesa-dev liblzma-dev zlib1g-dev libcrypt-dev \
+  libgles2-mesa-dev liblzma-dev zlib1g-dev libcrypt-dev libssl-dev \
   p7zip-full cpio rpm2cpio dpkg-dev
 
 # 安装 .NET 8 SDK（用于编译 VB.NET 系统与桌面应用）

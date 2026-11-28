@@ -244,7 +244,8 @@ stage_desktop() {
 	fi
 	# Build low-level native C binaries (Wayland compositor, XCB clip helper,
 	# libolympium-native.so confinement/Mach-O/accounts bridge, ELF/PE runner, splash).
-	make -C "$REPO/desktop" libolympium-native.so dev-compositor olympium-run splash.png clip-helper
+	# stage_bitness installs olympium-testapp and dev-install from this tree.
+	make -C "$REPO/desktop" libolympium-native.so dev-compositor olympium-run olympium-testapp dev-install splash.png clip-helper
 	make -C "$REPO/vbnet" build
 	install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" "$ROOT/usr/lib/olympium" \
 		"$ROOT/etc/dev-desktop" "$ROOT/etc/systemd/system/multi-user.target.wants" \
@@ -258,7 +259,9 @@ stage_desktop() {
 	fi
 	# Install VB.NET (.NET 8) desktop apps and system runtime managers via shared assembly + shims.
 	bash "$REPO/vbnet/install-shims.sh" "$ROOT" "$REPO/vbnet/out"
-	make -C "$REPO/image" openharmony-window olympium-run64 || true
+	# stage_bitness installs olympium-hello32 and olympium-run64 from image/.
+	make -C "$REPO/image" olympium-run64 olympium-hello32
+	make -C "$REPO/image" openharmony-window || true
 	install -m 755 "$REPO/image/startup.sh" "$REPO/image/install-sample.sh" "$ROOT/usr/libexec/dev-desktop/"
 	if [ -x "$REPO/image/openharmony-window" ]; then
 		install -m 755 "$REPO/image/openharmony-window" "$ROOT/usr/libexec/dev-desktop/"

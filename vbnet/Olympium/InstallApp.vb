@@ -623,7 +623,7 @@ Namespace Olympium
                 Dim target = If(Not String.IsNullOrEmpty(rec.Program), rec.Program, rec.Path)
                 Dim runner = EnvOr("OLYMPIUM_RUN", "/usr/libexec/dev-desktop/olympium-run")
                 Dim argv As New List(Of String)()
-                If IsExecutable(runner) Then argv.Add(runner)
+                If IsElf(target) AndAlso IsExecutable(runner) Then argv.Add(runner)
                 argv.Add(target)
                 argv.AddRange(extraArgs)
                 Return RunPassthrough(argv)
@@ -698,10 +698,10 @@ Namespace Olympium
                 If r.Action = "wine" Then
                     Return WineAutoRunner.LaunchExe(r.FilePath, Array.Empty(Of String)(), emitMarks:=False)
                 End If
-                ' 2. Native or cross-arch Linux ELF / script -> direct launch via olympium-run.
+                ' 2. Native or cross-arch Linux ELF uses olympium-run. A shebang script runs directly.
                 If r.Action = "import" AndAlso r.Launchable Then
                     Dim runner = EnvOr("OLYMPIUM_RUN", "/usr/libexec/dev-desktop/olympium-run")
-                    If IsExecutable(runner) Then
+                    If IsElf(r.FilePath) AndAlso IsExecutable(runner) Then
                         Return RunPassthrough({runner, r.FilePath})
                     End If
                     Return RunPassthrough({r.FilePath})

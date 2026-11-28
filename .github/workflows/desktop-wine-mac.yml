@@ -6,12 +6,18 @@ on:
     paths:
       - '.github/workflows/desktop-wine-mac.yml'
       - 'desktop/**'
+      - 'vbnet/**'
+      - 'image/build-iso.sh'
+      - 'image/stage-bitness.sh'
       - 'image/src/olympium-mac-run.cpp'
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/desktop-wine-mac.yml'
       - 'desktop/**'
+      - 'vbnet/**'
+      - 'image/build-iso.sh'
+      - 'image/stage-bitness.sh'
       - 'image/src/olympium-mac-run.cpp'
 permissions:
   contents: read
