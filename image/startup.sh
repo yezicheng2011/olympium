@@ -1,6 +1,6 @@
 #!/bin/sh
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 export GDK_BACKEND=wayland
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/dev-desktop}"
 # The color-field demo stays installed and is not opened at startup.

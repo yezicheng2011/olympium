@@ -1,6 +1,6 @@
 #!/bin/sh
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Starts the Olympium runtime when this image carries it. The runtime is a
 # separate program built from its own repository; this script only runs it.

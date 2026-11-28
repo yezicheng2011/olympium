@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Development Desktop contributors
- * License: daniel.ye Source License, Version 1.0. See LICENSE.
+ * Copyright 2026 Daniel Ye
+ * Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Native Wayland compositor and shell. Window buffers are composited by
  * wlroots. The panel, dock, and launcher sample that framebuffer and run a

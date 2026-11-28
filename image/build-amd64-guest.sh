@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Builds the small x86_64 guest used so a 32-bit machine can run a 64-bit
 # program. The kernel and the libraries are copied from the amd64 live root

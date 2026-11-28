@@ -1,5 +1,5 @@
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Installed by build-iso.sh and build-iso-i386.sh. ROOT, ARCH, and REPO are set.
 

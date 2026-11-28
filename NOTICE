@@ -1,12 +1,9 @@
-Development Desktop
-Copyright 2026 Ye Zicheng (daniel.ye)
+Olympium
+Copyright 2026 Daniel Ye
 
-First-party source is under daniel.ye Source License, Version 1.0.
+First-party source is under the Apache License, Version 2.0.
 The full text is LICENSE.
 
 The live system also includes third-party Linux packages. Those packages
 remain under their own licenses. See THIRD_PARTY_NOTICES.md and, in a
 built image, /usr/share/doc/dev-desktop/SOURCE and sbom.tsv.
-
-The name in branding/branding.conf is a temporary development title.
-It is not a released product name.

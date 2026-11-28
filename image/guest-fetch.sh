@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # First-use guest fetch. A pin is fetched only when its record says the
 # artifact may be downloaded from the named upstream. Unknown or forbidden

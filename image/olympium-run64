@@ -1,6 +1,6 @@
 #!/bin/sh
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Runs one 64-bit x86 program on a 32-bit system. A 64-bit kernel is booted
 # under qemu-system-x86_64, which on this image is itself a 32-bit program.

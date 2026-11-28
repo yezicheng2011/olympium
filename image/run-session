@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright 2026 Development Desktop contributors
-# License: daniel.ye Source License, Version 1.0. See LICENSE.
+# Copyright 2026 Daniel Ye
+# Licensed under the Apache License, Version 2.0. See LICENSE.
 # Session lines go to the kernel log and to any serial port the kernel already
 # uses as a console, so a boot test can follow the desktop without a display.
 # A serial port that is not a console is left alone: opening one can wait
