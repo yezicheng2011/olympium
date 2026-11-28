@@ -5,6 +5,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <thread>
 #include <cstring>
@@ -111,11 +112,14 @@ int main(int argc, char **argv) {
     int rc = manager->Unlock(OHOS::ScreenLock::Action::UNLOCKSCREEN, callback);
     std::printf("normal_unlock_request=%d\n", rc);
     std::fflush(stdout);
-    if (rc != OHOS::ScreenLock::E_SCREENLOCK_OK) return 4;
+    if (rc != OHOS::ScreenLock::E_SCREENLOCK_OK) std::_Exit(4);
     std::unique_lock<std::mutex> lock(callback->mutex);
     if (!callback->changed.wait_for(lock, std::chrono::seconds(30), [&] { return callback->done; })) {
-        std::puts("normal_unlock_callback_timeout"); return 5;
+        std::puts("normal_unlock_callback_timeout");
+        std::fflush(stdout);
+        std::_Exit(5);
     }
     std::printf("normal_unlock_callback=%d screen_locked=%d\n", callback->result, manager->IsScreenLocked());
-    return callback->result == 0 && !manager->IsScreenLocked() ? 0 : 6;
+    std::fflush(stdout);
+    std::_Exit(callback->result == 0 && !manager->IsScreenLocked() ? 0 : 6);
 }

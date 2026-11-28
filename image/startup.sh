@@ -1,8 +1,12 @@
 #!/bin/sh
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 export GDK_BACKEND=wayland
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/dev-desktop}"
+# Register binfmt_misc for Windows .exe so clicking/running any .exe auto-launches Wine.
+if [ -x /usr/libexec/dev-desktop/olympium-wine-exec ]; then
+	/usr/libexec/dev-desktop/olympium-wine-exec --register-binfmt >/dev/null 2>&1 || true
+fi
 # The color-field demo stays installed and is not opened at startup.
 # Boot tests pass these flags. A normal boot does not.
 if grep -q 'olympium.openfiles=1' /proc/cmdline 2>/dev/null; then

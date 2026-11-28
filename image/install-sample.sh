@@ -7,6 +7,7 @@ kmsg() {
 	printf 'dev-desktop: %s\n' "$*" >/dev/console 2>/dev/null || true
 	printf '%s\n' "$*" >>/run/dev-desktop/compositor.log 2>/dev/null || true
 }
+DESK=${OLYMPIUM_DESK_HOME:-/var/lib/olympium/desk}
 DEB=/usr/share/olympium/samples/desk-note.deb
 NOTE=/usr/share/olympium/samples/hello.dnote
 if [ ! -f "$DEB" ]; then
@@ -31,7 +32,7 @@ sleep 16
 kmsg "import sample with consent"
 /usr/bin/dev-install import --consent "$DEB" >/tmp/import-sample.log 2>&1
 kmsg "import exit $?"
-id=$(awk -F '\t' '$6=="linux_deb" {print $1; exit}' "${OLYMPIUM_DESK_HOME:-/var/lib/olympium/desk}/library.tsv")
+id=$(awk -F '\t' '$6=="linux_deb" {print $1; exit}' "$DESK/library.tsv")
 if [ -z "$id" ]; then
 	kmsg "import produced no id"
 	exit 1
@@ -39,12 +40,12 @@ fi
 kmsg "imported $id"
 /usr/bin/dev-install open "$NOTE" >/tmp/note-cold.log 2>&1 &
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-	if [ -s "${OLYMPIUM_DESK_HOME}/cold-app-ms" ]; then
+	if [ -s "$DESK/cold-app-ms" ]; then
 		break
 	fi
 	sleep 1
 done
-cold=$(cat "${OLYMPIUM_DESK_HOME}/cold-app-ms" 2>/dev/null || echo missing)
+cold=$(cat "$DESK/cold-app-ms" 2>/dev/null || echo missing)
 kmsg "cold_app_ms $cold"
 runtime_line=$(grep '^runtime_state ' /tmp/note-cold.log | head -1)
 runtime_ms=$(grep '^runtime_ms ' /tmp/note-cold.log | head -1)
@@ -52,18 +53,18 @@ kmsg "${runtime_line:-runtime_state missing}"
 kmsg "${runtime_ms:-runtime_ms missing}"
 /usr/bin/dev-install launch "$id" >/tmp/note-warm.log 2>&1 &
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-	if [ -s "${OLYMPIUM_DESK_HOME}/warm-app-ms" ]; then
+	if [ -s "$DESK/warm-app-ms" ]; then
 		break
 	fi
 	sleep 1
 done
-warm=$(cat "${OLYMPIUM_DESK_HOME}/warm-app-ms" 2>/dev/null || echo missing)
+warm=$(cat "$DESK/warm-app-ms" 2>/dev/null || echo missing)
 kmsg "warm_app_ms $warm"
 warm_state=$(grep '^runtime_state ' /tmp/note-warm.log | head -1)
 warm_ms=$(grep '^runtime_ms ' /tmp/note-warm.log | head -1)
 kmsg "second ${warm_state:-runtime_state missing}"
 kmsg "second ${warm_ms:-runtime_ms missing}"
-paste=$(find "${OLYMPIUM_DESK_HOME}/runtimes" -type f -name desk-paste | head -1)
+paste=$(find "$DESK/runtimes" -type f -name desk-paste | head -1)
 if [ -n "$paste" ]; then
 	"$paste" >/tmp/desk-paste.log 2>&1 &
 	kmsg "paste started"
@@ -78,7 +79,7 @@ if [ -n "$paste" ]; then
 	kmsg "paste ${clip_line:-clipboard: missing}"
 	kmsg "paste ${file_line:-exchange: missing}"
 fi
-if [ -s "${OLYMPIUM_DESK_HOME}/library.tsv" ]; then
+if [ -s "$DESK/library.tsv" ]; then
 	kmsg "library persisted"
 fi
 # Leave the application windows visible before Launchpad covers them.

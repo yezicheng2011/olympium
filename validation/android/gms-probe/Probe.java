@@ -30,6 +30,7 @@ public final class Probe extends Activity {
     private static final String CALLBACKS = "com.google.android.gms.common.internal.IGmsCallbacks";
     private static final String COMMON = "com.google.android.gms.common.internal.service.ICommonService";
     private final CountDownLatch response = new CountDownLatch(1);
+    private final CountDownLatch requestDone = new CountDownLatch(1);
     private volatile String brokerDescriptor = "", serviceDescriptor = "", error = "";
     private volatile int serviceStatus = Integer.MIN_VALUE;
     private TextView text;
@@ -63,6 +64,7 @@ public final class Probe extends Activity {
             }
             @Override public void onServiceDisconnected(ComponentName name) {
                 error = "Broker disconnected";
+                requestDone.countDown();
                 response.countDown();
             }
             @Override public void onNullBinding(ComponentName name) {
@@ -102,7 +104,13 @@ public final class Probe extends Activity {
             bound = bindService(new Intent("com.google.android.gms.common.service.START")
                     .setPackage(GMS), connection, BIND_AUTO_CREATE);
             result.put("broker_binding_accepted", bound);
-            if (bound && !response.await(60, TimeUnit.SECONDS)) error = "Service callback timed out";
+            if (bound) {
+                if (!response.await(60, TimeUnit.SECONDS)) {
+                    error = "Service callback timed out";
+                } else if (!requestDone.await(5, TimeUnit.SECONDS) && error.isEmpty()) {
+                    error = "Service request did not finish";
+                }
+            }
             result.put("broker_descriptor", brokerDescriptor);
             result.put("service_descriptor", serviceDescriptor);
             result.put("service_status", serviceStatus);
@@ -193,6 +201,7 @@ public final class Probe extends Activity {
         } finally {
             request.recycle();
             reply.recycle();
+            requestDone.countDown();
         }
     }
 

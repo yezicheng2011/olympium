@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #define _GNU_SOURCE
 #include "sandbox.h"
@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <fts.h>
 #include <grp.h>
+#include <limits.h>
 #include <linux/landlock.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -40,10 +41,10 @@ static int landlock_abi(void) {
 
 enum dev_confinement dev_confine_probe(void) {
 	const char *forced = getenv("OLYMPIUM_CONFINE");
-	if (forced != NULL && strcmp(forced, "nobody") == 0) {
+	if (forced != NULL && strcmp(forced, "nobody") == 0 && geteuid() == 0) {
 		/* For the test of the fallback. It can only pick the weaker of the
 		 * two confinements, never none. */
-		return geteuid() == 0 ? DEV_CONFINE_NOBODY : DEV_CONFINE_NONE;
+		return DEV_CONFINE_NOBODY;
 	}
 	if (landlock_abi() > 0) {
 		return DEV_CONFINE_LANDLOCK;
@@ -71,11 +72,11 @@ void dev_confine_prepare_dir(const char *write_dir) {
 }
 
 #ifdef __NR_landlock_create_ruleset
-static int allow(int ruleset, const char *path, __u64 access) {
+static int allow(int ruleset, const char *path, __u64 access, int optional) {
 	int fd = open(path, O_PATH | O_CLOEXEC);
 	if (fd < 0) {
-		/* A system without /lib32, say. Nothing to allow. */
-		return 0;
+		/* A system without /lib32, say. Nothing to allow if optional. */
+		return optional ? 0 : -1;
 	}
 	struct stat st;
 	if (fstat(fd, &st) == 0 && !S_ISDIR(st.st_mode)) {
@@ -130,14 +131,14 @@ static int confine_landlock(const char *read_path, const char *write_dir) {
 	};
 	int bad = 0;
 	for (size_t i = 0; i < sizeof system_dirs / sizeof system_dirs[0]; i++) {
-		bad |= allow(ruleset, system_dirs[i], read_only);
+		bad |= allow(ruleset, system_dirs[i], read_only, 1);
 	}
 	/* /dev/null and /dev/urandom, nothing else under /dev. */
-	bad |= allow(ruleset, "/dev/null", LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_WRITE_FILE);
-	bad |= allow(ruleset, "/dev/urandom", LANDLOCK_ACCESS_FS_READ_FILE);
+	bad |= allow(ruleset, "/dev/null", LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_WRITE_FILE, 0);
+	bad |= allow(ruleset, "/dev/urandom", LANDLOCK_ACCESS_FS_READ_FILE, 0);
 	if (read_path != NULL) {
 		bad |= allow(ruleset, read_path,
-			(LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR) & handled);
+			(LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR) & handled, 0);
 	}
 	if (write_dir != NULL) {
 		/* Ordinary files, folders and links. No devices, sockets or pipes,
@@ -150,7 +151,7 @@ static int confine_landlock(const char *read_path, const char *write_dir) {
 		/* REFER lets a file be renamed or hard-linked from one folder to
 		 * another. Both ends have to be under a folder that grants it, and
 		 * this is the only one, so nothing can be moved in or out. */
-		bad |= allow(ruleset, write_dir, writable & handled);
+		bad |= allow(ruleset, write_dir, writable & handled, 0);
 	}
 	if (bad != 0 || prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 ||
 			syscall(__NR_landlock_restrict_self, ruleset, 0) != 0) {
@@ -223,7 +224,14 @@ static void quiet_child(int in_fd, int out_fd) {
 
 static int exit_status(pid_t pid) {
 	int st = 0;
-	if (pid <= 0 || waitpid(pid, &st, 0) < 0) {
+	if (pid <= 0) {
+		return -1;
+	}
+	pid_t waited;
+	do {
+		waited = waitpid(pid, &st, 0);
+	} while (waited < 0 && errno == EINTR);
+	if (waited != pid) {
 		return -1;
 	}
 	return WIFEXITED(st) ? WEXITSTATUS(st) : 128 + (WIFSIGNALED(st) ? WTERMSIG(st) : 0);
@@ -254,6 +262,11 @@ int dev_confined_pipe(char *const producer[], const char *read_path,
 	}
 	dev_confine_prepare_dir(write_dir);
 	pid_t first = fork();
+	if (first < 0) {
+		close(fds[0]);
+		close(fds[1]);
+		return -1;
+	}
 	if (first == 0) {
 		quiet_child(-1, fds[1]);
 		if (dev_confine_self(read_path, NULL) < 0) {
@@ -263,12 +276,25 @@ int dev_confined_pipe(char *const producer[], const char *read_path,
 		_exit(127);
 	}
 	pid_t second = fork();
+	if (second < 0) {
+		close(fds[0]);
+		close(fds[1]);
+		exit_status(first);
+		return -1;
+	}
 	if (second == 0) {
 		quiet_child(fds[0], -1);
-		if (write_dir != NULL && chdir(write_dir) != 0) {
-			_exit(124);
+		char resolved[PATH_MAX];
+		const char *confine_dir = write_dir;
+		if (write_dir != NULL) {
+			if (realpath(write_dir, resolved) != NULL) {
+				confine_dir = resolved;
+			}
+			if (chdir(confine_dir) != 0) {
+				_exit(124);
+			}
 		}
-		if (dev_confine_self(NULL, write_dir) < 0) {
+		if (dev_confine_self(NULL, confine_dir) < 0) {
 			_exit(125);
 		}
 		execv(consumer[0], consumer);

@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #include "blur.h"
 
@@ -53,7 +53,7 @@ static void blur_axis(const uint8_t *src, uint8_t *dst, int width, int height,
 }
 
 void dev_blur_bgra(uint8_t *pixels, int width, int height, int stride, int radius) {
-	if (pixels == NULL || width <= 0 || height <= 0 || radius <= 0) {
+	if (pixels == NULL || width <= 0 || height <= 0 || radius <= 0 || stride < width * 4) {
 		return;
 	}
 	size_t bytes = (size_t)stride * (size_t)height;
@@ -66,13 +66,16 @@ void dev_blur_bgra(uint8_t *pixels, int width, int height, int stride, int radiu
 	}
 	blur_axis(pixels, tmp, width, height, stride, radius, 1);
 	blur_axis(tmp, tmp2, width, height, stride, radius, 0);
-	memcpy(pixels, tmp2, bytes);
+	size_t row_bytes = (size_t)width * 4;
+	for (int y = 0; y < height; y++) {
+		memcpy(pixels + (size_t)y * (size_t)stride, tmp2 + (size_t)y * (size_t)stride, row_bytes);
+	}
 	free(tmp);
 	free(tmp2);
 }
 
 void dev_glass_bgra(uint8_t *pixels, int width, int height, int stride, int radius) {
-	if (pixels == NULL || width <= 1 || height <= 1) {
+	if (pixels == NULL || width <= 1 || height <= 1 || stride < width * 4) {
 		return;
 	}
 	size_t bytes = (size_t)stride * (size_t)height;
@@ -119,7 +122,10 @@ void dev_glass_bgra(uint8_t *pixels, int width, int height, int stride, int radi
 
 void dev_soft_bgra(uint8_t *pixels, int width, int height, int stride) {
 	enum { STEP = 8 };
-	if (pixels == NULL || width < STEP * 2 || height < STEP * 2) {
+	if (pixels == NULL || width <= 0 || height <= 0 || stride < width * 4) {
+		return;
+	}
+	if (width < STEP * 2 || height < STEP * 2) {
 		dev_blur_bgra(pixels, width, height, stride, 4);
 		return;
 	}

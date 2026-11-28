@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Boot mark for GRUB. The Olympium dragon from dragon.h.
  */
@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 static void dragon(cairo_t *cr, double x, double y, double size) {
-	draw_dragon_mark(cr, x, y, size, 0.93, 0.78, 0.45);
+	draw_dragon_mark(cr, x, y, size, 1.00, 0.92, 0.54);
 }
 
 int main(int argc, char **argv) {

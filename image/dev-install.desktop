@@ -2,7 +2,7 @@
 Type=Application
 Name=Install
 Exec=dev-install open %f
-Icon=package-x-generic
+Icon=olympium
 Terminal=false
 NoDisplay=true
-MimeType=application/vnd.android.package-archive;application/x-olympium-hap;
+MimeType=application/vnd.debian.binary-package;application/x-deb;application/x-rpm;application/x-apple-diskimage;application/x-xar;application/vnd.android.package-archive;application/x-olympium-hap;application/x-msi;application/x-ms-dos-executable;application/x-dosexec;application/vnd.microsoft.portable-executable;

@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * Native Wayland compositor and shell. Window buffers are composited by
  * wlroots. The panel, dock, and launcher sample that framebuffer and run a
@@ -17,6 +17,7 @@
 #include <drm_fourcc.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <linux/input-event-codes.h>
 #include <math.h>
 #include <pango/pangocairo.h>
@@ -371,13 +372,34 @@ static void write_status(struct server *server) {
 	fclose(f);
 }
 
+/* Double-fork so detached children are reparented to PID 1 and never stay as
+ * zombies while SIGCHLD remains SIG_DFL for wlroots/Xwayland. Returns 0 in the
+ * grandchild, 1 in the parent, and -1 on fork failure. */
+static int fork_detached(void) {
+	pid_t pid = fork();
+	if (pid < 0) {
+		return -1;
+	}
+	if (pid == 0) {
+		pid_t grand = fork();
+		if (grand == 0) {
+			signal(SIGPIPE, SIG_DFL);
+			return 0;
+		}
+		_exit(grand < 0 ? 1 : 0);
+	}
+	int st = 0;
+	while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {
+	}
+	return 1;
+}
+
 static void launch_app(struct server *server, const struct app_entry *app) {
 	if (access(app->path, X_OK) != 0) {
 		snprintf(server->notice, sizeof server->notice, "Missing %s", app->path);
 		return;
 	}
-	pid_t pid = fork();
-	if (pid == 0) {
+	if (fork_detached() == 0) {
 		setsid();
 		if (app->arg != NULL) {
 			execl(app->path, app->path, app->arg, (char *)NULL);
@@ -497,9 +519,80 @@ static void rrect(cairo_t *cr, double x, double y, double w, double h, double r)
 	cairo_close_path(cr);
 }
 
-/* The Olympium mark. The drawing is in dragon.h, shared with the boot splash. */
+/* The Olympium mark. Loads the latest transparent dragon PNG when present,
+ * falling back to the matching vector drawing in dragon.h. */
+static cairo_surface_t *olympium_dragon_surface(void) {
+	static int tried;
+	static cairo_surface_t *cached;
+	if (tried) {
+		return cached;
+	}
+	tried = 1;
+	const char *paths[] = {
+		"/usr/share/olympium/olympium-transparent-1024.png",
+		"/usr/share/icons/hicolor/256x256/apps/olympium.png",
+		"branding/icons/olympium-transparent-1024.png",
+		"../branding/icons/olympium-transparent-1024.png",
+	};
+	for (size_t i = 0; i < sizeof paths / sizeof paths[0]; i++) {
+		if (access(paths[i], R_OK) != 0) {
+			continue;
+		}
+		GdkPixbuf *pb = gdk_pixbuf_new_from_file_at_scale(paths[i], 96, 96, TRUE, NULL);
+		if (pb == NULL) {
+			continue;
+		}
+		int w = gdk_pixbuf_get_width(pb);
+		int h = gdk_pixbuf_get_height(pb);
+		int stride = gdk_pixbuf_get_rowstride(pb);
+		int nchan = gdk_pixbuf_get_n_channels(pb);
+		const guchar *src = gdk_pixbuf_get_pixels(pb);
+		cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+		unsigned char *dst = cairo_image_surface_get_data(surf);
+		int dstride = cairo_image_surface_get_stride(surf);
+		for (int y = 0; y < h; y++) {
+			const guchar *sr = src + y * stride;
+			uint32_t *dr = (uint32_t *)(dst + y * dstride);
+			for (int x = 0; x < w; x++) {
+				unsigned r = sr[x * nchan + 0];
+				unsigned g = sr[x * nchan + 1];
+				unsigned b = sr[x * nchan + 2];
+				unsigned a = nchan >= 4 ? sr[x * nchan + 3] : 255;
+				r = (r * a + 127) / 255;
+				g = (g * a + 127) / 255;
+				b = (b * a + 127) / 255;
+				dr[x] = (a << 24) | (r << 16) | (g << 8) | b;
+			}
+		}
+		cairo_surface_mark_dirty(surf);
+		g_object_unref(pb);
+		cached = surf;
+		break;
+	}
+	return cached;
+}
+
 static void draw_dragon(cairo_t *cr, double x, double y, double size, double r, double g, double b) {
 	draw_dragon_mark(cr, x, y, size, r, g, b);
+}
+
+static void draw_dragon_badge(cairo_t *cr, double x, double y, double size) {
+	cairo_surface_t *img = olympium_dragon_surface();
+	if (img != NULL) {
+		int iw = cairo_image_surface_get_width(img);
+		int ih = cairo_image_surface_get_height(img);
+		if (iw > 0 && ih > 0) {
+			cairo_save(cr);
+			cairo_translate(cr, x, y);
+			cairo_scale(cr, size / (double)iw, size / (double)ih);
+			cairo_set_source_surface(cr, img, 0, 0);
+			cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
+			cairo_paint(cr);
+			cairo_restore(cr);
+			return;
+		}
+	}
+	draw_dragon_mark(cr, x, y, size, 1.00, 0.92, 0.54);
 }
 
 static void net_wedge(cairo_t *cr, double radius) {
@@ -624,7 +717,7 @@ static const struct icon_style ICON_STYLES[] = {
 	{"terminal", {0.26, 0.28, 0.33}, {0.07, 0.08, 0.10}},
 	{"shell", {0.20, 0.20, 0.24}, {0.03, 0.03, 0.05}},
 	{"settings", {0.78, 0.80, 0.84}, {0.50, 0.53, 0.59}},
-	{"olympium", {0.20, 0.36, 0.62}, {0.07, 0.14, 0.30}},
+	{"olympium", {0.11, 0.12, 0.15}, {0.02, 0.02, 0.03}},
 	{"launchpad", {1.00, 1.00, 1.00}, {0.86, 0.88, 0.92}},
 	{"compat", {0.66, 0.50, 0.98}, {0.38, 0.26, 0.84}},
 	{"testapp", {0.20, 0.55, 0.95}, {0.10, 0.32, 0.72}},
@@ -735,9 +828,9 @@ static void draw_icon(cairo_t *cr, const char *id, double x, double y) {
 		cairo_arc(cr, 24, 24, 5, 0, 6.2832);
 		cairo_fill(cr);
 	} else if (strcmp(kind, "olympium") == 0) {
-		draw_dragon(cr, 7, 6, 34, 1.00, 0.84, 0.40);
+		draw_dragon_badge(cr, 4, 4, 40);
 	} else if (strcmp(kind, "about") == 0) {
-		draw_dragon(cr, 7, 6, 34, 0.62, 0.40, 0.08);
+		draw_dragon(cr, 6, 6, 36, 0.62, 0.40, 0.08);
 	} else if (strcmp(kind, "launchpad") == 0) {
 		const double dots[][3] = {
 			{0.98, 0.34, 0.30}, {1.00, 0.60, 0.16}, {1.00, 0.82, 0.18},
@@ -1012,22 +1105,37 @@ static struct wlr_texture *texture_from_cairo(struct wlr_renderer *renderer,
 }
 
 static int read_region(struct server *server, int x, int y, int w, int h, uint8_t *buf, int stride) {
-	if (w <= 0 || h <= 0) {
+	if (w <= 0 || h <= 0 || server->screen_w <= 0 || server->screen_h <= 0) {
 		return 0;
 	}
+	int dst_x = 0;
+	int dst_y = 0;
 	if (x < 0) {
+		dst_x = -x;
+		w += x;
 		x = 0;
 	}
 	if (y < 0) {
+		dst_y = -y;
+		h += y;
 		y = 0;
+	}
+	if (x >= server->screen_w || y >= server->screen_h || w <= 0 || h <= 0) {
+		return 1;
+	}
+	if (x + w > server->screen_w) {
+		w = server->screen_w - x;
+	}
+	if (y + h > server->screen_h) {
+		h = server->screen_h - y;
 	}
 	bool ok = wlr_renderer_read_pixels(server->renderer, DRM_FORMAT_ARGB8888,
 		(uint32_t)stride, (uint32_t)w, (uint32_t)h,
-		(uint32_t)x, (uint32_t)y, 0, 0, buf);
+		(uint32_t)x, (uint32_t)y, (uint32_t)dst_x, (uint32_t)dst_y, buf);
 	if (!ok) {
 		ok = wlr_renderer_read_pixels(server->renderer, DRM_FORMAT_XRGB8888,
 			(uint32_t)stride, (uint32_t)w, (uint32_t)h,
-			(uint32_t)x, (uint32_t)y, 0, 0, buf);
+			(uint32_t)x, (uint32_t)y, (uint32_t)dst_x, (uint32_t)dst_y, buf);
 	}
 	return ok;
 }
@@ -1548,11 +1656,27 @@ static void output_frame(struct wl_listener *listener, void *data) {
 	output->shell_dirty = 0;
 	widgets_refresh(server, 0);
 	/* The glass reads this frame's pixels back. Repaint the whole scene first,
-	 * so the buffer never still holds glass from an earlier frame. */
+	 * so the buffer never still holds glass from an earlier frame. Temporarily
+	 * hide software cursors during scene rendering so they are neither blurred
+	 * into the glass nor buried underneath the menu bar, title bars, or dock;
+	 * we paint them on top of all shell chrome right before ending the frame. */
 	wlr_damage_ring_add_whole(&scene_output->damage_ring);
+	struct wlr_output_cursor *hidden_cursors[8];
+	int hidden_cursor_count = 0;
+	struct wlr_output_cursor *oc;
+	wl_list_for_each(oc, &output->wlr_output->cursors, link) {
+		if (oc != output->wlr_output->hardware_cursor && oc->enabled && hidden_cursor_count < 8) {
+			oc->enabled = false;
+			hidden_cursors[hidden_cursor_count++] = oc;
+		}
+	}
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
-	if (!wlr_scene_output_build_state(scene_output, &state, NULL)) {
+	bool built = wlr_scene_output_build_state(scene_output, &state, NULL);
+	for (int i = 0; i < hidden_cursor_count; i++) {
+		hidden_cursors[i]->enabled = true;
+	}
+	if (!built) {
 		wlr_output_state_finish(&state);
 		return;
 	}
@@ -1736,6 +1860,10 @@ static void output_frame(struct wl_listener *listener, void *data) {
 			launcher = make_chrome(server, lb.x, lb.y, lb.width, lb.height, 18, 2);
 			render_texture_at(server, output->wlr_output, launcher, lb.x, lb.y);
 		}
+		/* Render software cursors on the topmost layer so the pointer always
+		 * sits above the menu bar, window controls (red/yellow/green), dock,
+		 * dropdown menus, dialogs, and Launchpad. */
+		wlr_output_render_software_cursors(output->wlr_output, NULL);
 		server->frames++;
 		write_shot(server, server->screen_w, server->screen_h);
 		wlr_renderer_end(server->renderer);
@@ -2641,7 +2769,7 @@ static void keeper_send(struct wlr_data_source *source, const char *mime, int32_
 			fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 		}
 		keeper_write(fd, keeper->data, keeper->len);
-	} else if (fork() == 0) {
+	} else if (fork_detached() == 0) {
 		if (flags >= 0) {
 			fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
 		}
@@ -3017,7 +3145,7 @@ static void menu_box(const struct server *server, struct wlr_box *box) {
 }
 
 static void launch_files_at(const char *path) {
-	if (fork() == 0) {
+	if (fork_detached() == 0) {
 		setsid();
 		execl("/usr/bin/dev-files", "dev-files", path, (char *)NULL);
 		_exit(127);
@@ -3035,7 +3163,7 @@ static struct view *front_view(struct server *server) {
 }
 
 static void spawn2(const char *path, const char *arg) {
-	if (fork() == 0) {
+	if (fork_detached() == 0) {
 		setsid();
 		execl(path, path, arg, (char *)NULL);
 		_exit(127);
@@ -3287,6 +3415,9 @@ static int find_icon_file(const char *icon, char *out, size_t n) {
 		snprintf(out, n, "%s", icon);
 		return access(out, R_OK) == 0;
 	}
+	if (strchr(icon, '/') != NULL || strcmp(icon, ".") == 0 || strcmp(icon, "..") == 0) {
+		return 0;
+	}
 	char roots[4][400];
 	int root_count = 0;
 	const char *data = getenv("XDG_DATA_HOME");
@@ -3333,15 +3464,23 @@ static int find_icon_file(const char *icon, char *out, size_t n) {
 /* Pictures the system's packages installed, and pictures this desktop drew
  * itself from pixels, are read as they are. Anything else is not. */
 static int icon_file_is_ours(const char *path) {
-	if (strncmp(path, "/usr/", 5) == 0) {
+	char real_path[PATH_MAX];
+	if (realpath(path, real_path) == NULL) {
+		return 0;
+	}
+	if (strncmp(real_path, "/usr/", 5) == 0) {
 		return 1;
 	}
 	const char *desk = getenv("OLYMPIUM_DESK_HOME");
 	char icons[600];
+	char real_icons[PATH_MAX];
 	if (desk != NULL && desk[0] != '\0') {
-		snprintf(icons, sizeof icons, "%s/icons/", desk);
-		if (strncmp(path, icons, strlen(icons)) == 0) {
-			return 1;
+		snprintf(icons, sizeof icons, "%s/icons", desk);
+		if (realpath(icons, real_icons) != NULL) {
+			size_t len = strlen(real_icons);
+			if (strncmp(real_path, real_icons, len) == 0 && real_path[len] == '/') {
+				return 1;
+			}
 		}
 	}
 	return 0;
@@ -3523,6 +3662,7 @@ static void pad_load(struct server *server) {
 		}
 	}
 	server->pad_count = 0;
+	server->pad_folder = -1;
 	for (int i = 0; i < APP_COUNT; i++) {
 		if (strcmp(APPS[i].id, "launchpad") == 0) {
 			continue;
@@ -3621,7 +3761,7 @@ static int pad_visible(const struct server *server, int index) {
 	if (server->pad_filter[0] != '\0') {
 		return !app->is_folder && strcasestr(app->name, server->pad_filter) != NULL;
 	}
-	if (server->pad_folder >= 0) {
+	if (server->pad_folder >= 0 && server->pad_folder < server->pad_count) {
 		return !app->is_folder && strcmp(app->group, server->pad[server->pad_folder].group) == 0;
 	}
 	if (!app->is_folder && app->group[0] != '\0') {
@@ -3695,7 +3835,7 @@ static void draw_pad(struct server *server, cairo_t *cr) {
 	cairo_stroke(cr);
 	const char *query = server->pad_filter[0] != '\0' ? server->pad_filter : "Search";
 	paint_text(cr, "Ubuntu 13", query, search_x + 34, 40, 1, 1, 1);
-	if (server->pad_folder >= 0) {
+	if (server->pad_folder >= 0 && server->pad_folder < server->pad_count) {
 		pad_label(cr, "Ubuntu Bold 20", server->pad[server->pad_folder].name,
 			server->screen_w / 2.0, 84);
 	}
@@ -3813,7 +3953,7 @@ static void pad_activate(struct server *server, int index) {
 	if (app->cmd[0] == '\0') {
 		return;
 	}
-	if (fork() == 0) {
+	if (fork_detached() == 0) {
 		setsid();
 		execl("/bin/sh", "sh", "-c", app->cmd, (char *)NULL);
 		_exit(127);
@@ -4178,10 +4318,10 @@ static void release_chrome(struct server *server) {
 					wlr_xdg_toplevel_set_size(server->press_view->xdg_toplevel, width, height);
 				} else if (server->press_view->xwayland_surface != NULL) {
 					wlr_xwayland_surface_configure(server->press_view->xwayland_surface, 40,
-						PANEL_H + 8, (uint16_t)width, (uint16_t)height);
+						PANEL_H + TITLE_H + 8, (uint16_t)width, (uint16_t)height);
 				}
 				wlr_scene_node_set_position(&server->press_view->scene_tree->node,
-					40, PANEL_H + 8);
+					40, PANEL_H + TITLE_H + 8);
 			}
 		}
 	} else if (server->press_contrast && hit_contrast(server, x, y)) {
@@ -4464,7 +4604,7 @@ static void launch_startup(struct server *server, const char *why) {
 	}
 	server->startup_sent = 1;
 	wlr_log(WLR_INFO, "session start (%s)", why);
-	if (fork() == 0) {
+	if (fork_detached() == 0) {
 		execl("/bin/sh", "/bin/sh", "-c", server->startup_cmd, (char *)NULL);
 		_exit(127);
 	}
@@ -4633,7 +4773,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
 		struct wlr_xdg_surface *parent =
 			wlr_xdg_surface_try_from_wlr_surface(xdg_surface->popup->parent);
-		if (parent == NULL) {
+		if (parent == NULL || parent->data == NULL) {
 			return;
 		}
 		struct wlr_scene_tree *parent_tree = parent->data;
@@ -4866,7 +5006,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	/* Leave SIGCHLD alone. Ignoring it auto-reaps Xwayland, and wlroots
-	 * then treats the server as dead. */
+	 * then treats the server as dead. Ignore SIGPIPE so a client closing
+	 * a clipboard transfer pipe never kills the compositor. */
+	signal(SIGPIPE, SIG_IGN);
 
 	struct server server = {0};
 	server.press_app = -1;

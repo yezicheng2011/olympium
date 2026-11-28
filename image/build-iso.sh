@@ -1,19 +1,21 @@
 #!/bin/bash
-# Copyright 2026 Daniel Ye
-# Licensed under the Apache License, Version 2.0. See LICENSE.
+# Copyright 2026 Development Desktop contributors
+# SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Builds a live ISO for amd64 or arm64 from Ubuntu 24.04 packages plus the
 # first-party desktop. The image is not Ubuntu. No guest operating-system
 # images are embedded.
 set -euo pipefail
 
-ARCH=${1:-amd64}
+ARCH=${1:-universal}
+REPO=$(cd "$(dirname "$0")/.." && pwd)
+if [ "$ARCH" = universal ]; then
+	exec bash "$REPO/image/build-universal-iso.sh"
+fi
 case "$ARCH" in
 	amd64|arm64) ;;
-	*) echo "usage: $0 amd64|arm64" >&2; exit 1 ;;
+	*) echo "usage: $0 universal|amd64|arm64" >&2; exit 1 ;;
 esac
-
-REPO=$(cd "$(dirname "$0")/.." && pwd)
 ROOT=/var/tmp/dev-live/rootfs-$ARCH
 WORK=/var/tmp/dev-live/iso-$ARCH
 MIRROR_AMD64=http://archive.ubuntu.com/ubuntu
@@ -72,13 +74,14 @@ umount_chroot() {
 	umount "$ROOT/proc" 2>/dev/null || true
 	umount "$ROOT/sys" 2>/dev/null || true
 }
+trap umount_chroot EXIT
 
 install_drivers() {
 	mount_chroot
 	chroot "$ROOT" apt-get update
 	# Match the kernel already installed in this root, not the host kernel.
 	local kver
-	kver=$(cd "$ROOT/lib/modules" && echo *)
+	kver=$(ls -1 "$ROOT/lib/modules" | sort -V | tail -n 1)
 	# Redistributable modules, Mesa, and linux-firmware.
 	# NVIDIA proprietary and Broadcom STA are not installed; see driver-install.
 	local pkgs="linux-modules-${kver} linux-modules-extra-${kver} linux-firmware mesa-vulkan-drivers mesa-va-drivers mesa-vdpau-drivers wireless-regdb pciutils usbutils alsa-ucm-conf firmware-sof-signed iproute2"
@@ -106,7 +109,7 @@ install_drivers() {
 
 verify_drivers() {
 	local kver miss=0
-	kver=$(cd "$ROOT/lib/modules" && echo *)
+	kver=$(ls -1 "$ROOT/lib/modules" | sort -V | tail -n 1)
 	local builtin="$ROOT/lib/modules/$kver/modules.builtin"
 	have_mod() {
 		local name=$1 alt=${1//_/-}
@@ -224,8 +227,14 @@ install_packages() {
 stage_desktop() {
 	mount_chroot
 	# install-to-disk needs sfdisk (fdisk) and grub-install (grub2-common).
+	# dotnet-runtime-8.0 runs the VB.NET Olympium desktop apps and runtime tools.
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
-		parted dosfstools kmod fdisk grub2-common python3 python3-gi gir1.2-gtk-3.0 aapt adb desktop-file-utils shared-mime-info librsvg2-common
+		parted dosfstools kmod fdisk grub2-common desktop-file-utils shared-mime-info librsvg2-common \
+		dotnet-runtime-8.0
+	# Slim Android (scrcpy + adb + aapt) and slim OpenHarmony local SDK layout (no bloated full OS images).
+	bash "$REPO/image/stage-mobile-slim.sh" "$ROOT" "$ARCH"
+	# Universal cross-architecture execution (x86/x86_64/arm32/arm64 via qemu-user-static + foreign libc + binfmt_misc).
+	bash "$REPO/image/stage-crossarch.sh" "$ROOT" "$ARCH"
 	# The shell, Files, and Settings are set in the Ubuntu typeface. Without it
 	# Pango falls back to another face and every label changes width.
 	DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends fonts-ubuntu
@@ -233,30 +242,48 @@ stage_desktop() {
 		echo "the Ubuntu typeface is missing from the image" >&2
 		exit 1
 	fi
-	make -C "$REPO/desktop" all
-	install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" \
+	# Build low-level native C binaries (Wayland compositor, XCB clip helper,
+	# libolympium-native.so confinement/Mach-O/accounts bridge, ELF/PE runner, splash).
+	make -C "$REPO/desktop" libolympium-native.so dev-compositor olympium-run splash.png clip-helper
+	make -C "$REPO/vbnet" build
+	install -d "$ROOT/usr/bin" "$ROOT/usr/libexec/dev-desktop" "$ROOT/usr/lib/olympium" \
 		"$ROOT/etc/dev-desktop" "$ROOT/etc/systemd/system/multi-user.target.wants" \
-		"$ROOT/usr/share/doc/dev-desktop"
-	install -m 755 "$REPO/desktop/dev-compositor" "$REPO/desktop/dev-files" \
-		"$REPO/desktop/dev-settings" "$REPO/desktop/dev-swatch" \
-		"$REPO/desktop/dev-compat" "$REPO/desktop/dev-install" "$ROOT/usr/bin/"
+		"$ROOT/usr/share/doc/dev-desktop" "$ROOT/etc/binfmt.d"
+	install -m 755 "$REPO/desktop/dev-compositor" "$REPO/desktop/olympium-run" "$ROOT/usr/bin/"
+	install -m 755 "$REPO/desktop/olympium-run" "$ROOT/usr/libexec/dev-desktop/olympium-run"
+	install -m 755 "$REPO/desktop/libolympium-native.so" "$ROOT/usr/lib/olympium/libolympium-native.so"
 	# The clipboard helper is built where xcb-xfixes is on the build machine.
 	if [ -x "$REPO/desktop/dev-clip-helper" ]; then
 		install -m 755 "$REPO/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
 	fi
-	install -m 755 "$REPO/image/run-session" "$REPO/image/startup.sh" \
-		"$REPO/image/olympium-launch" "$REPO/image/install-to-disk" \
-		"$REPO/image/olympium-mac-run" \
-		"$REPO/image/guest-fetch.sh" \
-		"$REPO/image/driver-report" "$REPO/image/driver-install" \
-		"$REPO/image/install-sample.sh" \
-		"$ROOT/usr/libexec/dev-desktop/"
-	install -m 755 "$REPO/image/olympium-android" "$REPO/image/olympium-openharmony" "$ROOT/usr/libexec/dev-desktop/"
-	install -m 644 "$REPO/image/openharmony_window.py" "$ROOT/usr/libexec/dev-desktop/"
-	install -m 755 "$REPO/image/Xwayland-software" "$ROOT/usr/libexec/dev-desktop/"
-	install -m 644 "$REPO/image/android_window.py" "$REPO/image/android_icon.py" \
-		"$REPO/image/android_runtime.py" "$REPO/image/android_framework.py" "$REPO/image/android-runtime-pins.json" \
-		"$ROOT/usr/libexec/dev-desktop/"
+	# Install VB.NET (.NET 8) desktop apps and system runtime managers via shared assembly + shims.
+	bash "$REPO/vbnet/install-shims.sh" "$ROOT" "$REPO/vbnet/out"
+	make -C "$REPO/image" openharmony-window olympium-run64 || true
+	install -m 755 "$REPO/image/startup.sh" "$REPO/image/install-sample.sh" "$ROOT/usr/libexec/dev-desktop/"
+	if [ -x "$REPO/image/openharmony-window" ]; then
+		install -m 755 "$REPO/image/openharmony-window" "$ROOT/usr/libexec/dev-desktop/"
+	fi
+	if [ -x "$REPO/image/olympium-run64" ]; then
+		install -m 755 "$REPO/image/olympium-run64" "$ROOT/usr/libexec/dev-desktop/"
+	fi
+	install -m 644 "$REPO/image/android-runtime-pins.json" "$ROOT/usr/libexec/dev-desktop/"
+	# Install unified latest Olympium dragon icon across hicolor icon theme and /usr/share/olympium.
+	install -d "$ROOT/usr/share/olympium"
+	if [ -f "$REPO/branding/icons/olympium-1024.png" ]; then
+		install -m 644 "$REPO/branding/icons/olympium-1024.png" "$ROOT/usr/share/olympium/olympium-1024.png"
+		install -m 644 "$REPO/branding/icons/olympium-transparent-1024.png" "$ROOT/usr/share/olympium/olympium-transparent-1024.png"
+		for sz in 48x48 128x128 256x256 512x512; do
+			install -D -m 644 "$REPO/branding/icons/olympium-1024.png" \
+				"$ROOT/usr/share/icons/hicolor/$sz/apps/olympium.png"
+		done
+	fi
+	# Auto-Wine + binfmt_misc (default enabled on amd64 so Windows .exe runs natively on click).
+	if [ "${OLYMPIUM_WINE:-1}" = 1 ] && [ "$ARCH" = amd64 ]; then
+		bash "$REPO/image/install-wine.sh" "$ROOT" "$ARCH"
+		bash "$REPO/image/wine-prefix.sh" "$ROOT"
+	fi
+	install -D -m 644 "$REPO/image/olympium-wine.binfmt.conf" "$ROOT/etc/binfmt.d/olympium-wine.conf"
+	install -D -m 644 "$REPO/image/olympium-wine-exec.desktop" "$ROOT/usr/share/applications/olympium-wine-exec.desktop"
 	if [ "$ARCH" = amd64 ]; then
 		DEBIAN_FRONTEND=noninteractive chroot "$ROOT" apt-get install -y --no-install-recommends \
 			default-jre-headless libsmali-java
@@ -271,19 +298,13 @@ stage_desktop() {
 	install -D -m 644 "$REPO/image/olympium-hap.xml" "$ROOT/usr/share/mime/packages/olympium-hap.xml"
 	chroot "$ROOT" update-mime-database /usr/share/mime
 	chroot "$ROOT" update-desktop-database /usr/share/applications
-	# A Mac runtime, when one was staged by image/build-darling.sh and asked for.
-	if [ "${OLYMPIUM_DARLING:-0}" = 1 ] && [ "$ARCH" = amd64 ]; then
+	# Mac runtime (Darling GUI for Intel x86_64 & Universal2 Mac apps, plus optional M-series ARM64 stage).
+	if [ "${OLYMPIUM_DARLING:-1}" = 1 ] && [ "$ARCH" = amd64 ]; then
 		bash "$REPO/image/install-darling.sh" "$ROOT"
 	fi
-	install -m 755 "$REPO/image/driver-install" "$ROOT/usr/bin/driver-install"
-	install -m 755 "$REPO/image/driver-report" "$ROOT/usr/bin/driver-report"
-	install -m 755 "$REPO/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
-	install -m 755 "$REPO/image/install-to-disk" "$ROOT/usr/bin/install-to-disk"
 	install -D -m 644 "$REPO/image/foot.ini" "$ROOT/etc/xdg/foot/foot.ini"
-	install -d "$ROOT/usr/share/olympium"
 	install -m 644 "$REPO/image/guest-pins.txt" "$ROOT/usr/share/olympium/guest-pins.txt"
 	install -m 644 "$REPO/image/browser-home.html" "$ROOT/usr/share/olympium/browser-home.html"
-	install -m 755 "$REPO/image/firefox-launch" "$ROOT/usr/libexec/dev-desktop/firefox-launch"
 	install -D -m 644 "$REPO/image/99-olympium-ui.conf" \
 		"$ROOT/etc/fonts/conf.d/99-olympium-ui.conf"
 	install -D -m 644 "$REPO/image/gtk-3.0-settings.ini" "$ROOT/etc/gtk-3.0/settings.ini"
@@ -301,13 +322,14 @@ stage_desktop() {
 EOF
 	printf 'Olympium\n' > "$ROOT/etc/issue"
 	: > "$ROOT/etc/machine-id"
-	cp "$REPO/docs/isa-and-abi.md" "$REPO/docs/compatibility-matrix.md" \
+	cp "$REPO/LICENSE" "$REPO/NOTICE" "$REPO/THIRD_PARTY_NOTICES.md" \
+		"$REPO/docs/isa-and-abi.md" "$REPO/docs/compatibility-matrix.md" \
 		"$REPO/docs/firmware.md" "$REPO/docs/guest-images.md" \
 		"$REPO/docs/32-bit.md" "$REPO/docs/olympium-integration.md" \
 		"$REPO/docs/drivers.md" \
 		"$ROOT/usr/share/doc/dev-desktop/"
 	cat > "$ROOT/usr/share/doc/dev-desktop/SOURCE" <<'EOF'
-First-party desktop source is under the Apache License, Version 2.0.
+First-party desktop source is licensed under the Apache License, Version 2.0.
 The full text is the LICENSE file in the git tree that built this image.
 
 Third-party binary packages keep their own licenses. Copyright files are under
@@ -424,7 +446,18 @@ EOF
 [Default Applications]
 text/html=firefox.desktop
 application/xhtml+xml=firefox.desktop
+application/vnd.debian.binary-package=dev-install.desktop
+application/x-deb=dev-install.desktop
+application/x-rpm=dev-install.desktop
+application/x-apple-diskimage=dev-install.desktop
+application/x-xar=dev-install.desktop
 application/x-olympium-hap=dev-install.desktop
+application/vnd.android.package-archive=dev-install.desktop
+application/x-msi=olympium-wine-exec.desktop
+application/x-ms-dos-executable=olympium-wine-exec.desktop
+application/x-dosexec=olympium-wine-exec.desktop
+application/vnd.microsoft.portable-executable=olympium-wine-exec.desktop
+application/x-msdos-program=olympium-wine-exec.desktop
 x-scheme-handler/http=firefox.desktop
 x-scheme-handler/https=firefox.desktop
 x-scheme-handler/ftp=firefox.desktop
@@ -537,15 +570,21 @@ pack_iso() {
 	umount_chroot
 	rm -rf "$WORK"
 	mkdir -p "$WORK/boot/grub" "$WORK/live"
-	local kimg initrd
-	kimg=$(echo "$ROOT"/boot/vmlinuz-*)
-	initrd=$(echo "$ROOT"/boot/initrd.img-*)
+	local kimg initrd kver
+	kimg=$(ls -1 "$ROOT"/boot/vmlinuz-* | sort -V | tail -n 1)
+	kver=${kimg##*/vmlinuz-}
+	initrd="$ROOT/boot/initrd.img-$kver"
 	cp -L "$kimg" "$WORK/boot/vmlinuz"
 	cp -L "$initrd" "$WORK/boot/initrd.img"
 	if [ -f "$REPO/desktop/splash.png" ]; then
 		cp "$REPO/desktop/splash.png" "$WORK/boot/grub/splash.png"
 	fi
-	mksquashfs "$ROOT" "$WORK/live/filesystem.squashfs" -comp xz -b 1M -noappend \
+	bash "$REPO/image/slim-rootfs.sh" "$ROOT"
+	local bcj=x86
+	if [ "$ARCH" = arm64 ]; then
+		bcj=arm
+	fi
+	mksquashfs "$ROOT" "$WORK/live/filesystem.squashfs" -comp xz -b 1M -Xbcj "$bcj" -noappend \
 		-e var/cache/apt/archives var/lib/apt/lists
 	cat > "$WORK/boot/grub/grub.cfg" <<'EOF'
 set timeout=4
@@ -570,14 +609,14 @@ EOF
 	local out="$REPO/build/dev-live-${ARCH}.iso"
 	mkdir -p "$REPO/build"
 	if [ "$ARCH" = amd64 ]; then
-		grub-mkrescue -o "$out" "$WORK" -- -volid OLYMPIUM
+		grub-mkrescue -o "$out" "$WORK" -- -volid OLYMPIUM -iso-level 3
 	else
 		# grub-mkrescue inside the arm64 chroot emits an arm64 EFI image.
 		mount_chroot
 		rm -rf "$ROOT/tmp/iso"
 		mkdir -p "$ROOT/tmp/iso"
 		cp -a "$WORK/." "$ROOT/tmp/iso/"
-		chroot "$ROOT" grub-mkrescue -o /tmp/dev-live-arm64.iso /tmp/iso -- -volid OLYMPIUM
+		chroot "$ROOT" grub-mkrescue -o /tmp/dev-live-arm64.iso /tmp/iso -- -volid OLYMPIUM -iso-level 3
 		cp "$ROOT/tmp/dev-live-arm64.iso" "$out"
 		umount_chroot
 	fi
@@ -595,23 +634,45 @@ mkdir -p "$WORK"
 stage_runtime
 stage_desktop
 if [ "$ARCH" = arm64 ]; then
-	# Rebuild the desktop against the arm64 sysroot. The host binaries are amd64.
+	# Rebuild the desktop and native image tools against the arm64 sysroot.
 	mount_chroot
+	rm -rf "$ROOT/tmp/desktop" "$ROOT/tmp/image"
 	cp -a "$REPO/desktop" "$ROOT/tmp/desktop"
+	mkdir -p "$ROOT/tmp/image"
+	cp -a "$REPO/image/Makefile" "$REPO/image/src" "$ROOT/tmp/image/"
 	chroot "$ROOT" make -C /tmp/desktop clean all
+	chroot "$ROOT" make -C /tmp/image clean all
 	install -m 755 "$ROOT/tmp/desktop/dev-compositor" "$ROOT/tmp/desktop/dev-files" \
 		"$ROOT/tmp/desktop/dev-settings" "$ROOT/tmp/desktop/dev-swatch" \
 		"$ROOT/tmp/desktop/dev-compat" "$ROOT/tmp/desktop/dev-install" "$ROOT/usr/bin/"
 	if [ -x "$ROOT/tmp/desktop/dev-clip-helper" ]; then
 		install -m 755 "$ROOT/tmp/desktop/dev-clip-helper" "$ROOT/usr/libexec/dev-desktop/"
 	fi
+	install -m 755 "$ROOT/tmp/image/run-session" "$ROOT/tmp/image/olympium-launch" \
+		"$ROOT/tmp/image/install-to-disk" "$ROOT/tmp/image/olympium-mac-run" \
+		"$ROOT/tmp/image/guest-fetch" "$ROOT/tmp/image/driver-report" \
+		"$ROOT/tmp/image/driver-install" "$ROOT/tmp/image/firefox-launch" \
+		"$ROOT/tmp/image/olympium-android" "$ROOT/tmp/image/olympium-openharmony" \
+		"$ROOT/tmp/image/Xwayland-software" "$ROOT/usr/libexec/dev-desktop/"
+	if [ -x "$ROOT/tmp/image/openharmony-window" ]; then
+		install -m 755 "$ROOT/tmp/image/openharmony-window" "$ROOT/usr/libexec/dev-desktop/"
+	fi
+	install -m 755 "$ROOT/tmp/image/driver-install" "$ROOT/usr/bin/driver-install"
+	install -m 755 "$ROOT/tmp/image/driver-report" "$ROOT/usr/bin/driver-report"
+	install -m 755 "$ROOT/tmp/image/olympium-activate" "$ROOT/usr/bin/olympium-activate"
+	install -m 755 "$ROOT/tmp/image/install-to-disk" "$ROOT/usr/bin/install-to-disk"
 	file "$ROOT/usr/bin/dev-compositor"
 fi
 # shellcheck source=image/stage-bitness.sh
 . "$REPO/image/stage-bitness.sh"
 if [ "$ARCH" = arm64 ]; then
 	DESKTOP_BINS=$ROOT/tmp/desktop
+	IMAGE_BINS=$ROOT/tmp/image
 fi
 stage_bitness
+if [ "${OLYMPIUM_ROOTFS_ONLY:-0}" = 1 ]; then
+	echo "staged rootfs $ROOT ($ARCH)"
+	exit 0
+fi
 pack_iso
 echo "built $REPO/build/dev-live-${ARCH}.iso"

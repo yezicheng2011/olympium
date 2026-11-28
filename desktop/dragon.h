@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  *
  * The Olympium mark: an Eastern dragon in profile. A long body with no
  * wings, coiled in an S and tapering to a tufted tail, a head with a long
@@ -32,7 +32,9 @@ static inline void draw_dragon_mark(cairo_t *cr, double x, double y, double size
 	};
 	enum { PER = 28, N = 3 * PER + 1 };
 	double px[N], py[N], lx[N], ly[N], rx[N], ry[N];
-	int detail = size >= 40;
+	/* Keep the full dragon details down to dock/sidebar sizes so every
+	 * Olympium icon matches the latest dragon artwork. */
+	int detail = size >= 20;
 	for (int s = 0; s < 3; s++) {
 		for (int i = 0; i < PER; i++) {
 			dragon_bez(spine[s], (double)i / PER, &px[s * PER + i], &py[s * PER + i]);

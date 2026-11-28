@@ -55,7 +55,7 @@ def stop_owned():
             stat = (Path('/proc') / str(identity['pid']) / 'stat').read_text()
             if current != identity or stat[stat.rfind(')') + 2:].split()[0] == 'Z':
                 return
-        except OSError:
+        except (OSError, RuntimeError):
             return
         time.sleep(.2)
     raise RuntimeError('Owned emulator did not stop before the cold-boot deadline')
@@ -83,7 +83,7 @@ try:
             details.update(mode=oct(stat.st_mode & 0o777), owner=stat.st_uid, group=stat.st_gid)
         record['kvm_checks'].append(details)
         started = time.monotonic()
-        run(label + '-install', [sys.executable, repo / 'image/olympium-android',
+        run(label + '-install', [repo / 'image/olympium-android',
             'install', apk, '--root', root], 1200)
         install_seconds = round(time.monotonic() - started, 3)
         install = json.loads((output / (label + '-install.stdout.log')).read_text())

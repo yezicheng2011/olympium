@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -43,7 +44,8 @@ def run(*args, timeout=180, check=True):
     with (out / 'commands.log').open('a') as stream:
         stream.write('$ ' + ' '.join(map(str, args)) + '\n' + result.stdout + '\n')
     if check and result.returncode:
-        raise RuntimeError(f'Command failed ({result.returncode}): {args[0]}')
+        raise subprocess.CalledProcessError(result.returncode, list(map(str, args)),
+                                            output=result.stdout)
     return result.stdout
 
 
@@ -178,14 +180,19 @@ def desktop_calculation(tree, label):
         width, height = screen.size
         for row in range(anchor_y, height - guest.height + anchor_y + 1):
             line = screen.crop((0, row, width, row + 1)).tobytes()
-            pos = line.find(anchor)
-            if pos < 0 or pos % 3:
-                continue
-            left = pos // 3 - sample_x
-            top = row - anchor_y
-            other = screen.crop((left + sample_x, top + top_y, left + sample_end, top + bottom_y))
-            if other.tobytes() == keypad:
-                return left, top, guest.width, guest.height, width, height
+            start = 0
+            while True:
+                pos = line.find(anchor, start)
+                if pos < 0:
+                    break
+                start = pos + 1
+                if pos < sample_x * 3 or pos % 3:
+                    continue
+                left = pos // 3 - sample_x
+                top = row - anchor_y
+                other = screen.crop((left + sample_x, top + top_y, left + sample_end, top + bottom_y))
+                if other.tobytes() == keypad:
+                    return left, top, guest.width, guest.height, width, height
         return None
 
     with ((out / f'{label}-compositor.log').open('w') as compositor_log,
@@ -195,7 +202,7 @@ def desktop_calculation(tree, label):
         window = None
         try:
             wait_for(lambda: (runtime / 'wayland-0').exists(), 20, 'host Wayland socket')
-            window = subprocess.Popen([sys.executable, ROOT / 'image/openharmony_window.py',
+            window = subprocess.Popen([ROOT / 'image/openharmony-window',
                                        '--qmp', work / 'window.sock', '--hdc', hdc, '--target', target,
                                        '--bounds', *map(str, bounds), '--reference', reference],
                                       env=env, stdout=window_log, stderr=subprocess.STDOUT)
@@ -347,12 +354,14 @@ def verify_desktop_hap(package):
     from zipfile import ZipFile
 
     runtime = work / 'hap-wayland'
+    shutil.rmtree(runtime, ignore_errors=True)
     runtime.mkdir(mode=0o700)
     session = runtime / 'sdk-session.json'
     fd = os.open(session, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as stream:
         json.dump(dict(hdc=str(hdc), qmp=str(work / 'window.sock'), target=target), stream)
     root = work / 'hap-library'
+    shutil.rmtree(root, ignore_errors=True)
     env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY='wayland-0',
                WLR_BACKENDS='headless', WLR_RENDERER='pixman', DEV_DESK_HEADLESS='1',
                GDK_BACKEND='wayland', OLYMPIUM_DESK_HOME=str(root),
@@ -438,14 +447,19 @@ def verify_desktop_hap(package):
                     frame = host_frame(f'desktop-hap-{label}-opened')
                     for row in range(by - 7, frame.height - height + by - 6):
                         pixels = frame.crop((0, row, frame.width, row + 1)).tobytes()
-                        pos = pixels.find(anchor)
-                        if pos < 24 or pos % 3:
-                            continue
-                        left, top = pos // 3 - 8, row - (by - 7)
-                        box = (8, by - 12, width - 8, by + 12)
-                        if reference.crop(box).tobytes() == frame.crop(
-                                (left + box[0], top + box[1], left + box[2], top + box[3])).tobytes():
-                            return left, top, frame.width, frame.height
+                        start = 0
+                        while True:
+                            pos = pixels.find(anchor, start)
+                            if pos < 0:
+                                break
+                            start = pos + 1
+                            if pos < 24 or pos % 3:
+                                continue
+                            left, top = pos // 3 - 8, row - (by - 7)
+                            box = (8, by - 12, width - 8, by + 12)
+                            if reference.crop(box).tobytes() == frame.crop(
+                                    (left + box[0], top + box[1], left + box[2], top + box[3])).tobytes():
+                                return left, top, frame.width, frame.height
                     return None
 
                 left, top, screen_w, screen_h = wait_for(locate, 30, 'rendered HAP pixels on the host')
@@ -525,12 +539,14 @@ def verify_fresh_install(package):
 try:
     if not Path('/dev/kvm').exists():
         raise RuntimeError('Hardware acceptance requires /dev/kvm')
-    if not (work / 'publisher-provenance.json').exists():
+    if not (work / 'publisher-provenance.json').exists() or (
+            a.fresh_hap and not (work / 'sdk/ets').exists()):
         extra = ['--with-ets'] if a.fresh_hap else []
         run(sys.executable, ROOT / 'validation/openharmony/prepare-runtime.py',
             '--work', work, *extra, timeout=1800)
     if a.fresh_hap:
         fresh_work = work / 'fresh-hap-build'
+        shutil.rmtree(fresh_work, ignore_errors=True)
         run(sys.executable, ROOT / 'validation/openharmony/build-fresh-hap.py',
             '--sdk', work / 'sdk', '--work', fresh_work, timeout=240)
     image = work / 'oniro/images'
@@ -621,7 +637,11 @@ try:
         finally:
             if helper.poll() is None:
                 helper.terminate()
-                helper.wait(timeout=10)
+                try:
+                    helper.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    helper.kill()
+                    helper.wait()
     status = shell('/data/local/tmp/bootstrap', '--status')
     if 'credential_configured=0' not in status:
         raise RuntimeError('SDK credential state was not confirmed unprotected')
@@ -653,7 +673,11 @@ try:
         finally:
             if normal_unlock.poll() is None:
                 normal_unlock.terminate()
-                normal_unlock.wait(timeout=10)
+                try:
+                    normal_unlock.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    normal_unlock.kill()
+                    normal_unlock.wait()
     status = shell('/data/local/tmp/bootstrap', '--status')
     report['lock_manager_reports_unlocked'] = 'screen_locked=0' in status
     calculator('first')

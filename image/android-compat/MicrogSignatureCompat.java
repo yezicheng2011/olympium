@@ -1,6 +1,6 @@
 /*
  * SPDX-FileCopyrightText: The LineageOS Project
- * SPDX-FileCopyrightText: 2026 Daniel Ye
+ * SPDX-FileCopyrightText: 2026 Development Desktop contributors
  * SPDX-License-Identifier: Apache-2.0
  * Adapted limited microG policy; this is an experimental framework client-query hook.
  */

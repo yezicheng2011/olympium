@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #define _GNU_SOURCE
 #include "macbundle.h"
@@ -8,6 +8,7 @@
 #include "macho.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,9 +22,9 @@ enum {
 	ICNS_MAX = 64 * 1024 * 1024
 };
 
-/* Reads a whole file that is not a link, up to limit bytes. */
-static unsigned char *read_file(const char *path, size_t limit, size_t *length) {
-	int fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+/* Reads a whole file beneath dirfd that is not a link, up to limit bytes. */
+static unsigned char *read_file_at(int dirfd, const char *name, size_t limit, size_t *length) {
+	int fd = openat(dirfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
 	if (fd < 0) {
 		return NULL;
 	}
@@ -41,6 +42,9 @@ static unsigned char *read_file(const char *path, size_t limit, size_t *length) 
 	size_t got = 0;
 	while (got < (size_t)st.st_size) {
 		ssize_t n = read(fd, data + got, (size_t)st.st_size - got);
+		if (n < 0 && errno == EINTR) {
+			continue;
+		}
 		if (n <= 0) {
 			break;
 		}
@@ -53,13 +57,19 @@ static unsigned char *read_file(const char *path, size_t limit, size_t *length) 
 }
 
 int mac_is_bundle_dir(const char *path) {
-	char plist[4200];
-	struct stat st;
-	if (lstat(path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+	int bfd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (bfd < 0) {
 		return 0;
 	}
-	snprintf(plist, sizeof plist, "%s/Contents/Info.plist", path);
-	return lstat(plist, &st) == 0 && S_ISREG(st.st_mode);
+	int cfd = openat(bfd, "Contents", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	close(bfd);
+	if (cfd < 0) {
+		return 0;
+	}
+	struct stat st;
+	int ok = fstatat(cfd, "Info.plist", &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode);
+	close(cfd);
+	return ok;
 }
 
 /* A value becomes one line of plain text: no control characters. */
@@ -417,11 +427,19 @@ static void bundle_base(const char *bundle_dir, char *out, size_t n) {
 
 int mac_bundle_read(const char *bundle_dir, struct mac_bundle *out) {
 	memset(out, 0, sizeof *out);
-	char path[4200];
-	snprintf(path, sizeof path, "%s/Contents/Info.plist", bundle_dir);
+	int bfd = open(bundle_dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (bfd < 0) {
+		return -1;
+	}
+	int cfd = openat(bfd, "Contents", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	close(bfd);
+	if (cfd < 0) {
+		return -1;
+	}
 	size_t length = 0;
-	unsigned char *plist = read_file(path, PLIST_MAX, &length);
+	unsigned char *plist = read_file_at(cfd, "Info.plist", PLIST_MAX, &length);
 	if (plist == NULL) {
+		close(cfd);
 		return -1;
 	}
 	char base[128];
@@ -449,10 +467,16 @@ int mac_bundle_read(const char *bundle_dir, struct mac_bundle *out) {
 	free(plist);
 
 	if (safe_leaf(out->executable)) {
-		snprintf(out->program, sizeof out->program, "%s/Contents/MacOS/%s", bundle_dir, out->executable);
-		int fd = open(out->program, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+		int mfd = openat(cfd, "MacOS", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		int fd = mfd >= 0 ? openat(mfd, out->executable, O_RDONLY | O_NOFOLLOW | O_CLOEXEC) : -1;
+		if (mfd >= 0) {
+			close(mfd);
+		}
 		struct stat st;
-		if (fd >= 0 && fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) {
+		int plen = snprintf(out->program, sizeof out->program, "%s/Contents/MacOS/%s",
+			bundle_dir, out->executable);
+		if (plen > 0 && (size_t)plen < sizeof out->program &&
+				fd >= 0 && fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) {
 			unsigned char head[4096];
 			ssize_t got = read(fd, head, sizeof head);
 			if (got > 0) {
@@ -473,40 +497,58 @@ int mac_bundle_read(const char *bundle_dir, struct mac_bundle *out) {
 		}
 	}
 
-	struct stat st;
-	if (icon[0] != '\0' && safe_leaf(icon)) {
-		snprintf(out->icon_path, sizeof out->icon_path, "%s/Contents/Resources/%s", bundle_dir, icon);
-		if (lstat(out->icon_path, &st) != 0 || !S_ISREG(st.st_mode)) {
-			/* The key often leaves the extension off. */
-			snprintf(out->icon_path, sizeof out->icon_path, "%s/Contents/Resources/%s.icns",
-				bundle_dir, icon);
-			if (lstat(out->icon_path, &st) != 0 || !S_ISREG(st.st_mode)) {
-				out->icon_path[0] = '\0';
-			}
-		}
-	}
-	if (out->icon_path[0] == '\0') {
-		/* No key, or a missing file: take the first .icns there is. */
-		char dir_path[4200];
-		snprintf(dir_path, sizeof dir_path, "%s/Contents/Resources", bundle_dir);
-		DIR *dir = opendir(dir_path);
-		if (dir != NULL) {
-			struct dirent *ent;
-			char first[256] = "";
-			while ((ent = readdir(dir)) != NULL) {
-				size_t len = strlen(ent->d_name);
-				if (len > 5 && strcasecmp(ent->d_name + len - 5, ".icns") == 0 &&
-						(first[0] == '\0' || strcmp(ent->d_name, first) < 0) && len < sizeof first) {
-					snprintf(first, sizeof first, "%s", ent->d_name);
-				}
-			}
-			closedir(dir);
-			if (first[0] != '\0') {
-				snprintf(out->icon_path, sizeof out->icon_path, "%s/%s", dir_path, first);
-				if (lstat(out->icon_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+	int rfd = openat(cfd, "Resources", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	close(cfd);
+	if (rfd >= 0) {
+		struct stat st;
+		if (icon[0] != '\0' && safe_leaf(icon)) {
+			char candidate[200];
+			if (fstatat(rfd, icon, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode)) {
+				int ilen = snprintf(out->icon_path, sizeof out->icon_path,
+					"%s/Contents/Resources/%s", bundle_dir, icon);
+				if (ilen <= 0 || (size_t)ilen >= sizeof out->icon_path) {
 					out->icon_path[0] = '\0';
 				}
+			} else {
+				/* The key often leaves the extension off. */
+				snprintf(candidate, sizeof candidate, "%s.icns", icon);
+				if (fstatat(rfd, candidate, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode)) {
+					int ilen = snprintf(out->icon_path, sizeof out->icon_path,
+						"%s/Contents/Resources/%s", bundle_dir, candidate);
+					if (ilen <= 0 || (size_t)ilen >= sizeof out->icon_path) {
+						out->icon_path[0] = '\0';
+					}
+				}
 			}
+		}
+		if (out->icon_path[0] == '\0') {
+			/* No key, or a missing file: take the first .icns there is. */
+			DIR *dir = fdopendir(rfd);
+			if (dir != NULL) {
+				rfd = -1;
+				struct dirent *ent;
+				char first[256] = "";
+				while ((ent = readdir(dir)) != NULL) {
+					size_t len = strlen(ent->d_name);
+					if (len > 5 && strcasecmp(ent->d_name + len - 5, ".icns") == 0 &&
+							(first[0] == '\0' || strcmp(ent->d_name, first) < 0) && len < sizeof first) {
+						snprintf(first, sizeof first, "%s", ent->d_name);
+					}
+				}
+				if (first[0] != '\0' &&
+						fstatat(dirfd(dir), first, &st, AT_SYMLINK_NOFOLLOW) == 0 &&
+						S_ISREG(st.st_mode)) {
+					int ilen = snprintf(out->icon_path, sizeof out->icon_path,
+						"%s/Contents/Resources/%s", bundle_dir, first);
+					if (ilen <= 0 || (size_t)ilen >= sizeof out->icon_path) {
+						out->icon_path[0] = '\0';
+					}
+				}
+				closedir(dir);
+			}
+		}
+		if (rfd >= 0) {
+			close(rfd);
 		}
 	}
 	return 0;
@@ -521,7 +563,7 @@ void mac_archs_text(const uint32_t *archs, int count, char *out, size_t n) {
 }
 
 const char *mac_host_arch_name(void) {
-	static char machine[64];
+	static char machine[128];
 	const char *forced = getenv("OLYMPIUM_HOST_MACHINE");
 	struct utsname u;
 	if (forced != NULL && forced[0] != '\0') {
@@ -537,7 +579,7 @@ const char *mac_host_arch_name(void) {
 	if (strcmp(machine, "x86_64") == 0) {
 		return "x86_64";
 	}
-	if (machine[0] == 'i' && strcmp(machine + 2, "86") == 0) {
+	if (machine[0] == 'i' && machine[1] != '\0' && strcmp(machine + 2, "86") == 0) {
 		return "i386";
 	}
 	return machine;
@@ -545,10 +587,36 @@ const char *mac_host_arch_name(void) {
 
 int mac_host_can_run(const uint32_t *archs, int count) {
 	const char *host = mac_host_arch_name();
+	int has_x86_64 = 0;
+	int has_arm64 = 0;
+	int has_i386 = 0;
 	for (int i = 0; i < count; i++) {
-		if (strcmp(dev_macho_cputype_name(archs[i]), host) == 0) {
+		const char *name = dev_macho_cputype_name(archs[i]);
+		if (strcmp(name, host) == 0) {
 			return 1;
 		}
+		if (strcmp(name, "x86_64") == 0) has_x86_64 = 1;
+		else if (strcmp(name, "arm64") == 0) has_arm64 = 1;
+		else if (strcmp(name, "i386") == 0) has_i386 = 1;
+	}
+	/* Allow Intel 32-bit on x86_64 Darling. */
+	if (strcmp(host, "x86_64") == 0 && has_i386) {
+		return 1;
+	}
+	/* Allow M-series (arm64) Mach-O on x86_64 when an ARM64 Darling/QEMU bridge is installed. */
+	if (strcmp(host, "x86_64") == 0 && has_arm64 &&
+			(access("/usr/local/bin/darling-arm64", X_OK) == 0 ||
+			 (access("/opt/olympium/darling-arm64/bin/darling", X_OK) == 0 &&
+			  access("/usr/bin/qemu-aarch64-static", X_OK) == 0))) {
+		return 1;
+	}
+	/* Allow Intel (x86_64) Mach-O on ARM64 when an x86_64 Darling + translator is installed. */
+	if (strcmp(host, "arm64") == 0 && has_x86_64 &&
+			(access("/usr/local/bin/darling", X_OK) == 0 ||
+			 access("/opt/olympium/darling-x86_64/bin/darling", X_OK) == 0) &&
+			(access("/usr/bin/qemu-x86_64-static", X_OK) == 0 ||
+			 access("/usr/bin/box64", X_OK) == 0)) {
+		return 1;
 	}
 	return 0;
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright 2026 Daniel Ye
- * Licensed under the Apache License, Version 2.0. See LICENSE.
+ * Copyright 2026 Development Desktop contributors
+ * SPDX-License-Identifier: Apache-2.0 — Licensed under the Apache License, Version 2.0. See LICENSE.
  */
 #define _GNU_SOURCE
 #include "accounts.h"
@@ -125,12 +125,18 @@ static int run_fed(char *const argv[], const char *input) {
 	}
 	pid_t pid = fork();
 	if (pid < 0) {
+		if (input != NULL) {
+			close(fds[0]);
+			close(fds[1]);
+		}
 		return -1;
 	}
 	if (pid == 0) {
 		if (input != NULL) {
 			dup2(fds[0], 0);
-			close(fds[0]);
+			if (fds[0] != 0) {
+				close(fds[0]);
+			}
 			close(fds[1]);
 		}
 		if (input == NULL) {
@@ -147,6 +153,9 @@ static int run_fed(char *const argv[], const char *input) {
 		size_t done = 0;
 		while (done < len) {
 			ssize_t w = write(fds[1], input + done, len - done);
+			if (w < 0 && errno == EINTR) {
+				continue;
+			}
 			if (w <= 0) {
 				break;
 			}
@@ -155,7 +164,12 @@ static int run_fed(char *const argv[], const char *input) {
 		close(fds[1]);
 	}
 	int status = 0;
-	while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+	pid_t waited;
+	do {
+		waited = waitpid(pid, &status, 0);
+	} while (waited < 0 && errno == EINTR);
+	if (waited != pid) {
+		return -1;
 	}
 	return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
@@ -182,7 +196,8 @@ int acct_set_password(const char *name, const char *password) {
 }
 
 int acct_create(const char *name, const char *full_name, const char *password) {
-	if (!acct_name_ok(name)) {
+	char why[96];
+	if (!acct_name_ok(name) || !acct_password_ok(password, why, sizeof why)) {
 		return -1;
 	}
 	char full[128];
